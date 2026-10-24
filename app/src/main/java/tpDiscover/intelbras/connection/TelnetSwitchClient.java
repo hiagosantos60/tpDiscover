@@ -8,16 +8,15 @@ import java.io.OutputStream;
 import java.util.regex.Pattern;
 
 /**
- * Cliente Telnet para switches Comware. Diferente do SSH, o Telnet exige que
- * a gente conduza manualmente o diálogo de login (usuário / senha), já que
- * não há autenticação embutida no protocolo.
+ * Cliente Telnet para switches Intelbras (Comware S23/S33 e Série 3000 S30).
  */
 public class TelnetSwitchClient implements SwitchClient {
 
-    private static final Pattern PROMPT = Pattern.compile("(?m)^[<\\[][^>\\]\\r\\n]+[>\\]]\\s*$");
+    private static final Pattern PROMPT = Pattern.compile("(?m)(^[<\\[][^>\\]\\r\\n]+[>\\]]\\s*$|^[a-zA-Z0-9_\\-\\.]+[>#]\\s*$)");
     private static final Pattern LOGIN_PROMPT = Pattern.compile("(?i)(login|username)\\s*:\\s*$");
     private static final Pattern PASSWORD_PROMPT = Pattern.compile("(?i)password\\s*:\\s*$");
-    private static final long TIMEOUT_ESPERA_MS = 8_000;
+    private static final Pattern MAIS = Pattern.compile("(?i)--+\\s*more\\s*--+");
+    private static final long TIMEOUT_ESPERA_MS = 30_000;
     private static final long PERIODO_QUIETO_MS = 250;
 
     private final ConnectionConfig config;
@@ -51,8 +50,6 @@ public class TelnetSwitchClient implements SwitchClient {
                 saida = lerAte(PROMPT, LOGIN_PROMPT);
             }
 
-            // Se depois de enviar a senha ainda caímos num prompt de login,
-            // ou a saída contém as mensagens típicas de rejeição, é falha de autenticação.
             boolean voltouParaLogin = LOGIN_PROMPT.matcher(ultimaLinha(saida)).find();
             boolean mensagemDeFalha = contemIgnoreCase(saida, "invalid")
                     || contemIgnoreCase(saida, "fail")
@@ -63,8 +60,23 @@ public class TelnetSwitchClient implements SwitchClient {
                         "Usuário ou senha incorretos para " + config.ip() + " (Telnet)", null);
             }
 
+            // Se cair em prompt modo usuário do S30 (ex: "INTELBRAS>"), eleva para privilegiado "#"
+            entrarModoPrivilegiadoSeNecessario(saida);
+
         } catch (IOException e) {
             throw new SwitchConnectionException(classificarErroIo(e), mensagemAmigavelIo(e), e);
+        }
+    }
+
+    private void entrarModoPrivilegiadoSeNecessario(String saidaAtual) throws SwitchConnectionException, IOException {
+        String linhaPrompt = ultimaLinha(saidaAtual).trim();
+        if (linhaPrompt.endsWith(">") && !linhaPrompt.startsWith("<")) {
+            enviar("en");
+            String resp = lerAte(PROMPT, PASSWORD_PROMPT);
+            if (PASSWORD_PROMPT.matcher(ultimaLinha(resp)).find()) {
+                enviar(config.senha());
+                lerAte(PROMPT);
+            }
         }
     }
 
@@ -81,30 +93,34 @@ public class TelnetSwitchClient implements SwitchClient {
 
     private String mensagemAmigavelIo(IOException e) {
         return switch (classificarErroIo(e)) {
-            case TIMEOUT -> "Timeout ao conectar via Telnet em " + config.ip();
+            case TIMEOUT -> "Timeout na conexão Telnet com " + config.ip();
             case INALCANCAVEL -> "Não foi possível alcançar " + config.ip() + ":" + config.portaTelnet()
-                    + " via Telnet — verifique se o Telnet está habilitado no switch";
-            default -> "Erro de I/O na conexão Telnet com " + config.ip() + ": " + e.getMessage();
+                    + " — Telnet pode estar desabilitado no switch, ou IP/rede incorretos";
+            default -> "Erro de rede no Telnet com " + config.ip() + ": " + e.getMessage();
         };
     }
 
     @Override
     public String executarComando(String comando) throws SwitchConnectionException {
+        if (telnet == null || !telnet.isConnected()) {
+            throw new SwitchConnectionException(SwitchConnectionException.Tipo.ERRO_PROTOCOLO,
+                    "Tentativa de executar comando sem conexão Telnet ativa: " + comando, null);
+        }
         try {
             enviar(comando);
             return lerAte(PROMPT);
         } catch (IOException e) {
             throw new SwitchConnectionException(SwitchConnectionException.Tipo.ERRO_PROTOCOLO,
-                    "Erro ao enviar/ler comando '" + comando + "' em " + config.ip() + " (Telnet)", e);
+                    "Erro ao enviar comando '" + comando + "' via Telnet para " + config.ip(), e);
         }
     }
 
     private void enviar(String texto) throws IOException {
-        out.write((texto + "\n").getBytes());
+        out.write((texto + "\r\n").getBytes());
         out.flush();
     }
 
-    private String lerAte(Pattern... padroesDeParada) throws SwitchConnectionException, IOException {
+    private String lerAte(Pattern... padroesEsperados) throws SwitchConnectionException, IOException {
         StringBuilder buffer = new StringBuilder();
         byte[] chunk = new byte[4096];
         long inicio = System.currentTimeMillis();
@@ -114,10 +130,20 @@ public class TelnetSwitchClient implements SwitchClient {
                 int lidos = in.read(chunk);
                 if (lidos > 0) {
                     buffer.append(new String(chunk, 0, lidos));
-                    String ultimaLinha = ultimaLinha(buffer.toString());
+                    String texto = buffer.toString();
 
-                    for (Pattern p : padroesDeParada) {
-                        if (p.matcher(ultimaLinha).find()) {
+                    // Lida com paginação ---MORE---
+                    if (MAIS.matcher(texto).find()) {
+                        buffer = new StringBuilder(MAIS.matcher(texto).replaceAll(""));
+                        out.write(" ".getBytes());
+                        out.flush();
+                        inicio = System.currentTimeMillis();
+                        continue;
+                    }
+
+                    String finalDoBuffer = ultimaLinha(texto);
+                    for (Pattern p : padroesEsperados) {
+                        if (p.matcher(finalDoBuffer).find()) {
                             dormir(PERIODO_QUIETO_MS);
                             if (in.available() == 0) {
                                 return buffer.toString();
@@ -132,18 +158,22 @@ public class TelnetSwitchClient implements SwitchClient {
             if (System.currentTimeMillis() - inicio > TIMEOUT_ESPERA_MS) {
                 throw new SwitchConnectionException(SwitchConnectionException.Tipo.TIMEOUT,
                         "Timeout esperando resposta do switch " + config.ip()
-                                + " (Telnet). Saída parcial: " + buffer, null);
+                                + " via Telnet (" + TIMEOUT_ESPERA_MS + "ms). Saída parcial: " + buffer, null);
             }
         }
     }
 
-    private String ultimaLinha(String texto) {
+    private static String ultimaLinha(String texto) {
+        if (texto == null) return "";
         String[] linhas = texto.split("\\R");
-        return linhas.length == 0 ? "" : linhas[linhas.length - 1].strip();
+        for (int i = linhas.length - 1; i >= 0; i--) {
+            if (!linhas[i].isBlank()) return linhas[i];
+        }
+        return "";
     }
 
-    private boolean contemIgnoreCase(String texto, String trecho) {
-        return texto.toLowerCase().contains(trecho.toLowerCase());
+    private static boolean contemIgnoreCase(String texto, String termo) {
+        return texto != null && texto.toLowerCase().contains(termo.toLowerCase());
     }
 
     private void dormir(long ms) {
@@ -156,12 +186,11 @@ public class TelnetSwitchClient implements SwitchClient {
 
     @Override
     public void desconectar() {
-        try {
-            if (telnet != null && telnet.isConnected()) {
+        if (telnet != null && telnet.isConnected()) {
+            try {
                 telnet.disconnect();
+            } catch (IOException ignored) {
             }
-        } catch (IOException ignored) {
-            // já estamos encerrando; não há o que fazer com esse erro aqui
         }
     }
 }

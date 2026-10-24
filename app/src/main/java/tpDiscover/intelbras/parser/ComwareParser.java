@@ -4,16 +4,21 @@ import tpDiscover.intelbras.modelos.MacEntry;
 import tpDiscover.intelbras.modelos.SwitchIdentity;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Parser para a saída de CLI dos switches Intelbras linha S23/S33 (firmware Comware).
  *
- * Cobre dois comandos:
- *  - display device manuinfo   -> identidade do switch
- *  - display mac-address       -> tabela MAC
+ * Cobre os comandos:
+ *  - display device manuinfo            -> identidade do switch
+ *  - display mac-address                -> tabela MAC
+ *  - display link-aggregation verbose   -> portas físicas que compõem cada BAGG
  */
 public class ComwareParser {
 
@@ -25,6 +30,17 @@ public class ComwareParser {
             "(\\S+)\\s+" +                                          // State
             "(\\S+)\\s+" +                                          // Port/Nickname
             "(\\S+)\\s*$"                                           // Aging (Y/N) - não usamos, mas valida a linha
+    );
+
+    // Ex: "Aggregate Interface: Bridge-Aggregation2"
+    private static final Pattern BAGG_HEADER = Pattern.compile(
+            "(?i)^\\s*Aggregate\\s+Interface\\s*:\\s*(?:Bridge-Aggregation|Route-Aggregation|BAGG)(\\d+)\\b"
+    );
+
+    // Ex: "  GE1/0/1          S       32768    1"
+    private static final Pattern BAGG_MEMBER_PORT = Pattern.compile(
+            "^\\s*((?:X?GE|GigabitEthernet|Ten-GigabitEthernet|Ethernet)\\d+(?:/\\d+)+)\\s+([SUI])\\b",
+            Pattern.CASE_INSENSITIVE
     );
 
     /**
@@ -57,6 +73,92 @@ public class ComwareParser {
         }
 
         return entries;
+    }
+
+    /**
+     * Faz o parse da saída de "display link-aggregation verbose" para descobrir
+     * quais portas físicas compõem cada interface lógica BAGG (ex: "BAGG2" -> ["GE1/0/1", "GE1/0/2"]).
+     */
+    public Map<String, List<String>> parseLinkAggregation(String rawOutput) {
+        Map<String, Set<String>> membrosPorBagg = new LinkedHashMap<>();
+        if (rawOutput == null || rawOutput.isBlank()) {
+            return Map.of();
+        }
+
+        String baggAtual = null;
+        boolean emSecaoRemota = false;
+
+        for (String line : rawOutput.split("\\R")) {
+            String trimmed = line.strip();
+            if (trimmed.isEmpty()) continue;
+
+            Matcher mHeader = BAGG_HEADER.matcher(trimmed);
+            if (mHeader.find()) {
+                baggAtual = "BAGG" + mHeader.group(1);
+                emSecaoRemota = false;
+                membrosPorBagg.computeIfAbsent(baggAtual, k -> new LinkedHashSet<>());
+                continue;
+            }
+
+            if (baggAtual == null) continue;
+
+            if (trimmed.regionMatches(true, 0, "Remote:", 0, 7)) {
+                emSecaoRemota = true;
+                continue;
+            }
+            if (trimmed.regionMatches(true, 0, "Local:", 0, 6)) {
+                emSecaoRemota = false;
+                continue;
+            }
+
+            if (!emSecaoRemota) {
+                Matcher mPort = BAGG_MEMBER_PORT.matcher(line);
+                if (mPort.find()) {
+                    String portaFisica = normalizarNomePortaComware(mPort.group(1));
+                    membrosPorBagg.get(baggAtual).add(portaFisica);
+                }
+            }
+        }
+
+        Map<String, List<String>> resultado = new LinkedHashMap<>();
+        membrosPorBagg.forEach((bagg, portas) -> {
+            if (!portas.isEmpty()) {
+                resultado.put(bagg, List.copyOf(portas));
+            }
+        });
+        return resultado;
+    }
+
+    /**
+     * Substitui nomes de interface de agregação (ex: "BAGG2") pelo formato enriquecido
+     * com suas portas físicas membro (ex: "BAGG2 (GE1/0/1, GE1/0/2)").
+     */
+    public List<MacEntry> expandirPortasAgregadas(List<MacEntry> entries, Map<String, List<String>> membrosPorBagg) {
+        if (membrosPorBagg == null || membrosPorBagg.isEmpty()) {
+            return entries;
+        }
+        List<MacEntry> resultado = new ArrayList<>(entries.size());
+        for (MacEntry e : entries) {
+            List<String> membros = membrosPorBagg.get(e.port().toUpperCase());
+            if (membros != null && !membros.isEmpty()) {
+                String portaExpandida = e.port() + " (" + String.join(", ", membros) + ")";
+                resultado.add(new MacEntry(e.switchId(), e.mac(), e.vlanId(), e.state(), portaExpandida));
+            } else {
+                resultado.add(e);
+            }
+        }
+        return resultado;
+    }
+
+    private static String normalizarNomePortaComware(String porta) {
+        String p = porta.trim();
+        if (p.regionMatches(true, 0, "GigabitEthernet", 0, 15)) {
+            return "GE" + p.substring(15);
+        }
+        if (p.regionMatches(true, 0, "Ten-GigabitEthernet", 0, 19)) {
+            return "XGE" + p.substring(19);
+        }
+        return p.toUpperCase();
     }
 
     /**

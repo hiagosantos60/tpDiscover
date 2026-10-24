@@ -45,37 +45,69 @@ public class TopologyEngine {
         return switchesPorPrefixo.values();
     }
 
-    /** Pra cada porta do switch informado: quais switches conhecidos aparecem, e quantos hosts desconhecidos. */
+    /** Pra cada porta do switch informado: quais switches conhecidos aparecem, e quais hosts desconhecidos. */
     public Map<String, PortaAnalise> analisarPortas(String switchId) {
         Map<String, Set<SwitchIdentity>> switchesPorPorta = new LinkedHashMap<>();
-        Map<String, Integer> hostsPorPorta = new LinkedHashMap<>();
+        Map<String, List<String>> hostsPorPorta = new LinkedHashMap<>();
+        Map<String, Set<String>> todosMacsPorPorta = new LinkedHashMap<>();
 
         for (MacEntry entry : entradasPorSwitch.getOrDefault(switchId, List.of())) {
-            switchesPorPorta.computeIfAbsent(entry.port(), k -> new LinkedHashSet<>());
-
             Optional<SwitchIdentity> vizinho = identificarSwitchPorMac(entry.macNormalizado());
             if (vizinho.isPresent() && vizinho.get().macNormalizado().equals(switchId)) {
                 continue; // o switch "vendo a si mesmo" (loop de porta própria) — ignora
             }
+
+            switchesPorPorta.computeIfAbsent(entry.port(), k -> new LinkedHashSet<>());
+            hostsPorPorta.computeIfAbsent(entry.port(), k -> new ArrayList<>());
+            todosMacsPorPorta.computeIfAbsent(entry.port(), k -> new LinkedHashSet<>()).add(entry.macNormalizado());
+
             if (vizinho.isPresent()) {
                 switchesPorPorta.get(entry.port()).add(vizinho.get());
             } else {
-                hostsPorPorta.merge(entry.port(), 1, Integer::sum);
+                List<String> hosts = hostsPorPorta.get(entry.port());
+                if (!hosts.contains(entry.mac())) {
+                    hosts.add(entry.mac());
+                }
             }
         }
 
         Map<String, PortaAnalise> resultado = new LinkedHashMap<>();
         for (String porta : switchesPorPorta.keySet()) {
             resultado.put(porta, new PortaAnalise(
-                    porta, switchesPorPorta.get(porta), hostsPorPorta.getOrDefault(porta, 0)));
+                    porta,
+                    switchesPorPorta.get(porta),
+                    hostsPorPorta.getOrDefault(porta, List.of()),
+                    todosMacsPorPorta.getOrDefault(porta, Set.of()).size()
+            ));
         }
         return resultado;
     }
 
-    /** Conjunto de switches conhecidos que aparecem em QUALQUER porta da tabela MAC do switch informado. */
-    private Set<SwitchIdentity> alcancaveisPor(String switchId) {
+    /**
+     * Retorna a porta no switch vizinho em que o switch de origem foi aprendido,
+     * se essa informação estiver presente na tabela MAC do vizinho.
+     */
+    public Optional<String> portaRemota(String switchOrigemMacNormalizado, String switchVizinhoMacNormalizado) {
+        String prefixoOrigem = MacUtils.prefixo(switchOrigemMacNormalizado);
+        for (MacEntry entry : entradasPorSwitch.getOrDefault(switchVizinhoMacNormalizado, List.of())) {
+            if (MacUtils.prefixo(entry.macNormalizado()).equals(prefixoOrigem)) {
+                return Optional.of(entry.port());
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Conjunto de switches conhecidos que aparecem na tabela MAC do switch informado,
+     * opcionalmente ignorando a porta que aponta de volta para o switch de origem
+     * (assim consideramos apenas switches que estão "além" do candidato).
+     */
+    private Set<SwitchIdentity> alcancaveisPor(String switchId, String portaIgnorada) {
         Set<SwitchIdentity> resultado = new LinkedHashSet<>();
         for (MacEntry entry : entradasPorSwitch.getOrDefault(switchId, List.of())) {
+            if (portaIgnorada != null && entry.port().equalsIgnoreCase(portaIgnorada)) {
+                continue;
+            }
             identificarSwitchPorMac(entry.macNormalizado())
                     .filter(s -> !s.macNormalizado().equals(switchId))
                     .ifPresent(resultado::add);
@@ -83,13 +115,26 @@ public class TopologyEngine {
         return resultado;
     }
 
-    /**
-     * Entre os candidatos vistos numa mesma porta, tenta achar qual é o vizinho direto.
-     * Critério: o candidato cuja PRÓPRIA tabela MAC "explica" a MAIOR fração dos demais
-     * candidatos vence. Se dois candidatos empatam explicando 100% dos outros -> AMBIGUO.
-     * Se ninguém tem nenhum dado que explique nada -> INDETERMINADO (falta coletar mais).
-     */
+    private int contarPortasComSwitches(String switchId) {
+        Set<String> portas = new HashSet<>();
+        for (MacEntry entry : entradasPorSwitch.getOrDefault(switchId, List.of())) {
+            identificarSwitchPorMac(entry.macNormalizado())
+                    .filter(s -> !s.macNormalizado().equals(switchId))
+                    .ifPresent(s -> portas.add(entry.port().toUpperCase()));
+        }
+        return portas.size();
+    }
+
     public ResultadoInferencia inferirVizinhoDireto(Set<SwitchIdentity> candidatos) {
+        return inferirVizinhoDireto(null, candidatos);
+    }
+
+    /**
+     * Entre os candidatos vistos numa mesma porta de switchOrigemId, tenta achar qual é o vizinho direto.
+     * Critério: o candidato cuja PRÓPRIA tabela MAC "explica" (nas portas que seguem adiante,
+     * excluindo a porta de retorno para a origem) a MAIOR fração dos demais candidatos vence.
+     */
+    public ResultadoInferencia inferirVizinhoDireto(String switchOrigemId, Set<SwitchIdentity> candidatos) {
         if (candidatos.isEmpty()) return ResultadoInferencia.semCandidatos();
         if (candidatos.size() == 1) return ResultadoInferencia.direto(candidatos.iterator().next(), Set.of());
 
@@ -97,7 +142,21 @@ public class TopologyEngine {
 
         List<Pontuacao> pontuacoes = new ArrayList<>();
         for (SwitchIdentity candidato : candidatos) {
-            Set<SwitchIdentity> alcancaveis = alcancaveisPor(candidato.macNormalizado());
+            Set<SwitchIdentity> alcancaveis;
+            if (switchOrigemId != null) {
+                Optional<String> portaDeRetorno = portaRemota(switchOrigemId, candidato.macNormalizado());
+                if (portaDeRetorno.isPresent()) {
+                    alcancaveis = alcancaveisPor(candidato.macNormalizado(), portaDeRetorno.get());
+                } else if (contarPortasComSwitches(candidato.macNormalizado()) <= 1) {
+                    // Se o candidato é switch de ponta (só vê outros switches em uma única porta de uplink),
+                    // ele não pode ser switch intermediário para os demais candidatos.
+                    alcancaveis = Set.of();
+                } else {
+                    alcancaveis = alcancaveisPor(candidato.macNormalizado(), null);
+                }
+            } else {
+                alcancaveis = alcancaveisPor(candidato.macNormalizado(), null);
+            }
             Set<SwitchIdentity> restante = new LinkedHashSet<>(candidatos);
             restante.remove(candidato);
 
@@ -128,7 +187,16 @@ public class TopologyEngine {
                 : ResultadoInferencia.diretoParcial(vencedor.candidato(), vencedor.naoExplicados());
     }
 
-    public record PortaAnalise(String porta, Set<SwitchIdentity> switchesVisiveis, int hostsDesconhecidos) {
+    public record PortaAnalise(
+            String porta,
+            Set<SwitchIdentity> switchesVisiveis,
+            List<String> macsHostsDesconhecidos,
+            int totalMacs
+    ) {
+        public int hostsDesconhecidos() {
+            return macsHostsDesconhecidos.size();
+        }
+
         public boolean ehPortaDeAcesso() {
             return switchesVisiveis.isEmpty();
         }

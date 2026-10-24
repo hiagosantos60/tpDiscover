@@ -5,15 +5,21 @@ import tpDiscover.intelbras.coleta.ColetorEmLote;
 import tpDiscover.intelbras.coleta.SwitchTarget;
 import tpDiscover.intelbras.correlacao.RelatorioTopologia;
 import tpDiscover.intelbras.correlacao.TopologyEngine;
+import tpDiscover.intelbras.modelos.SwitchIdentity;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
 public class App {
 
     public static void main(String[] args) {
-        // Caminho do arquivo de alvos: passa como argumento, ou usa "switches.txt" na pasta atual.
-        Path arquivoAlvos = Path.of(args.length > 0 ? args[0] : "switches.txt");
+        // Caminho do arquivo de alvos: passa como argumento, ou usa "switches.txt" na pasta atual (ou raiz do projeto).
+        String caminhoArg = args.length > 0 ? args[0] : "switches.txt";
+        Path arquivoAlvos = Path.of(caminhoArg);
+        if (!Files.exists(arquivoAlvos) && Files.exists(Path.of("..").resolve(caminhoArg))) {
+            arquivoAlvos = Path.of("..").resolve(caminhoArg).normalize();
+        }
 
         List<SwitchTarget> alvos;
         try {
@@ -28,7 +34,12 @@ public class App {
             return;
         }
 
-        System.out.println(alvos.size() + " switch(es) para coletar.");
+        System.out.println("============================================");
+        System.out.println("Alvos informados em " + arquivoAlvos + " (" + alvos.size() + " switch(es)):");
+        for (SwitchTarget alvo : alvos) {
+            System.out.println("  - " + alvo.ip() + " (usuário: " + alvo.usuario() + ")");
+        }
+        System.out.println("============================================");
 
         TopologyEngine engine = new TopologyEngine();
         ColetorEmLote coletor = new ColetorEmLote();
@@ -39,11 +50,23 @@ public class App {
         System.out.printf("Resumo da coleta: %d OK, %d falha(s), de %d total%n",
                 resultado.sucesso().size(), resultado.falhas().size(), resultado.total());
 
+        if (!resultado.sucesso().isEmpty()) {
+            System.out.println("Switches coletados:");
+            for (SwitchIdentity sw : resultado.sucesso()) {
+                System.out.printf("  [OK] %s | %s | %s | %s | %s%n",
+                        sw.deviceName() != null ? sw.deviceName() : "N/D",
+                        sw.ip() != null ? sw.ip() : "N/D",
+                        sw.macAddress() != null ? sw.macAddress() : "N/D",
+                        sw.productId() != null ? sw.productId() : "N/D",
+                        sw.serialNumber() != null ? sw.serialNumber() : "N/D");
+            }
+        }
+
         if (!resultado.falhas().isEmpty()) {
             System.out.println();
             System.out.println("Switches que falharam:");
             for (var falha : resultado.falhas()) {
-                System.out.println("  " + falha.alvo().ip() + " -> " + falha.tipo() + ": " + falha.mensagem());
+                System.out.println("  [FALHA] " + falha.alvo().ip() + " -> " + falha.tipo() + ": " + falha.mensagem());
             }
         }
 

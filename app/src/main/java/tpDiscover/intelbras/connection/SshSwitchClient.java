@@ -12,18 +12,21 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Cliente SSH para switches Comware (Intelbras S23/S33).
+ * Cliente SSH para switches Intelbras (suporta tanto Comware S23/S33 quanto Série 3000 S30).
  *
- * Estratégia de leitura: como é uma sessão de shell interativa (não exec por
- * comando), lemos o stream continuamente até detectar uma linha que "parece"
- * um prompt Comware (ex: "&lt;S2328G-B&gt;" ou "[S2328G-B]") e não chega mais
- * nenhum byte por um pequeno período — isso evita cortar a saída no meio.
+ * Estratégia de leitura: como é uma sessão de shell interativa, lemos o stream
+ * continuamente até detectar uma linha que coincide com um prompt reconhecido
+ * (Comware "<Nome>"/"[Nome]" ou Série 3000 "INTELBRAS>"/"INTELBRAS#") e não chega
+ * mais nenhum byte por um pequeno período.
  */
 public class SshSwitchClient implements SwitchClient {
 
-    // Prompt Comware: "<Nome>" (visualização de usuário) ou "[Nome]" (visualização de sistema/sub-view)
-    private static final Pattern PROMPT = Pattern.compile("(?m)^[<\\[][^>\\]\\r\\n]+[>\\]]\\s*$");
-    private static final long TIMEOUT_ESPERA_PROMPT_MS = 8_000;
+    // Prompt Comware: "<Nome>" ou "[Nome]" / S30: "INTELBRAS>" ou "INTELBRAS#"
+    private static final Pattern PROMPT = Pattern.compile("(?m)(^[<\\[][^>\\]\\r\\n]+[>\\]]\\s*$|^[a-zA-Z0-9_\\-\\.]+[>#]\\s*$)");
+    private static final Pattern SENHA_PROMPT = Pattern.compile("(?i)password\\s*:\\s*$");
+    // Paginação S30/Cisco: "---MORE---" ou "--More--"
+    private static final Pattern MAIS = Pattern.compile("(?i)--+\\s*more\\s*--+");
+    private static final long TIMEOUT_ESPERA_PROMPT_MS = 30_000;
     private static final long PERIODO_QUIETO_MS = 250;
 
     private final ConnectionConfig config;
@@ -43,15 +46,7 @@ public class SshSwitchClient implements SwitchClient {
             session = jsch.getSession(config.usuario(), config.ip(), config.portaSsh());
             session.setPassword(config.senha());
 
-            // Switches de rede raramente têm host key cadastrada no known_hosts do cliente;
-            // desabilitar a checagem é o padrão pragmático pra ferramentas de suporte de campo.
             session.setConfig("StrictHostKeyChecking", "no");
-
-            // Alguns firmwares Comware mais antigos só suportam algoritmos de troca de
-            // chave/cifra legados. Se a conexão falhar com "Algorithm negotiation fail",
-            // pode ser necessário liberar algoritmos antigos aqui, por exemplo:
-            // session.setConfig("kex", session.getConfig("kex") + ",diffie-hellman-group1-sha1");
-            // session.setConfig("server_host_key", session.getConfig("server_host_key") + ",ssh-rsa");
 
             session.setTimeout((int) config.timeoutMillis());
             session.connect((int) config.timeoutMillis());
@@ -61,14 +56,34 @@ public class SshSwitchClient implements SwitchClient {
             out = channel.getOutputStream();
             channel.connect((int) config.timeoutMillis());
 
-            // Consome o banner inicial (copyright, linhas em branco) até aparecer o primeiro prompt
-            lerAteEncontrarPrompt();
+            // Consome o banner inicial até aparecer o primeiro prompt
+            String banner = lerAteEncontrarPrompt();
+
+            // Se cair em prompt não privilegiado da Série 3000 (ex: "INTELBRAS>"), eleva para "#" com 'en'
+            entrarModoPrivilegiadoSeNecessario(banner);
 
         } catch (JSchException e) {
             throw new SwitchConnectionException(classificarErroJsch(e), mensagemAmigavel(e), e);
         } catch (IOException e) {
             throw new SwitchConnectionException(SwitchConnectionException.Tipo.ERRO_PROTOCOLO,
                     "Erro de I/O ao abrir canal SSH com " + config.ip() + ": " + e.getMessage(), e);
+        }
+    }
+
+    private void entrarModoPrivilegiadoSeNecessario(String saidaAtual) throws SwitchConnectionException, IOException {
+        String linhaPrompt = ultimaLinha(saidaAtual).trim();
+        // Se termina com '>' mas não começa com '<' (ex: "INTELBRAS>"), está no modo usuário do S30
+        if (linhaPrompt.endsWith(">") && !linhaPrompt.startsWith("<")) {
+            out.write("en\n".getBytes());
+            out.flush();
+            dormir(PERIODO_QUIETO_MS);
+
+            String resp = lerAteEncontrarPromptOuSenha();
+            if (SENHA_PROMPT.matcher(ultimaLinha(resp).trim()).find()) {
+                out.write((config.senha() + "\n").getBytes());
+                out.flush();
+                lerAteEncontrarPrompt();
+            }
         }
     }
 
@@ -123,11 +138,20 @@ public class SshSwitchClient implements SwitchClient {
                 int lidos = in.read(chunk);
                 if (lidos > 0) {
                     buffer.append(new String(chunk, 0, lidos));
+                    String texto = buffer.toString();
 
-                    Matcher m = PROMPT.matcher(buffer.toString());
+                    // Se o switch exibiu ---MORE---, envia espaço para continuar
+                    if (MAIS.matcher(texto).find()) {
+                        // Apaga o "---MORE---" do buffer acumulado para não poluir a saída
+                        buffer = new StringBuilder(MAIS.matcher(texto).replaceAll(""));
+                        out.write(" ".getBytes());
+                        out.flush();
+                        inicio = System.currentTimeMillis(); // reinicia timeout após cada página
+                        continue;
+                    }
+
+                    Matcher m = PROMPT.matcher(texto);
                     if (m.find()) {
-                        // achou algo que parece prompt; espera um pouco pra confirmar
-                        // que não é só uma linha parcial e que não vem mais nada atrás
                         dormir(PERIODO_QUIETO_MS);
                         if (in.available() == 0) {
                             return buffer.toString();
@@ -145,6 +169,55 @@ public class SshSwitchClient implements SwitchClient {
                                 + "Saída parcial recebida: " + buffer, null);
             }
         }
+    }
+
+    private String lerAteEncontrarPromptOuSenha() throws SwitchConnectionException, IOException {
+        StringBuilder buffer = new StringBuilder();
+        byte[] chunk = new byte[4096];
+        long inicio = System.currentTimeMillis();
+
+        while (true) {
+            if (in.available() > 0) {
+                int lidos = in.read(chunk);
+                if (lidos > 0) {
+                    buffer.append(new String(chunk, 0, lidos));
+                    String texto = buffer.toString();
+
+                    if (MAIS.matcher(texto).find()) {
+                        buffer = new StringBuilder(MAIS.matcher(texto).replaceAll(""));
+                        out.write(" ".getBytes());
+                        out.flush();
+                        inicio = System.currentTimeMillis();
+                        continue;
+                    }
+
+                    Matcher mPrompt = PROMPT.matcher(texto);
+                    Matcher mSenha = SENHA_PROMPT.matcher(ultimaLinha(texto).trim());
+                    if (mPrompt.find() || mSenha.find()) {
+                        dormir(PERIODO_QUIETO_MS);
+                        if (in.available() == 0) {
+                            return texto;
+                        }
+                    }
+                }
+            } else {
+                dormir(50);
+            }
+
+            if (System.currentTimeMillis() - inicio > TIMEOUT_ESPERA_PROMPT_MS) {
+                throw new SwitchConnectionException(SwitchConnectionException.Tipo.TIMEOUT,
+                        "Timeout esperando resposta do switch " + config.ip() + ": " + buffer, null);
+            }
+        }
+    }
+
+    private static String ultimaLinha(String texto) {
+        if (texto == null) return "";
+        String[] linhas = texto.split("\\R");
+        for (int i = linhas.length - 1; i >= 0; i--) {
+            if (!linhas[i].isBlank()) return linhas[i];
+        }
+        return "";
     }
 
     private void dormir(long ms) {
