@@ -8,6 +8,7 @@ import tpDiscover.intelbras.correlacao.TopologyEngine;
 import tpDiscover.intelbras.modelos.MacEntry;
 import tpDiscover.intelbras.modelos.SwitchIdentity;
 import tpDiscover.intelbras.parser.ComwareParser;
+import tpDiscover.intelbras.parser.OltParser;
 import tpDiscover.intelbras.parser.Serie3000Parser;
 
 import java.util.ArrayList;
@@ -15,13 +16,16 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Coleta uma lista de switches, suportando tanto switches Comware (S23/S33)
- * quanto switches da Série 3000 (S3028G-PB, S3054G-B, etc.).
+ * Coleta uma lista de equipamentos de rede Intelbras, suportando:
+ *  - Switches Comware (S23/S33)
+ *  - Switches Série 3000 (S3028G-PB, S3054G-B, etc.)
+ *  - OLTs EPON/GPON (OLT 4840E, OLT 4880E, G16, G08, etc.)
  */
 public class ColetorEmLote {
 
     private final ComwareParser comwareParser = new ComwareParser();
     private final Serie3000Parser serie3000Parser = new Serie3000Parser();
+    private final OltParser oltParser = new OltParser();
 
     public record FalhaColeta(SwitchTarget alvo, SwitchConnectionException.Tipo tipo, String mensagem) {
     }
@@ -58,16 +62,13 @@ public class ColetorEmLote {
         try {
             cliente = SwitchConnector.conectar(config);
 
-            // Tenta detectar se é Comware ou Série 3000
+            // 1) Tenta detectar se é Comware (S23/S33)
             String respComware = cliente.executarComando("screen-length disable");
-            boolean ehS30 = ehComandoInvalido(respComware);
+            boolean ehComware = !ehComandoInvalido(respComware);
 
-            if (!ehS30) {
-                // Tenta comando de identidade do Comware
+            if (ehComware) {
                 String manuinfo = cliente.executarComando("display device manuinfo");
-                if (ehComandoInvalido(manuinfo)) {
-                    ehS30 = true;
-                } else {
+                if (!ehComandoInvalido(manuinfo)) {
                     String macTableBruta = cliente.executarComando("display mac-address");
                     SwitchIdentity identidade = comwareParser.parseDeviceManuInfo(alvo.ip(), manuinfo);
                     engine.registrarSwitch(identidade);
@@ -87,11 +88,25 @@ public class ColetorEmLote {
                 }
             }
 
-            // Fluxo Série 3000 (S30)
-            cliente.executarComando("terminal length 0");
+            // 2) Consulta show version e show system para diferenciar OLT (4840E/G16/G08) de Switch Série 3000
             String version = cliente.executarComando("show version");
             String systemInfo = cliente.executarComando("show system");
-            // Tenta obter MAC base pela interface VLAN 1 ou gerência/porta 1
+            String infoCombinada = version + "\n" + systemInfo;
+
+            if (oltParser.ehDispositivoOlt(infoCombinada)) {
+                String macTableBruta = cliente.executarComando("show mac-address-table");
+                SwitchIdentity identidade = oltParser.parseDeviceInfo(alvo.ip(), "OLT", infoCombinada);
+                engine.registrarSwitch(identidade);
+
+                List<MacEntry> entradas = oltParser.parseMacAddressTable(identidade.macNormalizado(), macTableBruta);
+                engine.registrarEntradas(identidade.macNormalizado(), entradas);
+
+                System.out.println("  [OLT] " + entradas.size() + " entradas de tabela MAC coletadas");
+                return identidade;
+            }
+
+            // 3) Fluxo Switch Série 3000 (S30)
+            cliente.executarComando("terminal length 0");
             String mgmtInfo = cliente.executarComando("show interface vlan 1");
             if (ehComandoInvalido(mgmtInfo)) {
                 mgmtInfo = cliente.executarComando("show interface management1/0/0");
@@ -105,9 +120,8 @@ public class ColetorEmLote {
                 macTableBruta = cliente.executarComando("show mac-address-table");
             }
 
-            // Combina todas as saídas para melhor chance de extrair MAC/serial
             SwitchIdentity identidade = serie3000Parser.parseDeviceVersion(
-                    alvo.ip(), "INTELBRAS", version + "\n" + systemInfo + "\n" + mgmtInfo);
+                    alvo.ip(), "INTELBRAS", infoCombinada + "\n" + mgmtInfo);
             engine.registrarSwitch(identidade);
 
             List<MacEntry> entradas = serie3000Parser.parseMacAddressTable(identidade.macNormalizado(), macTableBruta);

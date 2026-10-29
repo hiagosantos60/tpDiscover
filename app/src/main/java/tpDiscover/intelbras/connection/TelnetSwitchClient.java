@@ -8,14 +8,17 @@ import java.io.OutputStream;
 import java.util.regex.Pattern;
 
 /**
- * Cliente Telnet para switches Intelbras (Comware S23/S33 e Série 3000 S30).
+ * Cliente Telnet para switches e OLTs Intelbras (Comware S23/S33, Série 3000 S30 e OLTs 4840E/G16/G08).
  */
 public class TelnetSwitchClient implements SwitchClient {
 
     private static final Pattern PROMPT = Pattern.compile("(?m)(^[<\\[][^>\\]\\r\\n]+[>\\]]\\s*$|^[a-zA-Z0-9_\\-\\.]+[>#]\\s*$)");
-    private static final Pattern LOGIN_PROMPT = Pattern.compile("(?i)(login|username)\\s*:\\s*$");
-    private static final Pattern PASSWORD_PROMPT = Pattern.compile("(?i)password\\s*:\\s*$");
-    private static final Pattern MAIS = Pattern.compile("(?i)--+\\s*more\\s*--+");
+    private static final Pattern LOGIN_PROMPT = Pattern.compile("(?i)(login|username|user\\s*name)(?:\\s*\\([^)]*\\))?\\s*:\\s*$");
+    private static final Pattern PASSWORD_PROMPT = Pattern.compile("(?i)password(?:\\s*\\([^)]*\\))?\\s*:\\s*$");
+    // Paginação S30/Cisco ("---MORE---") e OLT ("....press ENTER to next line, CTRL_C to quit, other key to next page....")
+    private static final Pattern MAIS = Pattern.compile(
+            "(?i)(--+\\s*more\\s*--+|[.]{2,}\\s*press\\s+enter\\s+to\\s+next\\s+line[^.\\r\\n]*[.]{2,})"
+    );
     private static final long TIMEOUT_ESPERA_MS = 30_000;
     private static final long PERIODO_QUIETO_MS = 250;
 
@@ -47,20 +50,40 @@ public class TelnetSwitchClient implements SwitchClient {
 
             if (PASSWORD_PROMPT.matcher(ultimaLinha(saida)).find()) {
                 enviar(config.senha());
-                saida = lerAte(PROMPT, LOGIN_PROMPT);
+                saida = lerAte(PROMPT, LOGIN_PROMPT, PASSWORD_PROMPT);
             }
 
-            boolean voltouParaLogin = LOGIN_PROMPT.matcher(ultimaLinha(saida)).find();
+            boolean voltouParaLogin = LOGIN_PROMPT.matcher(ultimaLinha(saida)).find()
+                    || PASSWORD_PROMPT.matcher(ultimaLinha(saida)).find();
             boolean mensagemDeFalha = contemIgnoreCase(saida, "invalid")
                     || contemIgnoreCase(saida, "fail")
-                    || contemIgnoreCase(saida, "denied");
+                    || contemIgnoreCase(saida, "denied")
+                    || contemIgnoreCase(saida, "password error");
+
+            // Fallback automático para senha padrão "admin" de OLTs (4840E/G16/G08) caso a senha configurada não seja "admin"
+            if ((voltouParaLogin || mensagemDeFalha) && !"admin".equals(config.senha())) {
+                if (LOGIN_PROMPT.matcher(ultimaLinha(saida)).find()) {
+                    enviar(config.usuario());
+                    saida = lerAte(PASSWORD_PROMPT, PROMPT);
+                }
+                if (PASSWORD_PROMPT.matcher(ultimaLinha(saida)).find()) {
+                    enviar("admin");
+                    saida = lerAte(PROMPT, LOGIN_PROMPT, PASSWORD_PROMPT);
+                }
+                voltouParaLogin = LOGIN_PROMPT.matcher(ultimaLinha(saida)).find()
+                        || PASSWORD_PROMPT.matcher(ultimaLinha(saida)).find();
+                mensagemDeFalha = contemIgnoreCase(saida, "invalid")
+                        || contemIgnoreCase(saida, "fail")
+                        || contemIgnoreCase(saida, "denied")
+                        || contemIgnoreCase(saida, "password error");
+            }
 
             if (voltouParaLogin || mensagemDeFalha) {
                 throw new SwitchConnectionException(SwitchConnectionException.Tipo.FALHA_AUTENTICACAO,
                         "Usuário ou senha incorretos para " + config.ip() + " (Telnet)", null);
             }
 
-            // Se cair em prompt modo usuário do S30 (ex: "INTELBRAS>"), eleva para privilegiado "#"
+            // Se cair em prompt modo usuário do S30 ou OLT (ex: "INTELBRAS>" / "OLT4880E>"), eleva para "#"
             entrarModoPrivilegiadoSeNecessario(saida);
 
         } catch (IOException e) {
@@ -71,7 +94,7 @@ public class TelnetSwitchClient implements SwitchClient {
     private void entrarModoPrivilegiadoSeNecessario(String saidaAtual) throws SwitchConnectionException, IOException {
         String linhaPrompt = ultimaLinha(saidaAtual).trim();
         if (linhaPrompt.endsWith(">") && !linhaPrompt.startsWith("<")) {
-            enviar("en");
+            enviar("enable");
             String resp = lerAte(PROMPT, PASSWORD_PROMPT);
             if (PASSWORD_PROMPT.matcher(ultimaLinha(resp)).find()) {
                 enviar(config.senha());
@@ -95,7 +118,7 @@ public class TelnetSwitchClient implements SwitchClient {
         return switch (classificarErroIo(e)) {
             case TIMEOUT -> "Timeout na conexão Telnet com " + config.ip();
             case INALCANCAVEL -> "Não foi possível alcançar " + config.ip() + ":" + config.portaTelnet()
-                    + " — Telnet pode estar desabilitado no switch, ou IP/rede incorretos";
+                    + " — Telnet pode estar desabilitado no equipamento, ou IP/rede incorretos";
             default -> "Erro de rede no Telnet com " + config.ip() + ": " + e.getMessage();
         };
     }
@@ -132,9 +155,9 @@ public class TelnetSwitchClient implements SwitchClient {
                     buffer.append(new String(chunk, 0, lidos));
                     String texto = buffer.toString();
 
-                    // Lida com paginação ---MORE---
+                    // Lida com paginação ---MORE--- ou ....press ENTER to next line....
                     if (MAIS.matcher(texto).find()) {
-                        buffer = new StringBuilder(MAIS.matcher(texto).replaceAll(""));
+                        buffer = new StringBuilder(MAIS.matcher(texto).replaceAll("\n"));
                         out.write(" ".getBytes());
                         out.flush();
                         inicio = System.currentTimeMillis();
@@ -157,7 +180,7 @@ public class TelnetSwitchClient implements SwitchClient {
 
             if (System.currentTimeMillis() - inicio > TIMEOUT_ESPERA_MS) {
                 throw new SwitchConnectionException(SwitchConnectionException.Tipo.TIMEOUT,
-                        "Timeout esperando resposta do switch " + config.ip()
+                        "Timeout esperando resposta do equipamento " + config.ip()
                                 + " via Telnet (" + TIMEOUT_ESPERA_MS + "ms). Saída parcial: " + buffer, null);
             }
         }

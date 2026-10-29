@@ -7,6 +7,7 @@ import tpDiscover.intelbras.modelos.MacEntry;
 import tpDiscover.intelbras.modelos.MacUtils;
 import tpDiscover.intelbras.modelos.SwitchIdentity;
 import tpDiscover.intelbras.parser.ComwareParser;
+import tpDiscover.intelbras.parser.OltParser;
 import tpDiscover.intelbras.parser.Serie3000Parser;
 
 import java.io.IOException;
@@ -43,6 +44,44 @@ class AppTest {
 
         // Outro equipamento do mesmo lote no mesmo 5º octeto, mas fora da janela (+128)
         assertFalse(MacUtils.pertenceAoSwitch("80854407f600", "80854407f680"));
+    }
+
+    @Test
+    void testOltParserComSaidaReal() {
+        OltParser parser = new OltParser();
+        String rawInfo = """
+                software platform   :Broadband Network Platform Software
+                software version    :OLT-04P V100R001B01D001P007SP6
+                MAC address         :58:10:8c:68:da:f0
+                product serial no.  :1
+                system configuration
+                system description     :EPON
+                system name            :OLT4880E
+                product name           :OLT-04P EPON Product
+                """;
+
+        assertTrue(parser.ehDispositivoOlt(rawInfo));
+        SwitchIdentity id = parser.parseDeviceInfo("10.1.40.131", "OLT", rawInfo);
+        assertEquals("OLT4880E", id.deviceName());
+        assertEquals("5810-8C68-DAF0", id.macAddress());
+        assertEquals("OLT-04P EPON", id.productId());
+        assertEquals("1", id.serialNumber());
+
+        String rawMacTable = """
+                MAC Address           VLAN ID  port     status
+                00:09:0f:09:1e:0a     1        e0/2     dynamic
+                80:85:44:01:e3:84     1        e0/2     dynamic
+                58:10:8c:68:da:f0     1        cpu      static
+                30:e1:f1:ff:66:1f     1        e0/2     dynamic
+                Total entries: 4 .
+                """;
+
+        List<MacEntry> entries = parser.parseMacAddressTable(id.macNormalizado(), rawMacTable);
+        // A entrada "cpu" deve ser ignorada
+        assertEquals(3, entries.size());
+        assertEquals("0009-0f09-1e0a", entries.get(0).mac());
+        assertEquals("E0/2", entries.get(0).port());
+        assertEquals(1, entries.get(0).vlanId());
     }
 
     @Test

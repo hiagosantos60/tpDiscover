@@ -1,5 +1,6 @@
-# Lista de switches para descoberta de topologia (formato: ip;usuario;senha)
-# Suporta switches Intelbras Comware (S23/S33) e Série 3000 (S30)
+# Lista de equipamentos para descoberta de topologia (formato: ip;usuario;senha)
+# Suporta switches Intelbras Comware (S23/S33), Série 3000 (S30) e OLTs (4840E, G16, G08)
 10.1.40.204;admin;Admin@1234
 10.1.40.203;admin;Admin@1234
 10.1.40.130;admin;Admin@1234
+10.1.40.131;admin;Admin@1234
