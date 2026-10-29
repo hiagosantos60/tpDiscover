@@ -79,6 +79,7 @@ public class App {
         System.out.println("============================================");
         System.out.println("Topologia inferida:");
         System.out.println("============================================");
-        RelatorioTopologia.imprimir(engine);
+        Path pastaSaida = arquivoAlvos.toAbsolutePath().normalize().getParent();
+        RelatorioTopologia.imprimir(engine, pastaSaida);
     }
 }

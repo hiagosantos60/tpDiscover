@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import tpDiscover.intelbras.correlacao.RelatorioTopologia;
 import tpDiscover.intelbras.correlacao.TopologyEngine;
 import tpDiscover.intelbras.modelos.MacEntry;
+import tpDiscover.intelbras.modelos.MacUtils;
 import tpDiscover.intelbras.modelos.SwitchIdentity;
 import tpDiscover.intelbras.parser.ComwareParser;
 import tpDiscover.intelbras.parser.Serie3000Parser;
@@ -17,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AppTest {
@@ -28,6 +30,19 @@ class AppTest {
         assertTrue(RelatorioTopologia.compararPortas("GE1/0/10", "GE1/0/24") < 0);
         assertTrue(RelatorioTopologia.compararPortas("GE1/0/24", "XGE1/0/25") < 0);
         assertTrue(RelatorioTopologia.compararPortas("BAGG1", "BAGG2") < 0);
+    }
+
+    @Test
+    void testMacUtilsOffsetECarryNoQuintoOcteto() {
+        // Offset normal dentro do mesmo 5º octeto (+11 e +26)
+        assertTrue(MacUtils.pertenceAoSwitch("80854407f634", "80854407f63f"));
+        assertTrue(MacUtils.pertenceAoSwitch("80854407f634", "80854407f64e"));
+
+        // Carry para o 5º octeto (ex: base termina em 0xF8 e porta soma +16 -> 0x08 do próximo bloco)
+        assertTrue(MacUtils.pertenceAoSwitch("80854407f6f8", "80854407f708"));
+
+        // Outro equipamento do mesmo lote no mesmo 5º octeto, mas fora da janela (+128)
+        assertFalse(MacUtils.pertenceAoSwitch("80854407f600", "80854407f680"));
     }
 
     @Test
@@ -146,10 +161,10 @@ class AppTest {
         engine.registrarSwitch(swB);
         engine.registrarSwitch(swC);
 
-        // A vê B e C na GE1/0/20
+        // Mesmo que A só tenha aprendido B na GE1/0/20 (MAC de C expirou na tabela de A),
+        // o motor infere transitivamente que C está atrás de B!
         engine.registrarEntradas(swA.macNormalizado(), List.of(
-                new MacEntry(swA.macNormalizado(), "30e1-f1ff-661f", 1, "Learned", "GE1/0/20"),
-                new MacEntry(swA.macNormalizado(), "d836-5f42-5c7b", 1, "Learned", "GE1/0/20")
+                new MacEntry(swA.macNormalizado(), "30e1-f1ff-661f", 1, "Learned", "GE1/0/20")
         ));
 
         // B vê A na GE1/0/23 e C na BAGG2
@@ -177,6 +192,58 @@ class AppTest {
         // B deve ser raiz da árvore conectando A e C sem ambiguidade
         assertTrue(relatorio.contains("GE1/0/23 <-> GE1/0/20 ─ S2328G-A (10.1.40.204)"));
         assertTrue(relatorio.contains("BAGG2 <-> GE1/0/2 ─ INTELBRAS (10.1.40.130)"));
+    }
+
+    @Test
+    void testInferenciaIntermediarioOmitidoPorAgingCenarioTeste() {
+        TopologyEngine engine = new TopologyEngine();
+
+        SwitchIdentity sw24 = new SwitchIdentity("SWT-24", "SN-24", "D836-5F9A-5468", "S3054G-B", "10.0.0.24");
+        SwitchIdentity sw10 = new SwitchIdentity("SWT-10", "SN-10", "8085-4407-F634", "S3352G-B", "10.0.0.10");
+        SwitchIdentity sw18 = new SwitchIdentity("SWT-18", "SN-18", "8085-4403-C045", "S2328G-PB", "10.0.0.18");
+        SwitchIdentity sw21 = new SwitchIdentity("SWT-21", "SN-21", "8085-4407-B35C", "S3328G-B", "10.0.0.21");
+
+        engine.registrarSwitch(sw24);
+        engine.registrarSwitch(sw10);
+        engine.registrarSwitch(sw18);
+        engine.registrarSwitch(sw21);
+
+        // SWT .24 vê .10 e .18 na GE1/0/11, e vê .21 na GE1/0/35
+        engine.registrarEntradas(sw24.macNormalizado(), List.of(
+                new MacEntry(sw24.macNormalizado(), "8085-4407-f634", 1, "Learned", "GE1/0/11"),
+                new MacEntry(sw24.macNormalizado(), "8085-4403-c045", 1, "Learned", "GE1/0/11"),
+                new MacEntry(sw24.macNormalizado(), "8085-4407-b35c", 1, "Learned", "GE1/0/35")
+        ));
+
+        // SWT .10 vê .24 e .21 na GE1/0/1, e vê .18 na GE1/0/26
+        engine.registrarEntradas(sw10.macNormalizado(), List.of(
+                new MacEntry(sw10.macNormalizado(), "d836-5f9a-5469", 1, "Learned", "GE1/0/1"),
+                new MacEntry(sw10.macNormalizado(), "8085-4407-b367", 1, "Learned", "GE1/0/1"),
+                new MacEntry(sw10.macNormalizado(), "8085-4403-c050", 1, "Learned", "GE1/0/26"),
+                new MacEntry(sw10.macNormalizado(), "8085-4403-c05f", 1, "Learned", "GE1/0/26")
+        ));
+
+        // SWT .18 (borda ligada na GE1/0/26 do .10) aprendeu .24 e .21 na GE1/0/13,
+        // mas NÃO tem o MAC de .10 na tabela (caso real do cenario_teste.txt)
+        engine.registrarEntradas(sw18.macNormalizado(), List.of(
+                new MacEntry(sw18.macNormalizado(), "d836-5f9a-5469", 1, "Learned", "GE1/0/13"),
+                new MacEntry(sw18.macNormalizado(), "8085-4407-b367", 1, "Learned", "GE1/0/13")
+        ));
+
+        // SWT .21 vê .24, .10 e .18 na GE1/0/3
+        engine.registrarEntradas(sw21.macNormalizado(), List.of(
+                new MacEntry(sw21.macNormalizado(), "d836-5f9a-5469", 1, "Learned", "GE1/0/3"),
+                new MacEntry(sw21.macNormalizado(), "8085-4407-f63f", 1, "Learned", "GE1/0/3"),
+                new MacEntry(sw21.macNormalizado(), "8085-4403-c050", 1, "Learned", "GE1/0/3")
+        ));
+
+        String relatorio = RelatorioTopologia.gerarRelatorioTexto(engine);
+
+        // SWT .10 deve saber que a porta remota de SWT .18 é GE1/0/13 (e não '?')
+        assertTrue(relatorio.contains("-> SWT-18 (10.0.0.18) porta GE1/0/13"));
+
+        // SWT .18 deve identificar SWT .10 (porta GE1/0/26) como seu vizinho direto na GE1/0/13
+        assertTrue(relatorio.contains("-> SWT-10 (10.0.0.10) porta GE1/0/26"));
     }
 
     @Test

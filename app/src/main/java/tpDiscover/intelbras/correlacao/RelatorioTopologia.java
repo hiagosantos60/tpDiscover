@@ -28,16 +28,23 @@ public class RelatorioTopologia {
     private static final String TRACEJADO = " \u2500 ";     //  ─ 
     private static final String GUIA_COLUNA = "\u2502  ";    // │  
 
+    private record Enlace(String portaLocal, String portaRemota, SwitchIdentity vizinho) {}
+
     public static void imprimir(TopologyEngine engine) {
+        imprimir(engine, null);
+    }
+
+    public static void imprimir(TopologyEngine engine, Path pastaDestino) {
         String relatorio = gerarRelatorioTexto(engine);
         System.out.println(relatorio);
 
         String nomeArquivo = "topologia_" + LocalDateTime.now().format(ARQUIVO_TIMESTAMP_FMT) + ".txt";
+        Path destino = (pastaDestino != null) ? pastaDestino.resolve(nomeArquivo) : Path.of(nomeArquivo);
         try {
-            Files.writeString(Path.of(nomeArquivo), relatorio, StandardCharsets.UTF_8);
-            System.out.println("\n[ARQUIVO] Relatório salvo com sucesso em: " + nomeArquivo);
+            Files.writeString(destino, relatorio, StandardCharsets.UTF_8);
+            System.out.println("\n[ARQUIVO] Relatório salvo com sucesso em: " + destino);
         } catch (IOException e) {
-            System.err.println("[AVISO] Não foi possível salvar o arquivo " + nomeArquivo + ": " + e.getMessage());
+            System.err.println("[AVISO] Não foi possível salvar o arquivo " + destino + ": " + e.getMessage());
         }
     }
 
@@ -173,28 +180,93 @@ public class RelatorioTopologia {
             return;
         }
 
-        SwitchIdentity raizPrincipal = encontrarMelhorRaiz(engine, switches);
+        Map<String, List<Enlace>> adjacencia = construirGrafoEnlacesDiretos(engine, switches);
+        SwitchIdentity raizPrincipal = encontrarMelhorRaiz(switches, adjacencia);
 
         Set<String> visitados = new HashSet<>();
         sb.append(raizPrincipal.deviceName()).append(" (").append(raizPrincipal.ip()).append(")\n");
         visitados.add(raizPrincipal.macNormalizado());
-        desenharGalho(engine, raizPrincipal, "", visitados, sb);
+        desenharGalho(raizPrincipal, "", visitados, adjacencia, sb);
 
         for (SwitchIdentity sw : switches) {
             if (!visitados.contains(sw.macNormalizado())) {
                 sb.append("\n").append(sw.deviceName()).append(" (").append(sw.ip()).append(")\n");
                 visitados.add(sw.macNormalizado());
-                desenharGalho(engine, sw, "", visitados, sb);
+                desenharGalho(sw, "", visitados, adjacencia, sb);
             }
         }
     }
 
-    private static SwitchIdentity encontrarMelhorRaiz(TopologyEngine engine, List<SwitchIdentity> switches) {
+    /**
+     * Constrói o grafo simétrico de enlaces diretos entre os switches.
+     * Caso um lado tenha perdido o MAC do vizinho por expiração (aging), o enlace
+     * descoberto pelo outro lado garante que a árvore permaneça íntegra e conectada.
+     */
+    private static Map<String, List<Enlace>> construirGrafoEnlacesDiretos(
+            TopologyEngine engine,
+            List<SwitchIdentity> switches
+    ) {
+        Map<String, List<Enlace>> adj = new LinkedHashMap<>();
+        for (SwitchIdentity sw : switches) {
+            adj.put(sw.macNormalizado(), new ArrayList<>());
+        }
+
+        for (SwitchIdentity sw : switches) {
+            String idOrigem = sw.macNormalizado();
+            Map<String, TopologyEngine.PortaAnalise> portas = engine.analisarPortas(idOrigem);
+            List<String> portasOrdenadas = new ArrayList<>(portas.keySet());
+            portasOrdenadas.sort(RelatorioTopologia::compararPortas);
+
+            for (String portaLocal : portasOrdenadas) {
+                TopologyEngine.PortaAnalise analise = portas.get(portaLocal);
+                if (!analise.ehPortaDeAcesso()) {
+                    TopologyEngine.ResultadoInferencia r = engine.inferirVizinhoDireto(idOrigem, analise.switchesVisiveis());
+                    if (r.tipo() == TopologyEngine.ResultadoInferencia.Tipo.DIRETO ||
+                        r.tipo() == TopologyEngine.ResultadoInferencia.Tipo.DIRETO_PARCIAL) {
+                        SwitchIdentity vizinho = r.candidatos().get(0);
+                        String portaRemota = engine.portaRemota(idOrigem, vizinho.macNormalizado()).orElse("?");
+                        adicionarEnlaceSeAusente(adj.get(idOrigem), new Enlace(portaLocal, portaRemota, vizinho));
+
+                        // Garante simetria caso o vizinho não tenha aprendido o MAC de origem diretamente
+                        List<Enlace> listaVizinho = adj.get(vizinho.macNormalizado());
+                        if (listaVizinho != null) {
+                            adicionarEnlaceSeAusente(listaVizinho, new Enlace(portaRemota, portaLocal, sw));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Ordena os enlaces de cada switch pela porta local
+        for (List<Enlace> enlaces : adj.values()) {
+            enlaces.sort((e1, e2) -> compararPortas(e1.portaLocal(), e2.portaLocal()));
+        }
+        return adj;
+    }
+
+    private static void adicionarEnlaceSeAusente(List<Enlace> lista, Enlace novo) {
+        for (int i = 0; i < lista.size(); i++) {
+            Enlace existente = lista.get(i);
+            if (existente.vizinho().macNormalizado().equals(novo.vizinho().macNormalizado())) {
+                // Atualiza se o enlace existente tinha "?" e o novo descobriu a porta real
+                String portaLocal = !"?".equals(existente.portaLocal()) ? existente.portaLocal() : novo.portaLocal();
+                String portaRemota = !"?".equals(existente.portaRemota()) ? existente.portaRemota() : novo.portaRemota();
+                lista.set(i, new Enlace(portaLocal, portaRemota, existente.vizinho()));
+                return;
+            }
+        }
+        lista.add(novo);
+    }
+
+    private static SwitchIdentity encontrarMelhorRaiz(
+            List<SwitchIdentity> switches,
+            Map<String, List<Enlace>> adjacencia
+    ) {
         SwitchIdentity melhor = switches.get(0);
         int maxVizinhos = -1;
 
         for (SwitchIdentity sw : switches) {
-            int contagem = contarVizinhos(engine, sw);
+            int contagem = adjacencia.getOrDefault(sw.macNormalizado(), List.of()).size();
             if (contagem > maxVizinhos) {
                 maxVizinhos = contagem;
                 melhor = sw;
@@ -203,56 +275,28 @@ public class RelatorioTopologia {
         return melhor;
     }
 
-    private static int contarVizinhos(TopologyEngine engine, SwitchIdentity sw) {
-        int count = 0;
-        Map<String, TopologyEngine.PortaAnalise> portas = engine.analisarPortas(sw.macNormalizado());
-        for (TopologyEngine.PortaAnalise analise : portas.values()) {
-            if (!analise.ehPortaDeAcesso()) {
-                TopologyEngine.ResultadoInferencia r = engine.inferirVizinhoDireto(sw.macNormalizado(), analise.switchesVisiveis());
-                if (r.tipo() == TopologyEngine.ResultadoInferencia.Tipo.DIRETO ||
-                    r.tipo() == TopologyEngine.ResultadoInferencia.Tipo.DIRETO_PARCIAL) {
-                    count++;
-                }
-            }
-        }
-        return count;
-    }
-
     private static void desenharGalho(
-            TopologyEngine engine,
             SwitchIdentity pai,
             String prefixo,
             Set<String> visitados,
+            Map<String, List<Enlace>> adjacencia,
             StringBuilder sb
     ) {
-        record Enlace(String portaLocal, String portaRemota, SwitchIdentity vizinho) {}
-
-        Map<String, TopologyEngine.PortaAnalise> portas = engine.analisarPortas(pai.macNormalizado());
-        List<String> portasOrdenadas = new ArrayList<>(portas.keySet());
-        portasOrdenadas.sort(RelatorioTopologia::compararPortas);
-
         List<Enlace> vizinhosDiretos = new ArrayList<>();
-
-        for (String portaLocal : portasOrdenadas) {
-            TopologyEngine.PortaAnalise analise = portas.get(portaLocal);
-            if (!analise.ehPortaDeAcesso()) {
-                TopologyEngine.ResultadoInferencia r = engine.inferirVizinhoDireto(pai.macNormalizado(), analise.switchesVisiveis());
-                if (r.tipo() == TopologyEngine.ResultadoInferencia.Tipo.DIRETO ||
-                    r.tipo() == TopologyEngine.ResultadoInferencia.Tipo.DIRETO_PARCIAL) {
-                    SwitchIdentity filho = r.candidatos().get(0);
-                    if (!visitados.contains(filho.macNormalizado())) {
-                        String portaRemota = engine.portaRemota(pai.macNormalizado(), filho.macNormalizado())
-                                .orElse("?");
-                        vizinhosDiretos.add(new Enlace(portaLocal, portaRemota, filho));
-                    }
-                }
+        for (Enlace e : adjacencia.getOrDefault(pai.macNormalizado(), List.of())) {
+            if (!visitados.contains(e.vizinho().macNormalizado())) {
+                vizinhosDiretos.add(e);
             }
+        }
+
+        // Marca todos os filhos imediatos como visitados antes de descer recursivamente
+        for (Enlace e : vizinhosDiretos) {
+            visitados.add(e.vizinho().macNormalizado());
         }
 
         for (int i = 0; i < vizinhosDiretos.size(); i++) {
             boolean ehUltimo = (i == vizinhosDiretos.size() - 1);
             Enlace e = vizinhosDiretos.get(i);
-            visitados.add(e.vizinho().macNormalizado());
 
             String conector = ehUltimo ? RAMO_FIM : RAMO_MEIO;
             sb.append(prefixo)
@@ -267,7 +311,7 @@ public class RelatorioTopologia {
                     .append(")\n");
 
             String proximoPrefixo = prefixo + (ehUltimo ? "   " : GUIA_COLUNA);
-            desenharGalho(engine, e.vizinho(), proximoPrefixo, visitados, sb);
+            desenharGalho(e.vizinho(), proximoPrefixo, visitados, adjacencia, sb);
         }
     }
 
