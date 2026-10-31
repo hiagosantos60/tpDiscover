@@ -1,10 +1,12 @@
 package tpDiscover.intelbras.parser;
 
+import tpDiscover.intelbras.modelos.ArpEntry;
 import tpDiscover.intelbras.modelos.MacEntry;
 import tpDiscover.intelbras.modelos.SwitchIdentity;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -17,13 +19,20 @@ import java.util.regex.Pattern;
  *  - show mac-address-table   -> tabela MAC (formato: MAC  VLAN  port  status)
  *  - show version             -> MAC base, serial, versão de hardware/software
  *  - show system              -> hostname (system name) e modelo (product name)
+ *  - show ip route / show arp -> descoberta automática do roteador/gateway da rede
  */
 public class OltParser {
+
+    private static final String IPV4_REGEX =
+            "((?:25[0-5]|2[0-4]\\d|1?\\d?\\d)(?:\\.(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)){3})";
+
+    private static final String MAC_ANY_REGEX =
+            "([0-9a-fA-F]{2}(?:[:\\-][0-9a-fA-F]{2}){5}|[0-9a-fA-F]{4}[.\\-:][0-9a-fA-F]{4}[.\\-:][0-9a-fA-F]{4})";
 
     // Formato padrão OLT 4840E / G16 / G08:
     // "00:09:0f:09:1e:0a     1        e0/2     dynamic"
     private static final Pattern MAC_FIRST_LINE = Pattern.compile(
-            "^\\s*([0-9a-fA-F]{2}(?:[:\\-][0-9a-fA-F]{2}){5}|[0-9a-fA-F]{4}[.\\-:][0-9a-fA-F]{4}[.\\-:][0-9a-fA-F]{4})\\s+" +
+            "^\\s*" + MAC_ANY_REGEX + "\\s+" +
             "(\\d+)\\s+" +
             "(\\S+)\\s+" +
             "(\\S+)\\s*$"
@@ -33,9 +42,17 @@ public class OltParser {
     // "1     00:09:0f:09:1e:0a     e0/2     dynamic"
     private static final Pattern VLAN_FIRST_LINE = Pattern.compile(
             "^\\s*(\\d+)\\s+" +
-            "([0-9a-fA-F]{2}(?:[:\\-][0-9a-fA-F]{2}){5}|[0-9a-fA-F]{4}[.\\-:][0-9a-fA-F]{4}[.\\-:][0-9a-fA-F]{4})\\s+" +
+            MAC_ANY_REGEX + "\\s+" +
             "(\\S+)\\s+" +
             "(\\S+)\\s*$"
+    );
+
+    private static final Pattern DEFAULT_ROUTE_LINE = Pattern.compile(
+            "(?i)^.*?(?:0\\.0\\.0\\.0(?:/0|\\s+0\\.0\\.0\\.0)|\\bdefault\\b|gateway\\s+of\\s+last\\s+resort\\s+is).*?\\b" + IPV4_REGEX + "\\b"
+    );
+
+    private static final Pattern ARP_LINE = Pattern.compile(
+            "^.*?" + IPV4_REGEX + "\\s+(?:\\S+\\s+)??" + MAC_ANY_REGEX + "(?:\\s+(\\S+))?(?:\\s+(\\S+))?.*$"
     );
 
     /**
@@ -124,6 +141,68 @@ public class OltParser {
         }
 
         return entries;
+    }
+
+    /**
+     * Extrai o IP do gateway padrão (0.0.0.0/0) da saída de "show ip route" na OLT.
+     */
+    public Optional<String> parseDefaultGatewayIp(String rawOutput) {
+        if (rawOutput == null || rawOutput.isBlank()) {
+            return Optional.empty();
+        }
+        Pattern ipv4 = Pattern.compile("\\b" + IPV4_REGEX + "\\b");
+        for (String line : rawOutput.split("\\R")) {
+            String trimmed = line.strip();
+            if (trimmed.isEmpty()) continue;
+            if (DEFAULT_ROUTE_LINE.matcher(trimmed).find()) {
+                Matcher mIp = ipv4.matcher(trimmed);
+                while (mIp.find()) {
+                    String cand = mIp.group(1);
+                    if (!"0.0.0.0".equals(cand) && !"255.255.255.255".equals(cand)) {
+                        return Optional.of(cand);
+                    }
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Faz o parse da saída de "show arp" na OLT.
+     */
+    public List<ArpEntry> parseArpTable(String rawOutput) {
+        List<ArpEntry> entries = new ArrayList<>();
+        if (rawOutput == null || rawOutput.isBlank()) {
+            return entries;
+        }
+        for (String line : rawOutput.split("\\R")) {
+            String trimmed = line.strip();
+            if (trimmed.isEmpty()) continue;
+            Matcher m = ARP_LINE.matcher(trimmed);
+            if (!m.matches()) continue;
+
+            String ip = m.group(1);
+            String mac = Serie3000Parser.formatarMacPadrao(m.group(2));
+            String porta = extrairPortaFisicaOlt(m.group(4));
+            if (porta == null) {
+                porta = extrairPortaFisicaOlt(m.group(3));
+            }
+            entries.add(new ArpEntry(ip, mac, porta));
+        }
+        return entries;
+    }
+
+    private static String extrairPortaFisicaOlt(String token) {
+        if (token == null || token.isBlank()) return null;
+        String t = token.trim();
+        String lower = t.toLowerCase();
+        if (ehPortaInternaCpu(t) || lower.startsWith("vlan") || t.equals("-") || t.startsWith("--")) {
+            return null;
+        }
+        if (lower.matches("^(?:e|ge|xge|g|p|epon|gpon)\\d+.*")) {
+            return normalizarPorta(t);
+        }
+        return null;
     }
 
     private static boolean ehPortaInternaCpu(String porta) {

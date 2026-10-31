@@ -1,5 +1,6 @@
 package tpDiscover.intelbras.parser;
 
+import tpDiscover.intelbras.modelos.ArpEntry;
 import tpDiscover.intelbras.modelos.MacEntry;
 import tpDiscover.intelbras.modelos.SwitchIdentity;
 
@@ -8,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -19,8 +21,12 @@ import java.util.regex.Pattern;
  *  - display device manuinfo            -> identidade do switch
  *  - display mac-address                -> tabela MAC
  *  - display link-aggregation verbose   -> portas físicas que compõem cada BAGG
+ *  - display ip routing-table / arp     -> descoberta automática do roteador/gateway da rede
  */
 public class ComwareParser {
+
+    private static final String IPV4_REGEX =
+            "((?:25[0-5]|2[0-4]\\d|1?\\d?\\d)(?:\\.(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)){3})";
 
     // Reconhece uma linha de dado da tabela MAC, ex:
     // "0009-0f09-1e0a   1          Learned          GE1/0/23                 Y"
@@ -43,6 +49,17 @@ public class ComwareParser {
             Pattern.CASE_INSENSITIVE
     );
 
+    // Ex: "0.0.0.0/0   Static  60  0   10.1.40.1   Vlan-interface1"
+    // ou  "0.0.0.0/0   Static  60  0  RD  10.1.40.1   Vlan-interface1"
+    private static final Pattern DEFAULT_ROUTE_LINE = Pattern.compile(
+            "^\\s*0\\.0\\.0\\.0(?:/0|\\s+0\\.0\\.0\\.0)\\b.*"
+    );
+
+    // Ex: "10.1.40.1       0009-0f09-1e0a  1         GE1/0/23                 1185  D"
+    private static final Pattern ARP_LINE = Pattern.compile(
+            "^\\s*" + IPV4_REGEX + "\\s+([0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4})(?:\\s+\\S+)?(?:\\s+(\\S+))?.*$"
+    );
+
     /**
      * Faz o parse da saída de "display mac-address".
      *
@@ -52,6 +69,7 @@ public class ComwareParser {
      */
     public List<MacEntry> parseMacAddressTable(String switchId, String rawOutput) {
         List<MacEntry> entries = new ArrayList<>();
+        if (rawOutput == null) return entries;
 
         for (String line : rawOutput.split("\\R")) {
             String trimmed = line.strip();
@@ -73,6 +91,87 @@ public class ComwareParser {
         }
 
         return entries;
+    }
+
+    /**
+     * Extrai o IP do gateway padrão (0.0.0.0/0) da saída de "display ip routing-table".
+     */
+    public Optional<String> parseDefaultGatewayIp(String rawOutput) {
+        if (rawOutput == null || rawOutput.isBlank()) {
+            return Optional.empty();
+        }
+        Pattern ipv4 = Pattern.compile("\\b" + IPV4_REGEX + "\\b");
+        for (String line : rawOutput.split("\\R")) {
+            String trimmed = line.strip();
+            if (trimmed.isEmpty()) continue;
+            if (DEFAULT_ROUTE_LINE.matcher(trimmed).matches()) {
+                Matcher mIp = ipv4.matcher(trimmed);
+                while (mIp.find()) {
+                    String cand = mIp.group(1);
+                    if (!"0.0.0.0".equals(cand)) {
+                        return Optional.of(cand);
+                    }
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Faz o parse da saída de "display arp", extraindo IP, MAC e porta física/agregada.
+     */
+    public List<ArpEntry> parseArpTable(String rawOutput) {
+        List<ArpEntry> entries = new ArrayList<>();
+        if (rawOutput == null || rawOutput.isBlank()) {
+            return entries;
+        }
+
+        for (String line : rawOutput.split("\\R")) {
+            String trimmed = line.strip();
+            if (trimmed.isEmpty()) continue;
+
+            Matcher m = ARP_LINE.matcher(trimmed);
+            if (!m.matches()) continue;
+
+            String ip = m.group(1);
+            String mac = Serie3000Parser.formatarMacPadrao(m.group(2));
+            String rawPort = m.group(3);
+            String portaFisica = extrairPortaFisicaArpComware(rawPort);
+
+            entries.add(new ArpEntry(ip, mac, portaFisica));
+        }
+        return entries;
+    }
+
+    public List<ArpEntry> expandirPortasArp(List<ArpEntry> entries, Map<String, List<String>> membrosPorBagg) {
+        if (membrosPorBagg == null || membrosPorBagg.isEmpty()) {
+            return entries;
+        }
+        List<ArpEntry> resultado = new ArrayList<>(entries.size());
+        for (ArpEntry e : entries) {
+            if (e.port() != null) {
+                List<String> membros = membrosPorBagg.get(e.port().toUpperCase());
+                if (membros != null && !membros.isEmpty()) {
+                    resultado.add(new ArpEntry(e.ip(), e.mac(), e.port() + " (" + String.join(", ", membros) + ")"));
+                    continue;
+                }
+            }
+            resultado.add(e);
+        }
+        return resultado;
+    }
+
+    private static String extrairPortaFisicaArpComware(String token) {
+        if (token == null || token.isBlank()) return null;
+        String t = token.trim();
+        String lower = t.toLowerCase();
+        if (lower.startsWith("vlan") || lower.startsWith("inloop") || lower.startsWith("null") || t.equals("--") || t.equals("N/A")) {
+            return null;
+        }
+        if (lower.matches("^(?:x?ge|gigabitethernet|ten-gigabitethernet|ethernet|bagg|bridge-aggregation|route-aggregation)\\d+.*")) {
+            return normalizarNomePortaComware(t);
+        }
+        return null;
     }
 
     /**
@@ -157,6 +256,12 @@ public class ComwareParser {
         }
         if (p.regionMatches(true, 0, "Ten-GigabitEthernet", 0, 19)) {
             return "XGE" + p.substring(19);
+        }
+        if (p.regionMatches(true, 0, "Bridge-Aggregation", 0, 18)) {
+            return "BAGG" + p.substring(18);
+        }
+        if (p.regionMatches(true, 0, "Route-Aggregation", 0, 17)) {
+            return "BAGG" + p.substring(17);
         }
         return p.toUpperCase();
     }

@@ -1,0 +1,7 @@
+# Lista de equipamentos para descoberta de topologia (formato: ip;usuario;senha)
+# Suporta switches Intelbras Comware (S23/S33), Série 3000 (S30) e OLTs (4840E, G16, G08)
+10.0.0.10;admin;AAdmin@@1234
+10.0.0.11;admin;AAdmin@@1234
+10.0.0.12;admin;AAdmin@@1234
+10.0.0.13;admin;AAdmin@@1234
+10.0.0.14;admin;AAdmin@@1234

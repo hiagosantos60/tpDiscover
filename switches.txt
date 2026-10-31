@@ -1,6 +1,27 @@
 # Lista de equipamentos para descoberta de topologia (formato: ip;usuario;senha)
-# Suporta switches Intelbras Comware (S23/S33), Série 3000 (S30) e OLTs (4840E, G16, G08)
-10.1.40.204;admin;Admin@1234
+# Diretiva opcional caso os switches não possuam rota padrão configurada (ex: # gateway=10.1.40.1):
+
+# S2328G-B
 10.1.40.203;admin;Admin@1234
+# S2328G-A
+10.1.40.204;admin;Admin@1234
+# S3028G-PB Max 2
+10.1.40.129;admin;Admin@1234
+# S3028G-PB Max
 10.1.40.130;admin;Admin@1234
-10.1.40.131;admin;Admin@1234
+# S3054G-B
+10.1.40.240;admin;Admin@1234
+# S3028G-B
+10.1.40.243;admin;Admin@1234
+# S3328G-PB-370W
+10.1.40.172;admin;Admin@1234
+# S3328G-B
+10.1.40.242;admin;Admin@1234
+# S3352G-B
+10.1.40.102;admin;Admin@1234
+# S2352G-A
+10.1.40.239;admin;Admin@1234
+# S2352G-PB
+10.1.40.202;admin;Admin@1234
+# S2352G-B
+10.1.40.207;admin;Admin@1234

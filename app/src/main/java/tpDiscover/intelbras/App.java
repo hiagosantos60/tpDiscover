@@ -21,14 +21,15 @@ public class App {
             arquivoAlvos = Path.of("..").resolve(caminhoArg).normalize();
         }
 
-        List<SwitchTarget> alvos;
+        AlvosLoader.ConfiguracaoAlvos configAlvos;
         try {
-            alvos = AlvosLoader.carregarDeArquivo(arquivoAlvos);
+            configAlvos = AlvosLoader.carregarConfiguracao(arquivoAlvos);
         } catch (Exception e) {
             System.err.println("[ERRO] Não foi possível carregar a lista de switches: " + e.getMessage());
             return;
         }
 
+        List<SwitchTarget> alvos = configAlvos.alvos();
         if (alvos.isEmpty()) {
             System.err.println("[ERRO] Nenhum switch válido encontrado em " + arquivoAlvos.toAbsolutePath());
             return;
@@ -39,9 +40,18 @@ public class App {
         for (SwitchTarget alvo : alvos) {
             System.out.println("  - " + alvo.ip() + " (usuário: " + alvo.usuario() + ")");
         }
+        if (configAlvos.possuiGatewayManual()) {
+            System.out.println("  * Gateway manual informado: "
+                    + (configAlvos.gatewayIpManual() != null ? configAlvos.gatewayIpManual() + " " : "")
+                    + (configAlvos.gatewayMacManual() != null ? "[" + configAlvos.gatewayMacManual() + "]" : ""));
+        }
         System.out.println("============================================");
 
         TopologyEngine engine = new TopologyEngine();
+        if (configAlvos.possuiGatewayManual()) {
+            engine.definirGatewayManual(configAlvos.gatewayIpManual(), configAlvos.gatewayMacManual());
+        }
+
         ColetorEmLote coletor = new ColetorEmLote();
         ColetorEmLote.ResultadoColeta resultado = coletor.coletarTudo(alvos, engine);
 
@@ -54,7 +64,7 @@ public class App {
             System.out.println("Switches coletados:");
             for (SwitchIdentity sw : resultado.sucesso()) {
                 System.out.printf("  [OK] %s | %s | %s | %s | %s%n",
-                        sw.deviceName() != null ? sw.deviceName() : "N/D",
+                        RelatorioTopologia.nomeExibicaoSwitch(sw),
                         sw.ip() != null ? sw.ip() : "N/D",
                         sw.macAddress() != null ? sw.macAddress() : "N/D",
                         sw.productId() != null ? sw.productId() : "N/D",
@@ -71,14 +81,11 @@ public class App {
         }
 
         if (resultado.sucesso().isEmpty()) {
-            System.out.println("\nNenhum switch coletado com sucesso — nada para correlacionar.");
+            System.out.println("\nNenhum switch coletado com sucesso - nada para correlacionar.");
             return;
         }
 
         System.out.println();
-        System.out.println("============================================");
-        System.out.println("Topologia inferida:");
-        System.out.println("============================================");
         Path pastaSaida = arquivoAlvos.toAbsolutePath().normalize().getParent();
         RelatorioTopologia.imprimir(engine, pastaSaida);
     }

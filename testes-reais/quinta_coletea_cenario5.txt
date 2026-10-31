@@ -1,0 +1,187 @@
+
+====================================================================================================
+S2328G-PA | 10.0.0.10 | 30E1-F1FC-90C7 | LS-2328G-PA | 210150A2MM723BK193WV
+====================================================================================================
+Porta            | Tipo           | Conectado a                                            | Qtd MACs
+-----------------+----------------+--------------------------------------------------------+---------
+GE1/0/2          | UPLINK/TRUNK   | -> INTELBRAS (10.0.0.11) porta GE0/8                   | 2       
+                   ├─ Switch atrás: S2328G-PB (10.0.0.12)
+                   ├─ Switch atrás: S2352G-PB (10.0.0.13)
+                   └─ Switch atrás: S2352G-A (10.0.0.14)
+GE1/0/23         | ACCESS         | d094-66bf-cd21                                         | 1       
+
+====================================================================================================
+INTELBRAS | 10.0.0.11 | 0000-0000-0000 | S3028G-B | N/D
+====================================================================================================
+Porta            | Tipo           | Conectado a                                            | Qtd MACs
+-----------------+----------------+--------------------------------------------------------+---------
+GE0/8            | UPLINK/TRUNK   | -> S2328G-PA (10.0.0.10) porta GE1/0/2                 | 3       
+GE0/12           | UPLINK/TRUNK   | -> S2352G-A (10.0.0.14) porta GE1/0/11                 | 4       
+                   ├─ Switch atrás: S2352G-PB (10.0.0.13)
+                   └─ Switch atrás: S2328G-PB (10.0.0.12)
+
+====================================================================================================
+S2328G-PB | 10.0.0.12 | 8085-4403-C045 | LS-2328G-PB | 210150A2MQ923BQ000B3
+====================================================================================================
+Porta            | Tipo           | Conectado a                                            | Qtd MACs
+-----------------+----------------+--------------------------------------------------------+---------
+GE1/0/18         | UPLINK/TRUNK   | -> S2352G-A (10.0.0.14) porta GE1/0/17                 | 3       
+                   ├─ Switch atrás: S2328G-PA (10.0.0.10)
+                   └─ Switch atrás: INTELBRAS (10.0.0.11)
+GE1/0/24         | UPLINK/TRUNK   | -> S2352G-PB (10.0.0.13) porta GE1/0/26                | 1       
+
+====================================================================================================
+S2352G-PB | 10.0.0.13 | 8085-4406-B4A5 | LS-2352G-PB | 210150A2MN923BQ00043
+====================================================================================================
+Porta            | Tipo           | Conectado a                                            | Qtd MACs
+-----------------+----------------+--------------------------------------------------------+---------
+GE1/0/26         | UPLINK/TRUNK   | -> S2328G-PB (10.0.0.12) porta GE1/0/24                | 4       
+                   ├─ Switch atrás: S2352G-A (10.0.0.14)
+                   ├─ Switch atrás: S2328G-PA (10.0.0.10)
+                   └─ Switch atrás: INTELBRAS (10.0.0.11)
+
+====================================================================================================
+S2352G-A | 10.0.0.14 | 8085-4405-71C5 | LS-2352G-A | 210150A2MJ723BK1923P
+====================================================================================================
+Porta            | Tipo           | Conectado a                                            | Qtd MACs
+-----------------+----------------+--------------------------------------------------------+---------
+GE1/0/11         | UPLINK/TRUNK   | -> INTELBRAS (10.0.0.11) porta GE0/12                  | 3       
+                   └─ Switch atrás: S2328G-PA (10.0.0.10)
+GE1/0/17         | UPLINK/TRUNK   | -> S2328G-PB (10.0.0.12) porta GE1/0/18                | 2       
+                   └─ Switch atrás: S2352G-PB (10.0.0.13)
+
+====================================================================================================
+ÁRVORE DA TOPOLOGIA
+====================================================================================================
+INTELBRAS (10.0.0.11)
+├─ GE0/8 <-> GE1/0/2 ─ S2328G-PA (10.0.0.10)
+└─ GE0/12 <-> GE1/0/11 ─ S2352G-A (10.0.0.14)
+   └─ GE1/0/17 <-> GE1/0/18 ─ S2328G-PB (10.0.0.12)
+      └─ GE1/0/24 <-> GE1/0/26 ─ S2352G-PB (10.0.0.13)
+
+========================================
+
+O que apareceu no terminal 
+
+PS C:\Users\laboratorio\Downloads\tpDiscover-main\tpDiscover-main>  c:; cd 'c:\Users\laboratorio\Downloads\tpDiscover-main\tpDiscover-main'; & 'C:\Program Files\Java\jdk-25.0.2\bin\java.exe' '@C:\Users\laboratorio\AppData\Local\Temp\cp_b3cxyi9g641g6qx7bhbicambo.argfile' 'tpDiscover.intelbras.App' 
+============================================
+Alvos informados em switches.txt (5 switch(es)):
+  - 10.0.0.10 (usuário: admin)
+  - 10.0.0.11 (usuário: admin)
+  - 10.0.0.12 (usuário: admin)
+  - 10.0.0.13 (usuário: admin)
+  - 10.0.0.14 (usuário: admin)
+============================================
+
+--- Coletando 10.0.0.10 ---
+[AVISO] SSH falhou em 10.0.0.10 (INALCANCAVEL): Não foi possível alcançar 10.0.0.10:22 ? SSH pode estar desabilitado no switch, ou IP/rede incorretos
+[INFO] Tentando Telnet como alternativa em 10.0.0.10...
+[INFO] Conectado via Telnet em 10.0.0.10
+  [Comware] 3 entradas de tabela MAC coletadas
+  OK: SwitchIdentity[deviceName=S2328G-PA, serialNumber=210150A2MM723BK193WV, macAddress=30E1-F1FC-90C7, productId=LS-2328G-PA, ip=10.0.0.10]
+
+--- Coletando 10.0.0.11 ---
+[AVISO] SSH falhou em 10.0.0.11 (INALCANCAVEL): Não foi possível alcançar 10.0.0.11:22 ? SSH pode estar desabilitado no switch, ou IP/rede incorretos
+[INFO] Tentando Telnet como alternativa em 10.0.0.11...
+[INFO] Conectado via Telnet em 10.0.0.11
+  [Série 3000] 7 entradas de tabela MAC coletadas
+  OK: SwitchIdentity[deviceName=INTELBRAS, serialNumber=null, macAddress=0000-0000-0000, productId=S3028G-B, ip=10.0.0.11]
+
+--- Coletando 10.0.0.12 ---
+[AVISO] SSH falhou em 10.0.0.12 (INALCANCAVEL): Não foi possível alcançar 10.0.0.12:22 ? SSH pode estar desabilitado no switch, ou IP/rede incorretos
+[INFO] Tentando Telnet como alternativa em 10.0.0.12...
+[INFO] Conectado via Telnet em 10.0.0.12
+  [Comware] 4 entradas de tabela MAC coletadas
+  OK: SwitchIdentity[deviceName=S2328G-PB, serialNumber=210150A2MQ923BQ000B3, macAddress=8085-4403-C045, productId=LS-2328G-PB, ip=10.0.0.12]
+
+--- Coletando 10.0.0.13 ---
+[AVISO] SSH falhou em 10.0.0.13 (INALCANCAVEL): Não foi possível alcançar 10.0.0.13:22 ? SSH pode estar desabilitado no switch, ou IP/rede incorretos
+[INFO] Tentando Telnet como alternativa em 10.0.0.13...
+[INFO] Conectado via Telnet em 10.0.0.13
+  [Comware] 4 entradas de tabela MAC coletadas
+  OK: SwitchIdentity[deviceName=S2352G-PB, serialNumber=210150A2MN923BQ00043, macAddress=8085-4406-B4A5, productId=LS-2352G-PB, ip=10.0.0.13]
+
+--- Coletando 10.0.0.14 ---
+[AVISO] SSH falhou em 10.0.0.14 (INALCANCAVEL): Não foi possível alcançar 10.0.0.14:22 ? SSH pode estar desabilitado no switch, ou IP/rede incorretos
+[INFO] Tentando Telnet como alternativa em 10.0.0.14...
+[INFO] Conectado via Telnet em 10.0.0.14
+  [Comware] 5 entradas de tabela MAC coletadas
+  OK: SwitchIdentity[deviceName=S2352G-A, serialNumber=210150A2MJ723BK1923P, macAddress=8085-4405-71C5, productId=LS-2352G-A, ip=10.0.0.14]
+
+============================================
+Resumo da coleta: 5 OK, 0 falha(s), de 5 total
+Switches coletados:
+  [OK] S2328G-PA | 10.0.0.10 | 30E1-F1FC-90C7 | LS-2328G-PA | 210150A2MM723BK193WV
+  [OK] INTELBRAS | 10.0.0.11 | 0000-0000-0000 | S3028G-B | N/D
+  [OK] S2328G-PB | 10.0.0.12 | 8085-4403-C045 | LS-2328G-PB | 210150A2MQ923BQ000B3
+  [OK] S2352G-PB | 10.0.0.13 | 8085-4406-B4A5 | LS-2352G-PB | 210150A2MN923BQ00043
+  [OK] S2352G-A | 10.0.0.14 | 8085-4405-71C5 | LS-2352G-A | 210150A2MJ723BK1923P
+
+============================================
+Topologia inferida:
+============================================
+
+====================================================================================================
+S2328G-PA | 10.0.0.10 | 30E1-F1FC-90C7 | LS-2328G-PA | 210150A2MM723BK193WV
+====================================================================================================
+Porta            | Tipo           | Conectado a                                            | Qtd MACs
+-----------------+----------------+--------------------------------------------------------+---------
+GE1/0/2          | UPLINK/TRUNK   | -> INTELBRAS (10.0.0.11) porta GE0/8                   | 2       
+                   ├─ Switch atrás: S2328G-PB (10.0.0.12)
+                   ├─ Switch atrás: S2352G-PB (10.0.0.13)
+                   └─ Switch atrás: S2352G-A (10.0.0.14)
+GE1/0/23         | ACCESS         | d094-66bf-cd21                                         | 1       
+
+====================================================================================================
+INTELBRAS | 10.0.0.11 | 0000-0000-0000 | S3028G-B | N/D
+====================================================================================================
+Porta            | Tipo           | Conectado a                                            | Qtd MACs
+-----------------+----------------+--------------------------------------------------------+---------
+GE0/8            | UPLINK/TRUNK   | -> S2328G-PA (10.0.0.10) porta GE1/0/2                 | 3       
+GE0/12           | UPLINK/TRUNK   | -> S2352G-A (10.0.0.14) porta GE1/0/11                 | 4       
+                   ├─ Switch atrás: S2352G-PB (10.0.0.13)
+                   └─ Switch atrás: S2328G-PB (10.0.0.12)
+
+====================================================================================================
+S2328G-PB | 10.0.0.12 | 8085-4403-C045 | LS-2328G-PB | 210150A2MQ923BQ000B3
+====================================================================================================
+Porta            | Tipo           | Conectado a                                            | Qtd MACs
+-----------------+----------------+--------------------------------------------------------+---------
+GE1/0/18         | UPLINK/TRUNK   | -> S2352G-A (10.0.0.14) porta GE1/0/17                 | 3       
+                   ├─ Switch atrás: S2328G-PA (10.0.0.10)
+                   └─ Switch atrás: INTELBRAS (10.0.0.11)
+GE1/0/24         | UPLINK/TRUNK   | -> S2352G-PB (10.0.0.13) porta GE1/0/26                | 1       
+
+====================================================================================================
+S2352G-PB | 10.0.0.13 | 8085-4406-B4A5 | LS-2352G-PB | 210150A2MN923BQ00043
+====================================================================================================
+Porta            | Tipo           | Conectado a                                            | Qtd MACs
+-----------------+----------------+--------------------------------------------------------+---------
+GE1/0/26         | UPLINK/TRUNK   | -> S2328G-PB (10.0.0.12) porta GE1/0/24                | 4       
+                   ├─ Switch atrás: S2352G-A (10.0.0.14)
+                   ├─ Switch atrás: S2328G-PA (10.0.0.10)
+                   └─ Switch atrás: INTELBRAS (10.0.0.11)
+
+====================================================================================================
+S2352G-A | 10.0.0.14 | 8085-4405-71C5 | LS-2352G-A | 210150A2MJ723BK1923P
+====================================================================================================
+Porta            | Tipo           | Conectado a                                            | Qtd MACs
+-----------------+----------------+--------------------------------------------------------+---------
+GE1/0/11         | UPLINK/TRUNK   | -> INTELBRAS (10.0.0.11) porta GE0/12                  | 3       
+                   └─ Switch atrás: S2328G-PA (10.0.0.10)
+GE1/0/17         | UPLINK/TRUNK   | -> S2328G-PB (10.0.0.12) porta GE1/0/18                | 2       
+                   └─ Switch atrás: S2352G-PB (10.0.0.13)
+
+====================================================================================================
+ÁRVORE DA TOPOLOGIA
+====================================================================================================
+INTELBRAS (10.0.0.11)
+├─ GE0/8 <-> GE1/0/2 ─ S2328G-PA (10.0.0.10)
+└─ GE0/12 <-> GE1/0/11 ─ S2352G-A (10.0.0.14)
+   └─ GE1/0/17 <-> GE1/0/18 ─ S2328G-PB (10.0.0.12)
+      └─ GE1/0/24 <-> GE1/0/26 ─ S2352G-PB (10.0.0.13)
+
+
+
+
+ACERTOU A TOPOLOGIA E A CONEXÃO DOS CABOS, MAS AINDA SIM A ÁRVORE DE TOPOLOGIA ESTÁ ERRADA

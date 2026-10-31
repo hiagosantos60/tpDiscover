@@ -118,7 +118,7 @@ public class TelnetSwitchClient implements SwitchClient {
         return switch (classificarErroIo(e)) {
             case TIMEOUT -> "Timeout na conexão Telnet com " + config.ip();
             case INALCANCAVEL -> "Não foi possível alcançar " + config.ip() + ":" + config.portaTelnet()
-                    + " — Telnet pode estar desabilitado no equipamento, ou IP/rede incorretos";
+                    + " - Telnet pode estar desabilitado no equipamento, ou IP/rede incorretos";
             default -> "Erro de rede no Telnet com " + config.ip() + ": " + e.getMessage();
         };
     }

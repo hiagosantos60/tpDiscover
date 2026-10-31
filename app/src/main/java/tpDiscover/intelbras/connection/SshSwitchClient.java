@@ -161,9 +161,9 @@ public class SshSwitchClient implements SwitchClient {
     private String mensagemAmigavel(JSchException e) {
         return switch (classificarErroJsch(e)) {
             case FALHA_AUTENTICACAO -> "Usuário ou senha incorretos para " + config.ip() + " (SSH)";
-            case TIMEOUT -> "Timeout ao conectar em " + config.ip() + " — verifique se o IP está acessível";
+            case TIMEOUT -> "Timeout ao conectar em " + config.ip() + " - verifique se o IP está acessível";
             case INALCANCAVEL -> "Não foi possível alcançar " + config.ip() + ":" + config.portaSsh()
-                    + " — SSH pode estar desabilitado no switch, ou IP/rede incorretos";
+                    + " - SSH pode estar desabilitado no switch, ou IP/rede incorretos";
             case ERRO_PROTOCOLO -> "Falha SSH ao conectar em " + config.ip() + ": " + e.getMessage();
         };
     }
@@ -204,7 +204,8 @@ public class SshSwitchClient implements SwitchClient {
                         continue;
                     }
 
-                    Matcher m = PROMPT.matcher(texto);
+                    String ultima = ultimaLinha(texto).trim();
+                    Matcher m = PROMPT.matcher(ultima);
                     if (m.find()) {
                         dormir(PERIODO_QUIETO_MS);
                         if (in.available() == 0) {
@@ -246,7 +247,7 @@ public class SshSwitchClient implements SwitchClient {
                     }
 
                     String ultima = ultimaLinha(texto).trim();
-                    Matcher mPrompt = PROMPT.matcher(texto);
+                    Matcher mPrompt = PROMPT.matcher(ultima);
                     Matcher mLogin = LOGIN_PROMPT.matcher(ultima);
                     Matcher mSenha = SENHA_PROMPT.matcher(ultima);
                     if (mPrompt.find() || mLogin.find() || mSenha.find()) {

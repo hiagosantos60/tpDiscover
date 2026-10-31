@@ -26,6 +26,12 @@ public final class MacUtils {
     private MacUtils() {
     }
 
+    /** Normaliza qualquer formato de MAC para 12 caracteres hexadecimais minúsculos sem separadores. */
+    public static String normalizar(String mac) {
+        if (mac == null) return "";
+        return mac.trim().toLowerCase().replace("-", "").replace(":", "").replace(".", "");
+    }
+
     /** Retorna os primeiros N bytes (2N caracteres hex) de um MAC já normalizado (12 chars, sem separador). */
     public static String prefixo(String macNormalizado, int bytes) {
         int chars = Math.min(bytes * 2, macNormalizado.length());
@@ -56,6 +62,9 @@ public final class MacUtils {
      */
     public static boolean pertenceAoSwitch(String macBaseNormalizado, String macObservadoNormalizado) {
         if (macBaseNormalizado == null || macObservadoNormalizado == null) {
+            return false;
+        }
+        if ("000000000000".equals(macBaseNormalizado) || "000000000000".equals(macObservadoNormalizado)) {
             return false;
         }
         if (macBaseNormalizado.equalsIgnoreCase(macObservadoNormalizado)) {
