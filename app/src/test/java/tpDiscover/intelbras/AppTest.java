@@ -6,6 +6,7 @@ import tpDiscover.intelbras.coleta.AlvosLoader;
 import tpDiscover.intelbras.coleta.ColetorEmLote;
 import tpDiscover.intelbras.coleta.LocalGatewayDetector;
 import tpDiscover.intelbras.coleta.SwitchTarget;
+import tpDiscover.intelbras.correlacao.ExportadorPlanejadorRede;
 import tpDiscover.intelbras.correlacao.RelatorioTopologia;
 import tpDiscover.intelbras.correlacao.TopologyEngine;
 import tpDiscover.intelbras.modelos.ArpEntry;
@@ -172,11 +173,14 @@ class AppTest {
 
         RelatorioTopologia.imprimir(engine, tempDir);
 
-        String nomeEsperado = "topologia_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmm")) + ".txt";
-        Path arquivoGerado = tempDir.resolve(nomeEsperado);
-        assertTrue(Files.exists(arquivoGerado), "O arquivo TXT de topologia deve ter sido criado em disco");
+        String nomeEsperadoPdf = "topologia_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmm")) + ".pdf";
+        Path arquivoPdfGerado = tempDir.resolve(nomeEsperadoPdf);
+        if (!Files.exists(arquivoPdfGerado)) {
+            arquivoPdfGerado = tempDir.resolve("topologia_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmm")) + ".html");
+        }
+        assertTrue(Files.exists(arquivoPdfGerado), "O relatório PDF ou HTML de contingência da topologia deve ter sido criado em disco");
 
-        String relatorio = Files.readString(arquivoGerado);
+        String relatorio = RelatorioTopologia.gerarRelatorioTexto(engine);
 
         // Garante que apenas os dois blocos de topologia (Enlaces Diretos + Árvore) são exibidos, sem tabelas por switch
         assertFalse(relatorio.contains("Qtd MACs"));
@@ -920,5 +924,40 @@ class AppTest {
                       └─ GE1/0/10 <-> ETH0 ─ AP 3000 AX - teste (10.1.31.19:65019)
                 """;
         assertTrue(relatorio.contains(arvoreEsperada), "Árvore esperada com AP não encontrada:\n" + relatorio);
+    }
+
+    @Test
+    void testExportacaoPlanejadorRedeHtmlEPdf(@TempDir Path tempDir) throws IOException {
+        TopologyEngine engine = new TopologyEngine();
+
+        SwitchIdentity swCore = new SwitchIdentity("S2328G-B", "SN001", "30e1-f1ff-661f", "S2328G-B", "10.1.40.203");
+        SwitchIdentity swAcesso = new SwitchIdentity("S3028G-PB Max", "SN002", "d836-5f42-5c7b", "S3028G-PB Max", "10.1.40.130");
+        SwitchIdentity ap = new SwitchIdentity("AP 3000 AX - teste", "SN003", "30e1-f11f-e93b", "AP 3000 AX", "10.1.31.19:65019");
+
+        engine.registrarSwitch(swCore);
+        engine.registrarSwitch(swAcesso);
+        engine.registrarSwitch(ap);
+
+        engine.registrarEntradas(swCore.macNormalizado(), List.of(
+                new MacEntry(swCore.macNormalizado(), "0009-0f09-1e0a", 1, "Learned", "GE1/0/23"),
+                new MacEntry(swCore.macNormalizado(), "d836-5f42-5c7b", 1, "Learned", "GE1/0/1")
+        ));
+        engine.registrarEntradas(swAcesso.macNormalizado(), List.of(
+                new MacEntry(swAcesso.macNormalizado(), "30e1-f1ff-661f", 1, "DYNAMIC", "GE1/0/1"),
+                new MacEntry(swAcesso.macNormalizado(), "30e1-f11f-e93b", 1, "DYNAMIC", "GE1/0/10")
+        ));
+        engine.registrarEntradas(ap.macNormalizado(), List.of(
+                new MacEntry(ap.macNormalizado(), "d836-5f42-5c7b", 1, "DYNAMIC", "ETH0")
+        ));
+
+        engine.definirGatewayManual("10.1.40.1", "0009-0f09-1e0a");
+
+        // Executa exportação exclusiva do PDF para a pasta temporária
+        Path pdfGerado = ExportadorPlanejadorRede.exportarPdf(engine, tempDir);
+        assertTrue(pdfGerado != null && Files.exists(pdfGerado), "Arquivo PDF deve ter sido gerado");
+        assertTrue(Files.size(pdfGerado) > 1000, "PDF gerado deve ter tamanho válido");
+
+        // Garante que não foram deixados arquivos temporários soltos na pasta
+        assertFalse(Files.exists(tempDir.resolve("topologia_temp.html")), "Arquivos HTML temporários devem ter sido limpos");
     }
 }

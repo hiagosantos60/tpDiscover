@@ -57,6 +57,18 @@ public class TopologyEngine {
         }
     }
 
+    public List<MacEntry> entradasDe(String switchId) {
+        return Collections.unmodifiableList(entradasPorSwitch.getOrDefault(switchId, List.of()));
+    }
+
+    public List<ArpEntry> arpDe(String switchId) {
+        return Collections.unmodifiableList(arpPorSwitch.getOrDefault(switchId, List.of()));
+    }
+
+    public Optional<String> rotaPadraoDe(String switchId) {
+        return Optional.ofNullable(rotaPadraoPorSwitch.get(switchId));
+    }
+
     public void definirGatewayManual(String ip, String mac) {
         this.gatewayIpManual = (ip != null && !ip.isBlank()) ? ip.trim() : null;
         this.gatewayMacManual = (mac != null && !mac.isBlank()) ? Serie3000Parser.formatarMacPadrao(mac.trim()) : null;

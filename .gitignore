@@ -6,3 +6,9 @@ build
 
 # Ignore Kotlin plugin data
 .kotlin
+
+# Relatorios de topologia gerados em runtime
+topologia_*.pdf
+topologia_*.html
+topologia_*.json
+topologia_*.txt

@@ -27,11 +27,11 @@ public class RelatorioTopologia {
     private static final String RAMO_FIM          = "\u2514\u2500 "; // └─ 
     private static final String CONTINUACAO_MEIO  = "\u2502  ";      // │  
     private static final String CONTINUACAO_VAZIA = "   ";
-    private static final String TRACO_HORIZONTAL  = "\u2500";        // ─
+    static final String TRACO_HORIZONTAL  = "\u2500";        // ─
 
-    private record Enlace(String portaLocal, String portaRemota, SwitchIdentity vizinho) {}
+    record Enlace(String portaLocal, String portaRemota, SwitchIdentity vizinho) {}
 
-    private record ParEnlace(SwitchIdentity swA, String portaA, String portaB, SwitchIdentity swB) {}
+    record ParEnlace(SwitchIdentity swA, String portaA, String portaB, SwitchIdentity swB) {}
 
     private record LinhaParAPar(String colunaEsquerda, String portaDireita, String equipamentoDireito) {}
 
@@ -43,13 +43,14 @@ public class RelatorioTopologia {
         String relatorio = gerarRelatorioTexto(engine);
         System.out.println(relatorio);
 
-        String nomeArquivo = "topologia_" + LocalDateTime.now().format(ARQUIVO_TIMESTAMP_FMT) + ".txt";
-        Path destino = (pastaDestino != null) ? pastaDestino.resolve(nomeArquivo) : Path.of(nomeArquivo);
+        // Gera exclusivamente o relatório em PDF consolidando o cenário completo
         try {
-            Files.writeString(destino, relatorio, StandardCharsets.UTF_8);
-            System.out.println("\n[ARQUIVO] Relatório salvo com sucesso em: " + destino);
-        } catch (IOException e) {
-            System.err.println("[AVISO] Não foi possível salvar o arquivo " + destino + ": " + e.getMessage());
+            Path pdfGerado = ExportadorPlanejadorRede.exportarPdf(engine, pastaDestino);
+            if (pdfGerado != null) {
+                System.out.println("\n[PDF] Relatório executivo da topologia gerado com sucesso em: " + pdfGerado);
+            }
+        } catch (Exception e) {
+            System.err.println("[AVISO] Não foi possível gerar o PDF da topologia: " + e.getMessage());
         }
     }
 
@@ -141,7 +142,7 @@ public class RelatorioTopologia {
         }
     }
 
-    private static List<ParEnlace> extrairParesUnicos(
+    static List<ParEnlace> extrairParesUnicos(
             List<SwitchIdentity> switches,
             Map<String, List<Enlace>> adjacencia
     ) {
@@ -421,7 +422,7 @@ public class RelatorioTopologia {
      * Caso duas portas que se enxergam sejam ambas portas de entrada para o Roteador/Gateway
      * (ex.: dois switches core ligados em portas LAN em bridge do roteador), não cria cabo falso entre eles.
      */
-    private static Map<String, List<Enlace>> construirGrafoEnlacesDiretos(
+    static Map<String, List<Enlace>> construirGrafoEnlacesDiretos(
             TopologyEngine engine,
             List<SwitchIdentity> switches
     ) {

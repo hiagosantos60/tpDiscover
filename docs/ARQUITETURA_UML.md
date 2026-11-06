@@ -24,6 +24,12 @@ Documentação arquitetural do projeto **`tpDiscover.intelbras`** (Java 25 CLI /
    - `SwitchIdentity.macNormalizado` gera identificador sintético determinístico (`sem-mac@<ip>`) quando o MAC-base não estiver disponível.
 5. **Correlação de Topologia**:
    - `TopologyEngine` e `RelatorioTopologia` correlacionam o MAC do AP com as portas do switch pai, apresentando o enlace direto (`Switch [GE1/0/10] <-> [ETH0] AP 3000 AX - teste`) e na árvore hierárquica.
+6. **Exportação Executiva em PDF Vetorial ([`ExportadorPlanejadorRede.java`](file:///C:/Users/hi062467/Downloads/Utilitários/tpDiscover/app/src/main/java/tpDiscover/intelbras/correlacao/ExportadorPlanejadorRede.java))**:
+   - Integração visual inspirada no *Planejador de Rede* da Intelbras.
+   - Geração de documento PDF em formato A4 Paisagem executivo via navegador headless (Edge/Chrome).
+   - Renderização de diagrama de rede vetorial SVG dinâmico (ícones 3D, cabos de fibra/cobre, badges de portas e LEDs de status).
+   - Tabelas executivas de enlaces par a par, inventário de dispositivos e tabela de clientes ARP com resolução de fabricantes IEEE OUI.
+   - Limpeza automática de arquivos intermediários, gerando exclusivamente o arquivo `topologia_AAAA-MM-DD_HHmm.pdf`.
 
 ---
 
@@ -256,6 +262,12 @@ classDiagram
             +imprimir(TopologyEngine engine, Path pastaDestino)$ void
             +gerarRelatorioTexto(TopologyEngine engine)$ String
         }
+        class ExportadorPlanejadorRede {
+            +exportarPdf(TopologyEngine engine, Path pastaDestino)$ Optional~Path~
+            -construirHtmlCompleto(TopologyEngine engine)$ String
+            -gerarSvgTopologia(TopologyEngine engine)$ String
+            -renderizarPdfComNavegador(Path arquivoHtml, Path arquivoPdf)$ boolean
+        }
     }
 
     %% Relacionamentos
@@ -313,6 +325,9 @@ classDiagram
 
     RelatorioTopologia ..> TopologyEngine : le estado
     RelatorioTopologia ..> OuiLookup : consulta fabricantes
+    RelatorioTopologia --> ExportadorPlanejadorRede : delega geracao de PDF
+    ExportadorPlanejadorRede ..> TopologyEngine : le topologia e clientes
+    ExportadorPlanejadorRede ..> OuiLookup : resolve fabricante por OUI
     GatewayInfo ..> OuiLookup : formata rotulo
     SwitchIdentity ..> MacUtils : normaliza MAC
 ```
@@ -360,7 +375,8 @@ flowchart TD
 
     subgraph CORRELACAO["Camada de Correlação & Relatório"]
         ENGINE["TopologyEngine.java\n(Algoritmo L2/L3, Split-Horizon, árvores)"]
-        RELATORIO["RelatorioTopologia.java\n(ASCII tree, enlaces par a par, TXT export)"]
+        RELATORIO["RelatorioTopologia.java\n(ASCII tree no terminal)"]
+        EXPORT_PDF["ExportadorPlanejadorRede.java\n(Layout Executivo A4 Paisagem, SVG vetorial e PDF headless)"]
     end
 
     APP --> LOADER
@@ -368,6 +384,9 @@ flowchart TD
     APP --> BATCH
     APP --> ENGINE
     APP --> RELATORIO
+    RELATORIO --> EXPORT_PDF
+    EXPORT_PDF --> ENGINE
+    EXPORT_PDF --> OUI
 
     LOADER --> TARGET
     BATCH --> CONNECTOR

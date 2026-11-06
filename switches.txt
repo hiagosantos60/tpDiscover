@@ -1,27 +1,35 @@
-# Lista de equipamentos para descoberta de topologia (formato: ip;usuario;senha)
+# Lista de equipamentos para descoberta de topologia (formato: ip[:porta];usuario;senha)
 # Diretiva opcional caso os switches não possuam rota padrão configurada (ex: # gateway=10.1.40.1):
 
-# S2328G-B
+# --- EQUIPAMENTOS ATIVOS E ACESSÍVEIS ---
+
+# S2328G-B (SSH)
 10.1.40.203;admin;Admin@1234
-# S2328G-A
+
+# S2328G-A (Telnet)
 10.1.40.204;admin;Admin@1234
-# S3028G-PB Max 2
+
+# S3028G-PB Max 2 (Telnet)
 10.1.40.129;admin;Admin@1234
-# S3028G-PB Max
+
+# S3028G-PB Max (SSH)
 10.1.40.130;admin;Admin@1234
-# S3054G-B
+
+# S3054G-B (SSH)
 10.1.40.240;admin;Admin@1234
-# S3028G-B
-10.1.40.243;admin;Admin@1234
-# S3328G-PB-370W
-10.1.40.172;admin;Admin@1234
-# S3328G-B
-10.1.40.242;admin;Admin@1234
-# S3352G-B
-10.1.40.102;admin;Admin@1234
-# S2352G-A
-10.1.40.239;admin;Admin@1234
-# S2352G-PB
-10.1.40.202;admin;Admin@1234
-# S2352G-B
-10.1.40.207;admin;Admin@1234
+
+# AP 3000 AX (SSH porta 65019)
+10.1.31.19:65019;admin;Admin@1234
+
+
+# --- EQUIPAMENTOS COM FALHA / INACESSÍVEIS (DESATIVADOS) ---
+# Falha de autenticação (Porta 22 aberta, mas credencial incorreta):
+# 10.1.40.243;admin;Admin@1234  # S3028G-B
+
+# Inacessíveis / Desligados (sem resposta a Ping/SSH/Telnet):
+# 10.1.40.172;admin;Admin@1234  # S3328G-PB-370W
+# 10.1.40.242;admin;Admin@1234  # S3328G-B
+# 10.1.40.102;admin;Admin@1234  # S3352G-B
+# 10.1.40.239;admin;Admin@1234  # S2352G-A
+# 10.1.40.202;admin;Admin@1234  # S2352G-PB
+# 10.1.40.207;admin;Admin@1234  # S2352G-B
