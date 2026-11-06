@@ -277,8 +277,8 @@ public class OltParser {
         if (productId == null || productId.isBlank()) {
             productId = "OLT Intelbras";
         }
-        if (mac == null || mac.isBlank()) {
-            mac = "0000-0000-0000";
+        if (mac != null && mac.isBlank()) {
+            mac = null;
         }
 
         return new SwitchIdentity(deviceName, serial, mac, productId, ip);

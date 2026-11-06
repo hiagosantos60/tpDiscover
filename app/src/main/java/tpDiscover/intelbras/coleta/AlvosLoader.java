@@ -16,7 +16,8 @@ import java.util.regex.Pattern;
  *   # comentário (ignorado)
  *   # gateway=10.1.40.1               (opcional: IP e/ou MAC do roteador do cliente)
  *   10.1.40.230;admin;Admin@1234
- *   10.1.40.203;admin;OutraSenha
+ *   10.1.31.19:65019;admin;Admin@1234 (opcional: porta customizada SSH/Telnet)
+ *   10.1.40.203;admin                 (opcional: sem senha em disco; será solicitada na execução)
  *
  * Isso evita ter que recompilar o programa toda vez que o técnico for
  * atender um cliente diferente com uma lista de switches diferente.
@@ -79,13 +80,40 @@ public class AlvosLoader {
 
             if (linha.startsWith("#")) continue;
 
-            String[] partes = linha.split(";");
-            if (partes.length != 3) {
-                System.err.println("[AVISO] Linha " + (i + 1) + " ignorada (esperado ip;usuario;senha): " + linha);
+            String[] partes = linha.split(";", 3);
+            if (partes.length < 2) {
+                System.err.println("[AVISO] Linha " + (i + 1) + " ignorada (esperado ip;usuario;senha ou ip;usuario).");
                 continue;
             }
 
-            alvos.add(new SwitchTarget(partes[0].strip(), partes[1].strip(), partes[2].strip()));
+            String hostPorta = partes[0].strip();
+            String usuario = partes[1].strip();
+            if (hostPorta.isEmpty() || usuario.isEmpty()) {
+                System.err.println("[AVISO] Linha " + (i + 1) + " ignorada (IP ou usuário em branco).");
+                continue;
+            }
+
+            String ip = hostPorta;
+            Integer portaCustomizada = null;
+            int idxPorta = hostPorta.lastIndexOf(':');
+            if (idxPorta > 0 && hostPorta.indexOf(':') == idxPorta) {
+                ip = hostPorta.substring(0, idxPorta).strip();
+                String portaStr = hostPorta.substring(idxPorta + 1).strip();
+                try {
+                    int p = Integer.parseInt(portaStr);
+                    if (p < 1 || p > 65535 || ip.isEmpty()) {
+                        System.err.println("[AVISO] Linha " + (i + 1) + " ignorada (porta fora do intervalo 1..65535).");
+                        continue;
+                    }
+                    portaCustomizada = p;
+                } catch (NumberFormatException e) {
+                    System.err.println("[AVISO] Linha " + (i + 1) + " ignorada (porta inválida).");
+                    continue;
+                }
+            }
+
+            String senha = partes.length == 3 ? partes[2].strip() : null;
+            alvos.add(new SwitchTarget(ip, usuario, senha, portaCustomizada));
         }
 
         return new ConfiguracaoAlvos(alvos, gatewayIp, gatewayMac);

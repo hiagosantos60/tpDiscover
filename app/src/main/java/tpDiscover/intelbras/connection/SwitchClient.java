@@ -18,4 +18,9 @@ public interface SwitchClient {
 
     /** Encerra a conexão. Não lança exceção — é chamado tipicamente em bloco finally. */
     void desconectar();
+
+    /** Retorna o banner/prompt inicial capturado logo após autenticar na sessão. */
+    default String bannerInicial() {
+        return "";
+    }
 }

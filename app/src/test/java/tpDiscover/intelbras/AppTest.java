@@ -5,12 +5,14 @@ import org.junit.jupiter.api.io.TempDir;
 import tpDiscover.intelbras.coleta.AlvosLoader;
 import tpDiscover.intelbras.coleta.ColetorEmLote;
 import tpDiscover.intelbras.coleta.LocalGatewayDetector;
+import tpDiscover.intelbras.coleta.SwitchTarget;
 import tpDiscover.intelbras.correlacao.RelatorioTopologia;
 import tpDiscover.intelbras.correlacao.TopologyEngine;
 import tpDiscover.intelbras.modelos.ArpEntry;
 import tpDiscover.intelbras.modelos.MacEntry;
 import tpDiscover.intelbras.modelos.MacUtils;
 import tpDiscover.intelbras.modelos.SwitchIdentity;
+import tpDiscover.intelbras.parser.ApParser;
 import tpDiscover.intelbras.parser.ComwareParser;
 import tpDiscover.intelbras.parser.OltParser;
 import tpDiscover.intelbras.parser.Serie3000Parser;
@@ -708,5 +710,215 @@ class AppTest {
                 └─ <-> GE1/0/20 ─ S2328G-A (10.1.40.204)
                 """;
         assertTrue(secaoArvore.contains(arvoreEsperada), "Árvore esperada não encontrada:\n" + secaoArvore);
+    }
+
+    @Test
+    void testSenhasComPontoEVirgulaESemSenhaEmDiscoEMascara(@TempDir Path tempDir) throws IOException {
+        Path arq = tempDir.resolve("switches.txt");
+        Files.writeString(arq, """
+                10.1.40.203;admin;Senh@;Com;PontoEVirgula
+                10.1.40.204;admin;
+                10.1.40.205;admin
+                ;admin;SenhaQueNaoPodeVazar
+                """);
+
+        java.io.ByteArrayOutputStream errBuf = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream errOriginal = System.err;
+        List<SwitchTarget> alvos;
+        try {
+            System.setErr(new java.io.PrintStream(errBuf));
+            alvos = AlvosLoader.carregarDeArquivo(arq);
+        } finally {
+            System.setErr(errOriginal);
+        }
+
+        assertEquals(3, alvos.size());
+
+        assertEquals("Senh@;Com;PontoEVirgula", alvos.get(0).senha());
+        assertTrue(alvos.get(0).possuiSenha());
+        assertFalse(alvos.get(0).toString().contains("Senh@"), "toString() deve mascarar a senha");
+
+        assertEquals("", alvos.get(1).senha());
+        assertTrue(alvos.get(1).possuiSenha());
+
+        assertEquals(null, alvos.get(2).senha());
+        assertFalse(alvos.get(2).possuiSenha());
+        assertEquals("NovaSenha", alvos.get(2).comSenha("NovaSenha").senha());
+
+        assertFalse(errBuf.toString().contains("SenhaQueNaoPodeVazar"), "Aviso de linha inválida não deve vazar senha");
+    }
+
+    @Test
+    void testSemColisaoNemNpeQuandoMultiplosSwitchesSemMacBase() {
+        ComwareParser comwareParser = new ComwareParser();
+        SwitchIdentity swComwareSemMac = comwareParser.parseDeviceManuInfo("10.0.0.13", """
+                DEVICE_NAME          : S2328G-B
+                DEVICE_SERIAL_NUMBER : SN13
+                MAC_ADDRESS          : NONE
+                PRODUCT_ID           : LS-2328G-B
+                """);
+        assertEquals(null, swComwareSemMac.macAddress());
+        assertFalse(swComwareSemMac.possuiMacValido());
+        assertEquals("sem-mac@10.0.0.13", swComwareSemMac.macNormalizado());
+
+        SwitchIdentity swCore = new SwitchIdentity("S2328G-PA", "SN10", "30E1-F1FC-90C7", "LS-2328G-PA", "10.0.0.10");
+        SwitchIdentity swSemMac1 = new SwitchIdentity("S3028G-B", null, null, "S3028G-B", "10.0.0.11");
+        SwitchIdentity swSemMac2 = new SwitchIdentity("S3028G-PB", null, "0000-0000-0000", "S3028G-PB", "10.0.0.15");
+
+        assertFalse(MacUtils.pertenceAoSwitch(swSemMac1.macNormalizado(), swSemMac2.macNormalizado()));
+
+        TopologyEngine engine = new TopologyEngine();
+        engine.registrarSwitch(swCore);
+        engine.registrarSwitch(swSemMac1);
+        engine.registrarSwitch(swSemMac2);
+
+        assertEquals(3, engine.switchesRegistrados().size(), "Switches sem MAC não devem colidir nem sobrescrever um ao outro");
+
+        engine.registrarEntradas(swSemMac1.macNormalizado(), List.of(
+                new MacEntry(swSemMac1.macNormalizado(), "30e1-f1fc-90c7", 1, "DYNAMIC", "GE0/2")
+        ));
+        engine.registrarEntradas(swSemMac2.macNormalizado(), List.of(
+                new MacEntry(swSemMac2.macNormalizado(), "30e1-f1fc-90c7", 1, "DYNAMIC", "GE0/5")
+        ));
+
+        String relatorio = RelatorioTopologia.gerarRelatorioTexto(engine);
+        assertTrue(relatorio.contains("S3028G-B (10.0.0.11)"));
+        assertTrue(relatorio.contains("S3028G-PB (10.0.0.15)"));
+    }
+
+    @Test
+    void testApParserComSaidaRealAp3000AxETopologiaOndeApEstaConectado(@TempDir Path tempDir) throws IOException {
+        // 1) Valida suporte a porta customizada ip:porta no switches.txt
+        Path arq = tempDir.resolve("switches_ap.txt");
+        Files.writeString(arq, """
+                10.1.40.203;admin;Admin@1234
+                10.1.31.19:65019;admin;Admin@1234
+                """);
+        List<SwitchTarget> alvos = AlvosLoader.carregarDeArquivo(arq);
+        assertEquals(2, alvos.size());
+        assertEquals(null, alvos.get(0).portaCustomizada());
+        assertEquals("10.1.40.203", alvos.get(0).enderecoExibicao());
+        assertEquals("10.1.31.19", alvos.get(1).ip());
+        assertEquals(65019, alvos.get(1).portaCustomizada());
+        assertEquals("10.1.31.19:65019", alvos.get(1).enderecoExibicao());
+
+        // 2) Valida ApParser com as saídas reais capturadas do AP 3000 AX (10.1.31.19:65019)
+        ApParser apParser = new ApParser();
+        String bannerAp = """
+                -----------------------------------------------------------------
+                  _____ _   _ _______ ______ _      ____  _____             _____
+                  Fri Nov  6 14:40:08 BRT 2026
+                # 
+                """;
+        assertTrue(apParser.ehBannerOuPromptDeAp(bannerAp));
+
+        String ubusBoard = """
+                {
+                	"kernel": "4.4.60",
+                	"hostname": "teste",
+                	"system": "ARMv7 Processor rev 4 (v7l)",
+                	"model": "AP 3000 AX",
+                	"board_name": "ap-mp03.3",
+                	"board_version": "1.0"
+                }
+                """;
+        String ifconfig = """
+                ath0      Link encap:Ethernet  HWaddr 30:E1:F1:1F:E9:3D  
+                br-lan    Link encap:Ethernet  HWaddr 30:E1:F1:1F:E9:3B  
+                          inet addr:192.168.0.70  Bcast:192.168.0.255  Mask:255.255.255.0
+                devdh1    Link encap:Ethernet  HWaddr FE:FF:FF:FF:FF:FF  
+                eth0      Link encap:Ethernet  HWaddr 30:E1:F1:1F:E9:3B  
+                """;
+        String brctlShow = """
+                bridge name\tbridge id\t\tSTP enabled\tinterfaces
+                br-lan\t\t7fff.30e1f11fe93b\tno\t\tdevdh1
+                \t\t\t\t\t\t\teth0
+                \t\t\t\t\t\t\tath0
+                br-vlan2dff82f\t\t7fff.30e1f11fe93b\tno\t\tdevdh2
+                \t\t\t\t\t\t\teth0.4071
+                \t\t\t\t\t\t\tath1
+                """;
+
+        assertTrue(apParser.ehDispositivoAp(ubusBoard, brctlShow, ifconfig));
+        SwitchIdentity apId = apParser.parseDeviceInfo("10.1.31.19:65019", ubusBoard, ifconfig, brctlShow);
+        assertEquals("AP 3000 AX - teste", apId.deviceName());
+        assertEquals("AP 3000 AX", apId.productId());
+        assertEquals("30E1-F11F-E93B", apId.macAddress());
+
+        Map<String, Integer> bridges = apParser.parseBridgesEVlans(brctlShow);
+        assertEquals(1, bridges.get("br-lan"));
+        assertEquals(4071, bridges.get("br-vlan2dff82f"));
+
+        String brctlShowmacsLan = """
+                interface\tport no\tmac addr\t\tis local?\tageing timer
+                eth0        \t  2\t30:e1:f1:1f:e9:3b\tyes\t\t   0.00
+                ath0        \t  3\t30:e1:f1:1f:e9:3d\tyes\t\t   0.00
+                eth0        \t  2\t00:09:0f:09:1e:0a\tno\t\t   0.01
+                eth0        \t  2\t30:e1:f1:ff:66:1f\tno\t\t   1.39
+                eth0        \t  2\td8:36:5f:42:5c:7b\tno\t\t   5.78
+                devdh1      \t  1\tfe:ff:ff:ff:ff:ff\tyes\t\t   0.00
+                """;
+        String brctlShowmacsVlan = """
+                interface\tport no\tmac addr\t\tis local?\tageing timer
+                eth0.4071   \t  2\t30:e1:f1:1f:e9:3b\tyes\t\t   0.00
+                eth0.4071   \t  2\td8:36:5f:42:5c:7b\tno\t\t   2.10
+                """;
+
+        List<MacEntry> macsLan = apParser.parseBridgeMacs(apId.macNormalizado(), 1, brctlShowmacsLan);
+        assertEquals(3, macsLan.size());
+        assertEquals("ETH0", macsLan.get(0).port());
+        assertEquals(1, macsLan.get(0).vlanId());
+
+        List<MacEntry> macsVlan = apParser.parseBridgeMacs(apId.macNormalizado(), 4071, brctlShowmacsVlan);
+        assertEquals(1, macsVlan.size());
+        assertEquals("ETH0", macsVlan.get(0).port());
+        assertEquals(4071, macsVlan.get(0).vlanId());
+
+        String ipRoute = "default via 10.1.40.1 dev br-lan  proto static  src 10.1.40.180";
+        String ipNeigh = "10.1.40.1 dev br-lan lladdr 00:09:0f:09:1e:0a DELAY";
+        assertEquals("10.1.40.1", apParser.parseDefaultGatewayIp(ipRoute).orElseThrow());
+        List<ArpEntry> arpsAp = apParser.parseArpTable(ipNeigh, macsLan);
+        assertEquals(1, arpsAp.size());
+        assertEquals("ETH0", arpsAp.get(0).port());
+
+        // 3) Monta topologia completa: Fortinet -> S2328G-B (Core) -> S3028G-PB Max (Acesso) -> AP 3000 AX na porta GE1/0/10
+        TopologyEngine engine = new TopologyEngine();
+        SwitchIdentity swCore = new SwitchIdentity("S2328G-B", "SN203", "30E1-F1FF-661F", "LS-2328G-B", "10.1.40.203");
+        SwitchIdentity swAcesso = new SwitchIdentity("S3028G-PB Max", "SN130", "D836-5F42-5C7B", "S3028G-PB Max", "10.1.40.130");
+
+        List.of(swCore, swAcesso, apId).forEach(engine::registrarSwitch);
+
+        // Core vê Fortinet na GE1/0/23 e vê S3028G-PB Max + AP atrás da GE1/0/19
+        engine.registrarEntradas(swCore.macNormalizado(), List.of(
+                new MacEntry(swCore.macNormalizado(), "0009-0f09-1e0a", 1, "Learned", "GE1/0/23"),
+                new MacEntry(swCore.macNormalizado(), "d836-5f42-5c7b", 1, "Learned", "GE1/0/19"),
+                new MacEntry(swCore.macNormalizado(), "30e1-f11f-e93b", 1, "Learned", "GE1/0/19")
+        ));
+        // Switch de Acesso vê Core + Fortinet no uplink GE1/0/2, e vê o AP espetado na porta GE1/0/10!
+        engine.registrarEntradas(swAcesso.macNormalizado(), List.of(
+                new MacEntry(swAcesso.macNormalizado(), "0009-0f09-1e0a", 1, "DYNAMIC", "GE1/0/2"),
+                new MacEntry(swAcesso.macNormalizado(), "30e1-f1ff-661f", 1, "DYNAMIC", "GE1/0/2"),
+                new MacEntry(swAcesso.macNormalizado(), "30e1-f11f-e93b", 1, "DYNAMIC", "GE1/0/10")
+        ));
+        engine.registrarEntradas(apId.macNormalizado(), macsLan);
+        engine.registrarEntradas(apId.macNormalizado(), macsVlan);
+
+        engine.registrarRotaPadrao(swCore.macNormalizado(), "10.1.40.1");
+        engine.registrarEntradasArp(swCore.macNormalizado(), List.of(new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE1/0/23")));
+        engine.registrarRotaPadrao(apId.macNormalizado(), "10.1.40.1");
+        engine.registrarEntradasArp(apId.macNormalizado(), arpsAp);
+
+        String relatorio = RelatorioTopologia.gerarRelatorioTexto(engine);
+
+        assertTrue(relatorio.contains("S3028G-PB Max (10.1.40.130) [GE1/0/10]                 <-> [ETH0]     AP 3000 AX - teste (10.1.31.19:65019)"),
+                "Enlace direto do AP não encontrado:\n" + relatorio);
+
+        String arvoreEsperada = """
+                Roteador/Gateway 10.1.40.1 [0009-0f09-1e0a (Fortinet)]
+                └─ <-> GE1/0/23 ─ S2328G-B (10.1.40.203)
+                   └─ GE1/0/19 <-> GE1/0/2 ─ S3028G-PB Max (10.1.40.130)
+                      └─ GE1/0/10 <-> ETH0 ─ AP 3000 AX - teste (10.1.31.19:65019)
+                """;
+        assertTrue(relatorio.contains(arvoreEsperada), "Árvore esperada com AP não encontrada:\n" + relatorio);
     }
 }

@@ -8,6 +8,7 @@ import tpDiscover.intelbras.correlacao.TopologyEngine;
 import tpDiscover.intelbras.modelos.ArpEntry;
 import tpDiscover.intelbras.modelos.MacEntry;
 import tpDiscover.intelbras.modelos.SwitchIdentity;
+import tpDiscover.intelbras.parser.ApParser;
 import tpDiscover.intelbras.parser.ComwareParser;
 import tpDiscover.intelbras.parser.OltParser;
 import tpDiscover.intelbras.parser.Serie3000Parser;
@@ -15,6 +16,7 @@ import tpDiscover.intelbras.parser.Serie3000Parser;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -23,6 +25,7 @@ import java.util.regex.Pattern;
  *  - Switches Comware (S23/S33)
  *  - Switches Série 3000 (S3028G-PB, S3054G-B, etc.)
  *  - OLTs EPON/GPON (OLT 4840E, OLT 4880E, G16, G08, etc.)
+ *  - Access Points linha legado / ZeusOS / OpenWrt (AP 3000 AX, AP 1800 AX, AP 1350 AC-S, AP 360, etc.)
  */
 public class ColetorEmLote {
 
@@ -31,8 +34,8 @@ public class ColetorEmLote {
             "(?im)(^\\s*%+\\s*(?:invalid|unknown|unrecognized|incomplete|ambiguous|wrong|too\\s+many|error|bad|command|parameter)\\b"
             + "|\\b(?:unrecognized\\s+command|unknown\\s+command|invalid\\s+input|invalid\\s+command"
             + "|invalid\\s+parameter|incomplete\\s+command|command\\s+incomplete|ambiguous\\s+command"
-            + "|bad\\s+command|syntax\\s+error|command\\s+not\\s+found|no\\s+matched\\s+command"
-            + "|error\\s+input|parameter\\s+error|too\\s+many\\s+parameters)\\b)"
+            + "|bad\\s+command|syntax\\s+error|illegal\\s+command\\s+line|command\\s+not\\s+found|not\\s+found"
+            + "|no\\s+matched\\s+command|error\\s+input|parameter\\s+error|too\\s+many\\s+parameters)\\b)"
     );
     private static final Pattern INTERFACE_VLAN_UP = Pattern.compile("(?im)^\\s*(vlan\\d+)\\s+\\S+\\s+up\\b");
     private static final List<String> COMANDOS_MAC_S30 = List.of(
@@ -46,6 +49,7 @@ public class ColetorEmLote {
     private final ComwareParser comwareParser = new ComwareParser();
     private final Serie3000Parser serie3000Parser = new Serie3000Parser();
     private final OltParser oltParser = new OltParser();
+    private final ApParser apParser = new ApParser();
 
     public record FalhaColeta(SwitchTarget alvo, SwitchConnectionException.Tipo tipo, String mensagem) {
     }
@@ -61,7 +65,7 @@ public class ColetorEmLote {
         List<FalhaColeta> falhas = new ArrayList<>();
 
         for (SwitchTarget alvo : alvos) {
-            System.out.println("\n--- Coletando " + alvo.ip() + " ---");
+            System.out.println("\n--- Coletando " + alvo.enderecoExibicao() + " ---");
             try {
                 SwitchIdentity identidade = coletarUm(alvo, engine);
                 System.out.println("  OK: " + identidade);
@@ -100,21 +104,36 @@ public class ColetorEmLote {
     }
 
     private SwitchIdentity coletarUm(SwitchTarget alvo, TopologyEngine engine) throws SwitchConnectionException {
-        ConnectionConfig config = ConnectionConfig.padrao(alvo.ip(), alvo.usuario(), alvo.senha());
+        ConnectionConfig config = ConnectionConfig.comPorta(
+                alvo.ip(), alvo.usuario(), alvo.senha(), alvo.portaCustomizada());
+        String ipIdentidade = alvo.enderecoExibicao();
         SwitchClient cliente = null;
 
         try {
             cliente = SwitchConnector.conectar(config);
+            String bannerInicial = cliente.bannerInicial();
 
-            // 1) Tenta detectar se é Comware (S23/S33)
-            String respComware = cliente.executarComando("screen-length disable");
-            boolean ehComware = !ehComandoInvalido(respComware);
+            // 0) Se o banner/prompt inicial já indica AP Intelbras Linux/klish ("#" puro / OpenWrt), coleta direto sem enviar "screen-length disable"
+            if (apParser.ehBannerOuPromptDeAp(bannerInicial)) {
+                Optional<SwitchIdentity> apOpt = tentarColetarAp(ipIdentidade, cliente, engine);
+                if (apOpt.isPresent()) {
+                    return apOpt.get();
+                }
+            }
+
+            // 1) Tenta detectar se é Comware (S23/S33) — prompts Comware são "<Nome>" ou "[Nome]", nunca terminam com "#"
+            boolean promptTerminaComHash = promptInicialTerminaComHash(bannerInicial);
+            boolean ehComware = false;
+            if (!promptTerminaComHash) {
+                String respComware = cliente.executarComando("screen-length disable");
+                ehComware = !ehComandoInvalido(respComware);
+            }
 
             if (ehComware) {
                 String manuinfo = cliente.executarComando("display device manuinfo");
                 if (!ehComandoInvalido(manuinfo)) {
                     String macTableBruta = cliente.executarComando("display mac-address");
-                    SwitchIdentity identidade = comwareParser.parseDeviceManuInfo(alvo.ip(), manuinfo);
+                    SwitchIdentity identidade = comwareParser.parseDeviceManuInfo(ipIdentidade, manuinfo);
                     engine.registrarSwitch(identidade);
 
                     Map<String, List<String>> membrosPorBagg = Map.of();
@@ -155,7 +174,7 @@ public class ColetorEmLote {
 
             if (oltParser.ehDispositivoOlt(infoCombinada)) {
                 String macTableBruta = cliente.executarComando("show mac-address-table");
-                SwitchIdentity identidade = oltParser.parseDeviceInfo(alvo.ip(), "OLT", infoCombinada);
+                SwitchIdentity identidade = oltParser.parseDeviceInfo(ipIdentidade, "OLT", infoCombinada);
                 engine.registrarSwitch(identidade);
 
                 List<MacEntry> entradas = oltParser.parseMacAddressTable(identidade.macNormalizado(), macTableBruta);
@@ -173,6 +192,14 @@ public class ColetorEmLote {
 
                 System.out.println("  [OLT] " + entradas.size() + " entradas de tabela MAC coletadas");
                 return identidade;
+            }
+
+            // Fallback: caso seja um AP com prompt customizado "Hostname#" onde "show version" e "show system" falharam
+            if (ehComandoInvalido(version) && ehComandoInvalido(systemInfo)) {
+                Optional<SwitchIdentity> apOpt = tentarColetarAp(ipIdentidade, cliente, engine);
+                if (apOpt.isPresent()) {
+                    return apOpt.get();
+                }
             }
 
             // 3) Fluxo Switch Série 3000 (S30) - desabilita paginação da sessão quando suportado (---MORE--- também tratado no cliente)
@@ -225,7 +252,7 @@ public class ColetorEmLote {
             }
 
             SwitchIdentity identidade = serie3000Parser.parseDeviceVersion(
-                    alvo.ip(), null, identidadeBruta.toString());
+                    ipIdentidade, null, identidadeBruta.toString());
             engine.registrarSwitch(identidade);
 
             // 3c) Tabela MAC completa (tenta variações de comando 'show' entre diferentes gerações de firmware S30)
@@ -276,6 +303,77 @@ public class ColetorEmLote {
                 cliente.desconectar();
             }
         }
+    }
+
+    private Optional<SwitchIdentity> tentarColetarAp(
+            String ipIdentidade,
+            SwitchClient cliente,
+            TopologyEngine engine
+    ) throws SwitchConnectionException {
+        String brctlShow = cliente.executarComando("brctl show");
+        if (ehComandoInvalido(brctlShow)) {
+            return Optional.empty();
+        }
+        String ubusBoard = cliente.executarComando("ubus call system board");
+        if (ehComandoInvalido(ubusBoard)) {
+            ubusBoard = "";
+        }
+        String ifconfig = cliente.executarComando("ifconfig");
+        if (ehComandoInvalido(ifconfig)) {
+            ifconfig = "";
+        }
+
+        if (!apParser.ehDispositivoAp(ubusBoard, brctlShow, ifconfig)) {
+            return Optional.empty();
+        }
+
+        SwitchIdentity identidade = apParser.parseDeviceInfo(ipIdentidade, ubusBoard, ifconfig, brctlShow);
+        engine.registrarSwitch(identidade);
+
+        Map<String, Integer> vlanPorBridge = apParser.parseBridgesEVlans(brctlShow);
+        if (vlanPorBridge.isEmpty()) {
+            vlanPorBridge = Map.of("br-lan", 1);
+        }
+
+        List<MacEntry> todasEntradas = new ArrayList<>();
+        for (Map.Entry<String, Integer> entry : vlanPorBridge.entrySet()) {
+            String bridge = entry.getKey();
+            int vlanPadrao = entry.getValue();
+            String showMacs = cliente.executarComando("brctl showmacs " + bridge);
+            if (!ehComandoInvalido(showMacs)) {
+                todasEntradas.addAll(apParser.parseBridgeMacs(identidade.macNormalizado(), vlanPadrao, showMacs));
+            }
+        }
+        engine.registrarEntradas(identidade.macNormalizado(), todasEntradas);
+
+        String rotasBrutas = cliente.executarComando("ip route");
+        if (ehComandoInvalido(rotasBrutas)) {
+            rotasBrutas = cliente.executarComando("route");
+        }
+        if (!ehComandoInvalido(rotasBrutas)) {
+            apParser.parseDefaultGatewayIp(rotasBrutas)
+                    .ifPresent(gwIp -> engine.registrarRotaPadrao(identidade.macNormalizado(), gwIp));
+        }
+
+        String neighBruto = cliente.executarComando("ip neigh");
+        if (!ehComandoInvalido(neighBruto)) {
+            List<ArpEntry> entradasArp = apParser.parseArpTable(neighBruto, todasEntradas);
+            engine.registrarEntradasArp(identidade.macNormalizado(), entradasArp);
+        }
+
+        System.out.println("  [AP] " + todasEntradas.size() + " entradas de tabela MAC coletadas");
+        return Optional.of(identidade);
+    }
+
+    private static boolean promptInicialTerminaComHash(String banner) {
+        if (banner == null || banner.isBlank()) return false;
+        String[] linhas = banner.split("\\R");
+        for (int i = linhas.length - 1; i >= 0; i--) {
+            if (!linhas[i].isBlank()) {
+                return linhas[i].trim().endsWith("#");
+            }
+        }
+        return false;
     }
 
     private static boolean possuiPortaAgregada(List<MacEntry> entradas) {

@@ -353,7 +353,13 @@ public class TopologyEngine {
     private boolean ehIpDeSwitchRegistrado(String ip) {
         if (ip == null) return false;
         for (SwitchIdentity sw : switchesPorId.values()) {
-            if (ip.equals(sw.ip())) {
+            if (sw.ip() == null) continue;
+            String swIp = sw.ip();
+            int idxPorta = swIp.indexOf(':');
+            if (idxPorta > 0) {
+                swIp = swIp.substring(0, idxPorta);
+            }
+            if (ip.equals(swIp)) {
                 return true;
             }
         }

@@ -274,7 +274,9 @@ public class ComwareParser {
     public SwitchIdentity parseDeviceManuInfo(String ip, String rawOutput) {
         String deviceName = extrairCampo(rawOutput, "DEVICE_NAME");
         String serial = extrairCampo(rawOutput, "DEVICE_SERIAL_NUMBER");
-        String mac = extrairCampo(rawOutput, "MAC_ADDRESS");
+        String macBruto = extrairCampo(rawOutput, "MAC_ADDRESS");
+        String mac = tpDiscover.intelbras.modelos.MacUtils.ehMacValido(
+                tpDiscover.intelbras.modelos.MacUtils.normalizar(macBruto)) ? macBruto : null;
         String productId = extrairCampo(rawOutput, "PRODUCT_ID");
 
         return new SwitchIdentity(deviceName, serial, mac, productId, ip);

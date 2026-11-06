@@ -12,7 +12,10 @@ import java.util.regex.Pattern;
  */
 public class TelnetSwitchClient implements SwitchClient {
 
-    private static final Pattern PROMPT = Pattern.compile("(?m)(^[<\\[][^>\\]\\r\\n]+[>\\]]\\s*$|^[a-zA-Z0-9_\\-\\.]+[>#]\\s*$)");
+    private static final Pattern PROMPT = Pattern.compile(
+            "(?m)(^[<\\[][^>\\]\\r\\n]+[>\\]]\\s*$|^[a-zA-Z0-9_\\-\\.@:~/]*[>#]\\s*$)"
+    );
+    private static final Pattern KLISH_SYNTAX_ERR = Pattern.compile("(?i)syntax\\s+error:\\s*illegal\\s+command\\s+line");
     private static final Pattern LOGIN_PROMPT = Pattern.compile("(?i)(login|username|user\\s*name)(?:\\s*\\([^)]*\\))?\\s*:\\s*$");
     private static final Pattern PASSWORD_PROMPT = Pattern.compile("(?i)password(?:\\s*\\([^)]*\\))?\\s*:\\s*$");
     // Paginação S30/Cisco ("---MORE---") e OLT ("....press ENTER to next line, CTRL_C to quit, other key to next page....")
@@ -26,6 +29,7 @@ public class TelnetSwitchClient implements SwitchClient {
     private TelnetClient telnet;
     private InputStream in;
     private OutputStream out;
+    private String bannerInicial = "";
 
     public TelnetSwitchClient(ConnectionConfig config) {
         this.config = config;
@@ -83,6 +87,8 @@ public class TelnetSwitchClient implements SwitchClient {
                         "Usuário ou senha incorretos para " + config.ip() + " (Telnet)", null);
             }
 
+            this.bannerInicial = saida;
+
             // Se cair em prompt modo usuário do S30 ou OLT (ex: "INTELBRAS>" / "OLT4880E>"), eleva para "#"
             entrarModoPrivilegiadoSeNecessario(saida);
 
@@ -93,7 +99,7 @@ public class TelnetSwitchClient implements SwitchClient {
 
     private void entrarModoPrivilegiadoSeNecessario(String saidaAtual) throws SwitchConnectionException, IOException {
         String linhaPrompt = ultimaLinha(saidaAtual).trim();
-        if (linhaPrompt.endsWith(">") && !linhaPrompt.startsWith("<")) {
+        if (linhaPrompt.length() > 1 && linhaPrompt.endsWith(">") && !linhaPrompt.startsWith("<")) {
             enviar("enable");
             String resp = lerAte(PROMPT, PASSWORD_PROMPT);
             if (PASSWORD_PROMPT.matcher(ultimaLinha(resp)).find()) {
@@ -164,6 +170,14 @@ public class TelnetSwitchClient implements SwitchClient {
                         continue;
                     }
 
+                    if (KLISH_SYNTAX_ERR.matcher(texto).find() && ultimaLinha(texto).trim().startsWith("# ")) {
+                        buffer = new StringBuilder(KLISH_SYNTAX_ERR.matcher(texto).replaceAll("Syntax error"));
+                        out.write("\u0015\r\n".getBytes());
+                        out.flush();
+                        inicio = System.currentTimeMillis();
+                        continue;
+                    }
+
                     String finalDoBuffer = ultimaLinha(texto);
                     for (Pattern p : padroesEsperados) {
                         if (p.matcher(finalDoBuffer).find()) {
@@ -205,6 +219,11 @@ public class TelnetSwitchClient implements SwitchClient {
         } catch (InterruptedException ignored) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    @Override
+    public String bannerInicial() {
+        return bannerInicial;
     }
 
     @Override

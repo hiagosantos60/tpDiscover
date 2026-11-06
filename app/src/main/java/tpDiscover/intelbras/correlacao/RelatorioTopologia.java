@@ -584,7 +584,8 @@ public class RelatorioTopologia {
         if (u.startsWith("FE") || u.startsWith("E0") || u.startsWith("ETH")) return 1;
         if (u.startsWith("GE") || u.startsWith("GI") || u.startsWith("G0")) return 2;
         if (u.startsWith("XGE") || u.startsWith("TE") || u.startsWith("TEN")) return 3;
-        if (u.startsWith("GPON") || u.startsWith("EPON") || u.startsWith("PON") || u.startsWith("P0")) return 4;
+        if (u.startsWith("GPON") || u.startsWith("EPON") || u.startsWith("PON") || u.startsWith("P0")
+                || u.startsWith("ATH") || u.startsWith("WLAN") || u.startsWith("WIFI")) return 4;
         if (u.startsWith("BAGG") || u.startsWith("AGG") || u.startsWith("BRIDGE")) return 5;
         return 6;
     }

@@ -16,8 +16,30 @@ public record SwitchIdentity(
         String productId,      // ex: LS-2328G-B
         String ip              // IP usado para conectar (preenchido pelo coletor, não vem do "display")
 ) {
-    /** MAC-base normalizado, no mesmo formato usado em MacEntry.macNormalizado(). */
+    /** Indica se o equipamento possui um endereço MAC-base válido extraído da CLI. */
+    public boolean possuiMacValido() {
+        return MacUtils.ehMacValido(MacUtils.normalizar(macAddress));
+    }
+
+    /**
+     * MAC-base normalizado (12 hex minúsculos) quando válido, ou identificador único sintético
+     * baseado em IP/serial/nome quando o MAC não pôde ser obtido — evitando NullPointerException
+     * e colisões entre múltiplos switches sem MAC.
+     */
     public String macNormalizado() {
-        return macAddress.toLowerCase().replace("-", "").replace(":", "").replace(".", "");
+        String norm = MacUtils.normalizar(macAddress);
+        if (MacUtils.ehMacValido(norm)) {
+            return norm;
+        }
+        if (ip != null && !ip.isBlank()) {
+            return "sem-mac@" + ip.trim().toLowerCase();
+        }
+        if (serialNumber != null && !serialNumber.isBlank()) {
+            return "sem-mac@sn:" + serialNumber.trim().toLowerCase();
+        }
+        if (deviceName != null && !deviceName.isBlank()) {
+            return "sem-mac@nome:" + deviceName.trim().toLowerCase();
+        }
+        return "sem-mac@desconhecido";
     }
 }

@@ -56,22 +56,30 @@ public final class MacUtils {
     }
 
     /**
+     * Verifica se a string já normalizada representa um MAC de 48 bits válido para identificação
+     * de equipamento (12 hexadecimais, não zerado e não broadcast).
+     */
+    public static boolean ehMacValido(String macNormalizado) {
+        if (macNormalizado == null || macNormalizado.length() != 12) {
+            return false;
+        }
+        if ("000000000000".equals(macNormalizado) || "ffffffffffff".equalsIgnoreCase(macNormalizado)) {
+            return false;
+        }
+        return paraLong(macNormalizado) >= 0;
+    }
+
+    /**
      * Verifica se um MAC observado na tabela MAC pertence ao bloco de portas/interfaces de um switch.
      * Compara o mesmo OUI (3 primeiros octetos) e valida se a diferença numérica de 48 bits está
      * dentro da janela de portas do equipamento.
      */
     public static boolean pertenceAoSwitch(String macBaseNormalizado, String macObservadoNormalizado) {
-        if (macBaseNormalizado == null || macObservadoNormalizado == null) {
-            return false;
-        }
-        if ("000000000000".equals(macBaseNormalizado) || "000000000000".equals(macObservadoNormalizado)) {
+        if (!ehMacValido(macBaseNormalizado) || !ehMacValido(macObservadoNormalizado)) {
             return false;
         }
         if (macBaseNormalizado.equalsIgnoreCase(macObservadoNormalizado)) {
             return true;
-        }
-        if (macBaseNormalizado.length() != 12 || macObservadoNormalizado.length() != 12) {
-            return prefixo(macBaseNormalizado).equalsIgnoreCase(prefixo(macObservadoNormalizado));
         }
         // Exige o mesmo OUI (3 primeiros bytes)
         if (!macBaseNormalizado.regionMatches(true, 0, macObservadoNormalizado, 0, 6)) {
@@ -79,9 +87,6 @@ public final class MacUtils {
         }
         long base = paraLong(macBaseNormalizado);
         long obs = paraLong(macObservadoNormalizado);
-        if (base < 0 || obs < 0) {
-            return prefixo(macBaseNormalizado).equalsIgnoreCase(prefixo(macObservadoNormalizado));
-        }
         long diff = obs - base;
         return diff >= OFFSET_MINIMO_PORTA && diff <= OFFSET_MAXIMO_PORTA;
     }

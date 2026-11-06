@@ -185,7 +185,12 @@ public final class LocalGatewayDetector {
 
     private static Integer ipv4ParaInt(String ip) {
         if (ip == null) return null;
-        String[] partes = ip.trim().split("\\.");
+        String limpo = ip.trim();
+        int idxPorta = limpo.indexOf(':');
+        if (idxPorta > 0) {
+            limpo = limpo.substring(0, idxPorta).trim();
+        }
+        String[] partes = limpo.split("\\.");
         if (partes.length != 4) return null;
         int valor = 0;
         try {

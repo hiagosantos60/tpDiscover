@@ -22,8 +22,11 @@ import java.util.regex.Pattern;
  */
 public class SshSwitchClient implements SwitchClient {
 
-    // Prompt Comware: "<Nome>" ou "[Nome]" / S30 e OLT: "INTELBRAS>", "OLT4880E#" etc.
-    private static final Pattern PROMPT = Pattern.compile("(?m)(^[<\\[][^>\\]\\r\\n]+[>\\]]\\s*$|^[a-zA-Z0-9_\\-\\.]+[>#]\\s*$)");
+    // Prompt Comware: "<Nome>" ou "[Nome]" / S30 e OLT: "INTELBRAS>", "OLT4880E#" / APs Linux/klish: "#" ou "user@host:~#"
+    private static final Pattern PROMPT = Pattern.compile(
+            "(?m)(^[<\\[][^>\\]\\r\\n]+[>\\]]\\s*$|^[a-zA-Z0-9_\\-\\.@:~/]*[>#]\\s*$)"
+    );
+    private static final Pattern KLISH_SYNTAX_ERR = Pattern.compile("(?i)syntax\\s+error:\\s*illegal\\s+command\\s+line");
     private static final Pattern LOGIN_PROMPT = Pattern.compile("(?i)(login|username|user\\s*name)(?:\\s*\\([^)]*\\))?\\s*:\\s*$");
     private static final Pattern SENHA_PROMPT = Pattern.compile("(?i)password(?:\\s*\\([^)]*\\))?\\s*:\\s*$");
     // Paginação S30/Cisco ("---MORE---") e OLT ("....press ENTER to next line, CTRL_C to quit, other key to next page....")
@@ -38,6 +41,7 @@ public class SshSwitchClient implements SwitchClient {
     private ChannelShell channel;
     private InputStream in;
     private OutputStream out;
+    private String bannerInicial = "";
 
     public SshSwitchClient(ConnectionConfig config) {
         this.config = config;
@@ -62,6 +66,7 @@ public class SshSwitchClient implements SwitchClient {
 
             // Consome o banner inicial (e autentica no shell caso o equipamento peça Username/Password como as OLTs)
             String banner = autenticarNoShellSeNecessario();
+            this.bannerInicial = banner;
 
             // Se cair em prompt não privilegiado da Série 3000 ou OLT (ex: "INTELBRAS>" / "OLT4880E>"), eleva para "#"
             entrarModoPrivilegiadoSeNecessario(banner);
@@ -125,8 +130,8 @@ public class SshSwitchClient implements SwitchClient {
 
     private void entrarModoPrivilegiadoSeNecessario(String saidaAtual) throws SwitchConnectionException, IOException {
         String linhaPrompt = ultimaLinha(saidaAtual).trim();
-        // Se termina com '>' mas não começa com '<' (ex: "INTELBRAS>" ou "OLT4880E>"), eleva com 'enable'
-        if (linhaPrompt.endsWith(">") && !linhaPrompt.startsWith("<")) {
+        // Se termina com '>' mas não começa com '<' nem é prompt vazio '>' de klish (ex: "INTELBRAS>" ou "OLT4880E>"), eleva com 'enable'
+        if (linhaPrompt.length() > 1 && linhaPrompt.endsWith(">") && !linhaPrompt.startsWith("<")) {
             enviarLinha("enable");
             dormir(PERIODO_QUIETO_MS);
 
@@ -204,6 +209,15 @@ public class SshSwitchClient implements SwitchClient {
                         continue;
                     }
 
+                    // Se a CLI klish (APs Intelbras) rejeitou comando inválido mantendo "# <cmd>" na linha, limpa com Ctrl-U
+                    if (KLISH_SYNTAX_ERR.matcher(texto).find() && ultimaLinha(texto).trim().startsWith("# ")) {
+                        buffer = new StringBuilder(KLISH_SYNTAX_ERR.matcher(texto).replaceAll("Syntax error"));
+                        out.write("\u0015\n".getBytes());
+                        out.flush();
+                        inicio = System.currentTimeMillis();
+                        continue;
+                    }
+
                     String ultima = ultimaLinha(texto).trim();
                     Matcher m = PROMPT.matcher(ultima);
                     if (m.find()) {
@@ -246,6 +260,15 @@ public class SshSwitchClient implements SwitchClient {
                         continue;
                     }
 
+                    // Se a CLI klish (APs Intelbras) rejeitou comando inválido mantendo "# <cmd>" na linha, limpa com Ctrl-U
+                    if (KLISH_SYNTAX_ERR.matcher(texto).find() && ultimaLinha(texto).trim().startsWith("# ")) {
+                        buffer = new StringBuilder(KLISH_SYNTAX_ERR.matcher(texto).replaceAll("Syntax error"));
+                        out.write("\u0015\n".getBytes());
+                        out.flush();
+                        inicio = System.currentTimeMillis();
+                        continue;
+                    }
+
                     String ultima = ultimaLinha(texto).trim();
                     Matcher mPrompt = PROMPT.matcher(ultima);
                     Matcher mLogin = LOGIN_PROMPT.matcher(ultima);
@@ -283,6 +306,11 @@ public class SshSwitchClient implements SwitchClient {
         } catch (InterruptedException ignored) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    @Override
+    public String bannerInicial() {
+        return bannerInicial;
     }
 
     @Override
