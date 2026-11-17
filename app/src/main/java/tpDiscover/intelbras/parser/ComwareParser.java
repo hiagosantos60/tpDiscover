@@ -1,7 +1,11 @@
 package tpDiscover.intelbras.parser;
 
 import tpDiscover.intelbras.modelos.ArpEntry;
+import tpDiscover.intelbras.modelos.LldpNeighbor;
+import tpDiscover.intelbras.modelos.LoopDiagnostic;
 import tpDiscover.intelbras.modelos.MacEntry;
+import tpDiscover.intelbras.modelos.MacUtils;
+import tpDiscover.intelbras.modelos.StpPortState;
 import tpDiscover.intelbras.modelos.SwitchIdentity;
 
 import java.util.ArrayList;
@@ -18,55 +22,68 @@ import java.util.regex.Pattern;
  * Parser para a saída de CLI dos switches Intelbras linha S23/S33 (firmware Comware).
  *
  * Cobre os comandos:
- *  - display device manuinfo            -> identidade do switch
- *  - display mac-address                -> tabela MAC
- *  - display link-aggregation verbose   -> portas físicas que compõem cada BAGG
- *  - display ip routing-table / arp     -> descoberta automática do roteador/gateway da rede
+ *  - display device manuinfo                  -> identidade do switch
+ *  - display mac-address                      -> tabela MAC
+ *  - display link-aggregation verbose         -> portas físicas que compõem cada BAGG
+ *  - display ip routing-table / arp           -> descoberta automática do roteador/gateway da rede
+ *  - display lldp neighbor-information ...    -> vizinhos LLDP
+ *  - display stp brief / loopback-detection   -> diagnóstico de loops e estado STP
  */
 public class ComwareParser {
 
     private static final String IPV4_REGEX =
             "((?:25[0-5]|2[0-4]\\d|1?\\d?\\d)(?:\\.(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)){3})";
 
-    // Reconhece uma linha de dado da tabela MAC, ex:
-    // "0009-0f09-1e0a   1          Learned          GE1/0/23                 Y"
     private static final Pattern MAC_LINE = Pattern.compile(
-            "^([0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4})\\s+" + // MAC
-            "(\\d+)\\s+" +                                          // VLAN ID
-            "(\\S+)\\s+" +                                          // State
-            "(\\S+)\\s+" +                                          // Port/Nickname
-            "(\\S+)\\s*$"                                           // Aging (Y/N) - não usamos, mas valida a linha
+            "^([0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4})\\s+" +
+            "(\\d+)\\s+" +
+            "(\\S+)\\s+" +
+            "(\\S+)\\s+" +
+            "(\\S+)\\s*$"
     );
 
-    // Ex: "Aggregate Interface: Bridge-Aggregation2"
     private static final Pattern BAGG_HEADER = Pattern.compile(
             "(?i)^\\s*Aggregate\\s+Interface\\s*:\\s*(?:Bridge-Aggregation|Route-Aggregation|BAGG)(\\d+)\\b"
     );
 
-    // Ex: "  GE1/0/1          S       32768    1"
     private static final Pattern BAGG_MEMBER_PORT = Pattern.compile(
             "^\\s*((?:X?GE|GigabitEthernet|Ten-GigabitEthernet|Ethernet)\\d+(?:/\\d+)+)\\s+([SUI])\\b",
             Pattern.CASE_INSENSITIVE
     );
 
-    // Ex: "0.0.0.0/0   Static  60  0   10.1.40.1   Vlan-interface1"
-    // ou  "0.0.0.0/0   Static  60  0  RD  10.1.40.1   Vlan-interface1"
     private static final Pattern DEFAULT_ROUTE_LINE = Pattern.compile(
             "^\\s*0\\.0\\.0\\.0(?:/0|\\s+0\\.0\\.0\\.0)\\b.*"
     );
 
-    // Ex: "10.1.40.1       0009-0f09-1e0a  1         GE1/0/23                 1185  D"
     private static final Pattern ARP_LINE = Pattern.compile(
             "^\\s*" + IPV4_REGEX + "\\s+([0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4})(?:\\s+\\S+)?(?:\\s+(\\S+))?.*$"
     );
 
-    /**
-     * Faz o parse da saída de "display mac-address".
-     *
-     * @param switchId  identificador do switch de origem (ex: MAC-base ou IP),
-     *                  usado para marcar de onde veio cada entrada.
-     * @param rawOutput texto bruto retornado pelo terminal.
-     */
+    // LLDP verbose: "LLDP neighbor-information of port 3[GigabitEthernet1/0/3]:"
+    private static final Pattern LLDP_VERBOSE_PORT_HEADER = Pattern.compile(
+            "(?i)^LLDP\\s+neighbor-information\\s+of\\s+port\\s+\\d+\\[([^\\]]+)\\]\\s*:"
+    );
+    private static final Pattern LLDP_VERBOSE_KV = Pattern.compile(
+            "^\\s*([A-Za-z][A-Za-z0-9\\s/()-]{1,45})\\s*:\\s*(.*?)\\s*$"
+    );
+    // LLDP list: "GE1/0/3         8085-4407-b35c  GigabitEthernet1/0/24      NOMEDOPRODUTO"
+    private static final Pattern LLDP_LIST_LINE = Pattern.compile(
+            "^\\s*((?:X?GE|GigabitEthernet|Ten-GigabitEthernet|FE|FastEthernet|Ethernet)\\d+(?:/\\d+)*)\\s+" +
+            "(\\S+)\\s+" +
+            "(\\S+)" +
+            "(?:\\s+(.+?))?\\s*$",
+            Pattern.CASE_INSENSITIVE
+    );
+
+    // STP brief: " 0        GigabitEthernet1/0/3                DESI  FORWARDING  NONE"
+    private static final Pattern STP_BRIEF_LINE = Pattern.compile(
+            "(?i)^\\s*\\d+\\s+(\\S+)\\s+(DESI|ROOT|ALTE|BACK|MAST|DISA|NONE|\\S+)\\s+(FORWARDING|DISCARDING|LEARNING|LISTENING|DISABLED)\\s+\\S+\\s*$"
+    );
+
+    private static final Pattern LOOPBACK_PORT_LINE = Pattern.compile(
+            "(?i)\\b((?:X?GE|GigabitEthernet|Ten-GigabitEthernet|Ethernet|Bridge-Aggregation|BAGG)\\d+(?:/\\d+)*)\\b.*\\b(loop|detected|blocked|shutdown|discarding)\\b"
+    );
+
     public List<MacEntry> parseMacAddressTable(String switchId, String rawOutput) {
         List<MacEntry> entries = new ArrayList<>();
         if (rawOutput == null) return entries;
@@ -77,8 +94,6 @@ public class ComwareParser {
 
             Matcher m = MAC_LINE.matcher(trimmed);
             if (!m.matches()) {
-                // Ignora silenciosamente cabeçalho ("MAC Address VLAN ID..."),
-                // prompts (ex: "[S2328G-B]display mac-address") e linhas de rodapé/total.
                 continue;
             }
 
@@ -93,9 +108,6 @@ public class ComwareParser {
         return entries;
     }
 
-    /**
-     * Extrai o IP do gateway padrão (0.0.0.0/0) da saída de "display ip routing-table".
-     */
     public Optional<String> parseDefaultGatewayIp(String rawOutput) {
         if (rawOutput == null || rawOutput.isBlank()) {
             return Optional.empty();
@@ -117,9 +129,6 @@ public class ComwareParser {
         return Optional.empty();
     }
 
-    /**
-     * Faz o parse da saída de "display arp", extraindo IP, MAC e porta física/agregada.
-     */
     public List<ArpEntry> parseArpTable(String rawOutput) {
         List<ArpEntry> entries = new ArrayList<>();
         if (rawOutput == null || rawOutput.isBlank()) {
@@ -174,10 +183,6 @@ public class ComwareParser {
         return null;
     }
 
-    /**
-     * Faz o parse da saída de "display link-aggregation verbose" para descobrir
-     * quais portas físicas compõem cada interface lógica BAGG (ex: "BAGG2" -> ["GE1/0/1", "GE1/0/2"]).
-     */
     public Map<String, List<String>> parseLinkAggregation(String rawOutput) {
         Map<String, Set<String>> membrosPorBagg = new LinkedHashMap<>();
         if (rawOutput == null || rawOutput.isBlank()) {
@@ -228,10 +233,6 @@ public class ComwareParser {
         return resultado;
     }
 
-    /**
-     * Substitui nomes de interface de agregação (ex: "BAGG2") pelo formato enriquecido
-     * com suas portas físicas membro (ex: "BAGG2 (GE1/0/1, GE1/0/2)").
-     */
     public List<MacEntry> expandirPortasAgregadas(List<MacEntry> entries, Map<String, List<String>> membrosPorBagg) {
         if (membrosPorBagg == null || membrosPorBagg.isEmpty()) {
             return entries;
@@ -249,13 +250,248 @@ public class ComwareParser {
         return resultado;
     }
 
-    private static String normalizarNomePortaComware(String porta) {
+    /**
+     * Faz o parse da saída de "display lldp neighbor-information verbose" (ou detalhada).
+     */
+    public List<LldpNeighbor> parseLldpNeighborsVerbose(String switchId, String rawOutput) {
+        List<LldpNeighbor> vizinhos = new ArrayList<>();
+        if (rawOutput == null || rawOutput.isBlank() || rawOutput.toLowerCase().contains("global status of lldp: disable")) {
+            return vizinhos;
+        }
+
+        String portaLocalAtual = null;
+        String chassisId = null;
+        String portId = null;
+        String portDesc = null;
+        String sysName = null;
+        StringBuilder sysDesc = new StringBuilder();
+        String mgmtIp = null;
+        Set<String> capabilities = new LinkedHashSet<>();
+        boolean lendoSysDesc = false;
+        boolean temBlocoAtivo = false;
+
+        for (String line : rawOutput.split("\\R")) {
+            String trimmed = line.strip();
+            if (trimmed.isEmpty()) {
+                lendoSysDesc = false;
+                continue;
+            }
+
+            Matcher mHeader = LLDP_VERBOSE_PORT_HEADER.matcher(trimmed);
+            if (mHeader.find()) {
+                if (temBlocoAtivo && portaLocalAtual != null && (chassisId != null || sysName != null)) {
+                    vizinhos.add(criarLldpNeighbor(switchId, portaLocalAtual, chassisId, portId, portDesc,
+                            sysName, sysDesc.toString().trim(), mgmtIp, capabilities));
+                }
+                portaLocalAtual = normalizarNomePortaComware(mHeader.group(1));
+                chassisId = null;
+                portId = null;
+                portDesc = null;
+                sysName = null;
+                sysDesc.setLength(0);
+                mgmtIp = null;
+                capabilities = new LinkedHashSet<>();
+                lendoSysDesc = false;
+                temBlocoAtivo = true;
+                continue;
+            }
+
+            if (!temBlocoAtivo) {
+                continue;
+            }
+
+            if (trimmed.toLowerCase().startsWith("lldp neighbor index")) {
+                if (chassisId != null || sysName != null) {
+                    vizinhos.add(criarLldpNeighbor(switchId, portaLocalAtual, chassisId, portId, portDesc,
+                            sysName, sysDesc.toString().trim(), mgmtIp, capabilities));
+                    chassisId = null;
+                    portId = null;
+                    portDesc = null;
+                    sysName = null;
+                    sysDesc.setLength(0);
+                    mgmtIp = null;
+                    capabilities = new LinkedHashSet<>();
+                }
+                lendoSysDesc = false;
+                continue;
+            }
+
+            Matcher mKv = LLDP_VERBOSE_KV.matcher(line);
+            if (mKv.matches()) {
+                lendoSysDesc = false;
+                String chave = mKv.group(1).trim().toLowerCase();
+                String val = mKv.group(2).trim();
+
+                if (chave.equals("chassis id")) {
+                    chassisId = val;
+                } else if (chave.equals("port id")) {
+                    portId = val;
+                } else if (chave.equals("port description")) {
+                    portDesc = val;
+                } else if (chave.equals("system name")) {
+                    sysName = val;
+                } else if (chave.equals("system description")) {
+                    if (!val.isEmpty()) {
+                        sysDesc.append(val);
+                    }
+                    lendoSysDesc = true;
+                } else if (chave.equals("system capabilities enabled") || chave.equals("capabilities")) {
+                    for (String cap : val.split(",")) {
+                        String c = cap.trim();
+                        if (!c.isEmpty()) capabilities.add(c);
+                    }
+                } else if (chave.equals("management address") && mgmtIp == null) {
+                    if (val.matches("^" + IPV4_REGEX + "$")) {
+                        mgmtIp = val;
+                    }
+                }
+            } else if (lendoSysDesc && line.startsWith(" ")) {
+                if (!sysDesc.isEmpty()) sysDesc.append("\n");
+                sysDesc.append(trimmed);
+            }
+        }
+
+        if (temBlocoAtivo && portaLocalAtual != null && (chassisId != null || sysName != null)) {
+            vizinhos.add(criarLldpNeighbor(switchId, portaLocalAtual, chassisId, portId, portDesc,
+                    sysName, sysDesc.toString().trim(), mgmtIp, capabilities));
+        }
+
+        return vizinhos;
+    }
+
+    /**
+     * Faz o parse da tabela resumida "display lldp neighbor-information list".
+     */
+    public List<LldpNeighbor> parseLldpNeighborsList(String switchId, String rawOutput) {
+        List<LldpNeighbor> vizinhos = new ArrayList<>();
+        if (rawOutput == null || rawOutput.isBlank() || rawOutput.toLowerCase().contains("global status of lldp: disable")) {
+            return vizinhos;
+        }
+        for (String line : rawOutput.split("\\R")) {
+            String trimmed = line.strip();
+            if (trimmed.isEmpty()) continue;
+            Matcher m = LLDP_LIST_LINE.matcher(trimmed);
+            if (!m.matches()) continue;
+            String localPort = normalizarNomePortaComware(m.group(1));
+            String chassis = m.group(2).trim();
+            String remotePortRaw = m.group(3).trim();
+            String sysName = m.group(4) != null ? m.group(4).trim() : null;
+            vizinhos.add(criarLldpNeighbor(switchId, localPort, chassis, remotePortRaw, null, sysName, null, null, Set.of()));
+        }
+        return vizinhos;
+    }
+
+    private static LldpNeighbor criarLldpNeighbor(
+            String switchId,
+            String localPort,
+            String chassisId,
+            String portId,
+            String portDesc,
+            String sysName,
+            String sysDesc,
+            String mgmtIp,
+            Set<String> capabilities
+    ) {
+        String macNorm = extrairMacNormalizadoDeChassis(chassisId);
+        String remotePort = resolverMelhorPortaRemota(portId, portDesc);
+        return new LldpNeighbor(
+                switchId,
+                localPort,
+                chassisId,
+                macNorm,
+                remotePort,
+                portDesc,
+                sysName,
+                sysDesc,
+                mgmtIp,
+                Set.copyOf(capabilities)
+        );
+    }
+
+    static String extrairMacNormalizadoDeChassis(String chassisId) {
+        if (chassisId == null || chassisId.isBlank()) return "";
+        String norm = MacUtils.normalizar(chassisId);
+        return MacUtils.ehMacValido(norm) ? norm : "";
+    }
+
+    public static String resolverMelhorPortaRemota(String portId, String portDesc) {
+        String cand = (portId != null && !portId.isBlank()) ? portId.trim() : null;
+        if (cand != null && !cand.matches("^\\d+$")) {
+            return Serie3000Parser.normalizarPorta(cand);
+        }
+        if (portDesc != null && !portDesc.isBlank()) {
+            return Serie3000Parser.normalizarPorta(portDesc.replaceFirst("(?i)\\s+Interface$", "").trim());
+        }
+        return cand != null ? cand : "?";
+    }
+
+    /**
+     * Faz o parse da saída de "display stp brief".
+     */
+    public List<StpPortState> parseStpBrief(String switchId, String rawOutput) {
+        List<StpPortState> estados = new ArrayList<>();
+        if (rawOutput == null || rawOutput.isBlank()) {
+            return estados;
+        }
+        if (rawOutput.toLowerCase().contains("stp is not enabled")
+                || rawOutput.toLowerCase().contains("spanning-tree is disabled")) {
+            estados.add(new StpPortState(switchId, "*", "DISABLED", "DISABLED", false, null));
+            return estados;
+        }
+        for (String line : rawOutput.split("\\R")) {
+            String trimmed = line.strip();
+            if (trimmed.isEmpty()) continue;
+            Matcher m = STP_BRIEF_LINE.matcher(trimmed);
+            if (!m.matches()) continue;
+            String porta = normalizarNomePortaComware(m.group(1));
+            String role = m.group(2).toUpperCase();
+            String state = m.group(3).toUpperCase();
+            estados.add(new StpPortState(switchId, porta, role, state, true, null));
+        }
+        return estados;
+    }
+
+    /**
+     * Detecta alertas ativos em "display loopback-detection".
+     */
+    public List<LoopDiagnostic> parseLoopbackDetection(String switchId, String rawOutput) {
+        List<LoopDiagnostic> achados = new ArrayList<>();
+        if (rawOutput == null || rawOutput.isBlank()) return achados;
+        String lower = rawOutput.toLowerCase();
+        if (lower.contains("no loop is detected") || lower.contains("not enabled")) {
+            return achados;
+        }
+        for (String line : rawOutput.split("\\R")) {
+            String trimmed = line.strip();
+            if (trimmed.isEmpty()) continue;
+            Matcher m = LOOPBACK_PORT_LINE.matcher(trimmed);
+            if (m.find()) {
+                String porta = normalizarNomePortaComware(m.group(1));
+                achados.add(new LoopDiagnostic(
+                        LoopDiagnostic.Severidade.CRITICO,
+                        LoopDiagnostic.TipoLoop.LOOPBACK_HARDWARE,
+                        switchId,
+                        porta,
+                        switchId,
+                        porta,
+                        "Hardware loopback-detection acusou loop: " + trimmed,
+                        "Inspecionar cabeamento ou switch não gerenciável conectado na porta " + porta
+                ));
+            }
+        }
+        return achados;
+    }
+
+    public static String normalizarNomePortaComware(String porta) {
         String p = porta.trim();
         if (p.regionMatches(true, 0, "GigabitEthernet", 0, 15)) {
             return "GE" + p.substring(15);
         }
         if (p.regionMatches(true, 0, "Ten-GigabitEthernet", 0, 19)) {
             return "XGE" + p.substring(19);
+        }
+        if (p.regionMatches(true, 0, "FastEthernet", 0, 12)) {
+            return "FE" + p.substring(12);
         }
         if (p.regionMatches(true, 0, "Bridge-Aggregation", 0, 18)) {
             return "BAGG" + p.substring(18);
@@ -266,24 +502,17 @@ public class ComwareParser {
         return p.toUpperCase();
     }
 
-    /**
-     * Faz o parse da saída de "display device manuinfo".
-     *
-     * @param ip IP usado na conexão (não vem no comando, é injetado pelo coletor).
-     */
     public SwitchIdentity parseDeviceManuInfo(String ip, String rawOutput) {
         String deviceName = extrairCampo(rawOutput, "DEVICE_NAME");
         String serial = extrairCampo(rawOutput, "DEVICE_SERIAL_NUMBER");
         String macBruto = extrairCampo(rawOutput, "MAC_ADDRESS");
-        String mac = tpDiscover.intelbras.modelos.MacUtils.ehMacValido(
-                tpDiscover.intelbras.modelos.MacUtils.normalizar(macBruto)) ? macBruto : null;
+        String mac = MacUtils.ehMacValido(MacUtils.normalizar(macBruto)) ? macBruto : null;
         String productId = extrairCampo(rawOutput, "PRODUCT_ID");
 
         return new SwitchIdentity(deviceName, serial, mac, productId, ip);
     }
 
     private String extrairCampo(String rawOutput, String campo) {
-        // Formato: "CAMPO          : valor"
         Pattern p = Pattern.compile("^\\s*" + Pattern.quote(campo) + "\\s*:\\s*(.+?)\\s*$", Pattern.MULTILINE);
         Matcher m = p.matcher(rawOutput);
         return m.find() ? m.group(1) : null;

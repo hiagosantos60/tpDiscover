@@ -3,6 +3,7 @@ package tpDiscover.intelbras.coleta;
 import tpDiscover.intelbras.parser.Serie3000Parser;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -27,6 +28,12 @@ public class AlvosLoader {
     private static final Pattern DIRETIVA_GATEWAY = Pattern.compile(
             "(?i)^#?\\s*gateway\\s*[:=]\\s*(.+?)\\s*$"
     );
+    private static final Pattern DIRETIVA_SCAN = Pattern.compile(
+            "(?i)^#?\\s*scan\\s*[:=]\\s*(.+?)\\s*$"
+    );
+    private static final Pattern DIRETIVA_CREDENCIAL = Pattern.compile(
+            "(?i)^#?\\s*credencia(?:l|is)\\s*[:=]\\s*(.+?)\\s*$"
+    );
     private static final Pattern IPV4_PATTERN = Pattern.compile(
             "\\b((?:25[0-5]|2[0-4]\\d|1?\\d?\\d)(?:\\.(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)){3})\\b"
     );
@@ -37,11 +44,27 @@ public class AlvosLoader {
     public record ConfiguracaoAlvos(
             List<SwitchTarget> alvos,
             String gatewayIpManual,
-            String gatewayMacManual
+            String gatewayMacManual,
+            List<String> scanSpecs,
+            String usuarioPadrao,
+            String senhaPadrao
     ) {
+        public ConfiguracaoAlvos {
+            alvos = alvos != null ? List.copyOf(alvos) : List.of();
+            scanSpecs = scanSpecs != null ? List.copyOf(scanSpecs) : List.of();
+        }
+
+        public ConfiguracaoAlvos(List<SwitchTarget> alvos, String gatewayIpManual, String gatewayMacManual) {
+            this(alvos, gatewayIpManual, gatewayMacManual, List.of(), null, null);
+        }
+
         public boolean possuiGatewayManual() {
             return (gatewayIpManual != null && !gatewayIpManual.isBlank())
                     || (gatewayMacManual != null && !gatewayMacManual.isBlank());
+        }
+
+        public boolean possuiScan() {
+            return scanSpecs != null && !scanSpecs.isEmpty();
         }
     }
 
@@ -58,6 +81,9 @@ public class AlvosLoader {
         List<SwitchTarget> alvos = new ArrayList<>();
         String gatewayIp = null;
         String gatewayMac = null;
+        List<String> scanSpecs = new ArrayList<>();
+        String usuarioPadrao = null;
+        String senhaPadrao = null;
         List<String> linhas = Files.readAllLines(caminho);
 
         for (int i = 0; i < linhas.size(); i++) {
@@ -74,6 +100,27 @@ public class AlvosLoader {
                 Matcher mMac = MAC_PATTERN.matcher(valor);
                 if (mMac.find()) {
                     gatewayMac = Serie3000Parser.formatarMacPadrao(mMac.group(1));
+                }
+                continue;
+            }
+
+            Matcher mScan = DIRETIVA_SCAN.matcher(linha);
+            if (mScan.matches()) {
+                for (String s : mScan.group(1).split("[,;\\s]+")) {
+                    String limpo = s.trim();
+                    if (!limpo.isEmpty()) {
+                        scanSpecs.add(limpo);
+                    }
+                }
+                continue;
+            }
+
+            Matcher mCred = DIRETIVA_CREDENCIAL.matcher(linha);
+            if (mCred.matches()) {
+                String[] cred = mCred.group(1).strip().split(";", 2);
+                if (cred.length >= 1 && !cred[0].isBlank()) {
+                    usuarioPadrao = cred[0].strip();
+                    senhaPadrao = cred.length == 2 ? cred[1].strip() : null;
                 }
                 continue;
             }
@@ -116,6 +163,30 @@ public class AlvosLoader {
             alvos.add(new SwitchTarget(ip, usuario, senha, portaCustomizada));
         }
 
-        return new ConfiguracaoAlvos(alvos, gatewayIp, gatewayMac);
+        return new ConfiguracaoAlvos(alvos, gatewayIp, gatewayMac, scanSpecs, usuarioPadrao, senhaPadrao);
+    }
+
+    /**
+     * Persiste a lista de alvos no formato padrão {@code ip[:porta];usuario[;senha]}.
+     */
+    public static void salvarAlvos(Path destino, List<SwitchTarget> alvos, boolean incluirSenhas) throws IOException {
+        List<String> linhas = new ArrayList<>();
+        linhas.add("# Alvos salvos pelo tpDiscover");
+        if (alvos != null) {
+            for (SwitchTarget t : alvos) {
+                String base = t.enderecoExibicao();
+                String user = t.usuario() != null && !t.usuario().isBlank() ? t.usuario() : "admin";
+                if (incluirSenhas && t.possuiSenha()) {
+                    linhas.add(base + ";" + user + ";" + t.senha());
+                } else {
+                    linhas.add(base + ";" + user);
+                }
+            }
+        }
+        Path parent = destino.toAbsolutePath().normalize().getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        Files.write(destino, linhas, StandardCharsets.UTF_8);
     }
 }

@@ -166,6 +166,23 @@ public final class OuiLookup {
     }
 
     /**
+     * Indica se o MAC pertence a um bloco OUI conhecido do fabricante informado.
+     */
+    public static boolean ehFabricante(String mac, String fabricante) {
+        if (fabricante == null || fabricante.isBlank()) return false;
+        return identificarFabricante(mac)
+                .map(v -> v.equalsIgnoreCase(fabricante.trim()))
+                .orElse(false);
+    }
+
+    /**
+     * Atalho para verificar se o OUI do MAC pertence à Intelbras.
+     */
+    public static boolean ehIntelbras(String mac) {
+        return ehFabricante(mac, "Intelbras");
+    }
+
+    /**
      * Retorna o MAC com o nome do fabricante entre parênteses, se conhecido.
      * Exemplo: "0009-0f09-1e0a (Fortinet)" ou apenas "0009-0f09-1e0a".
      */

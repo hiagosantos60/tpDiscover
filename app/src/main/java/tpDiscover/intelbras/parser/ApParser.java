@@ -1,6 +1,7 @@
 package tpDiscover.intelbras.parser;
 
 import tpDiscover.intelbras.modelos.ArpEntry;
+import tpDiscover.intelbras.modelos.LldpNeighbor;
 import tpDiscover.intelbras.modelos.MacEntry;
 import tpDiscover.intelbras.modelos.MacUtils;
 import tpDiscover.intelbras.modelos.SwitchIdentity;
@@ -438,5 +439,113 @@ public class ApParser {
             }
         }
         return "";
+    }
+
+    /**
+     * Faz o parsing best-effort de vizinhos LLDP em APs OpenWrt via saída do {@code lldpcli show neighbors}
+     * ou {@code lldpctl}. Retorna lista vazia caso {@code lldpd} não esteja instalado ou sem vizinhos.
+     */
+    public static List<LldpNeighbor> parseLldpNeighbors(String switchId, String rawOutput) {
+        if (rawOutput == null || rawOutput.isBlank()) {
+            return List.of();
+        }
+        String lower = rawOutput.toLowerCase();
+        if (lower.contains("not found") || lower.contains("no such file") || lower.contains("unable to connect")) {
+            return List.of();
+        }
+
+        List<LldpNeighbor> neighbors = new ArrayList<>();
+        String currentIface = null;
+        String chassisRaw = null;
+        String sysName = null;
+        String sysDescr = null;
+        String mgmtIp = null;
+        String portId = null;
+        String portDescr = null;
+        java.util.Set<String> capabilities = new java.util.LinkedHashSet<>();
+
+        for (String line : rawOutput.split("\\R")) {
+            String trimmed = line.strip();
+            if (trimmed.isEmpty()) continue;
+
+            if (trimmed.startsWith("Interface:")) {
+                if (currentIface != null && ((chassisRaw != null && !chassisRaw.isBlank()) || (sysName != null && !sysName.isBlank()))) {
+                    neighbors.add(criarLldpNeighborAp(switchId, currentIface, chassisRaw, portId, portDescr, sysName, sysDescr, mgmtIp, capabilities));
+                }
+                String resto = trimmed.substring("Interface:".length()).trim();
+                int idxVirgula = resto.indexOf(',');
+                String ifaceBruta = idxVirgula > 0 ? resto.substring(0, idxVirgula).trim() : resto;
+                currentIface = normalizarPortaAp(ifaceBruta);
+                chassisRaw = null;
+                sysName = null;
+                sysDescr = null;
+                mgmtIp = null;
+                portId = null;
+                portDescr = null;
+                capabilities = new java.util.LinkedHashSet<>();
+                continue;
+            }
+            if (currentIface == null) continue;
+
+            if (trimmed.startsWith("ChassisID:")) {
+                String val = trimmed.substring("ChassisID:".length()).trim();
+                chassisRaw = val.replaceFirst("(?i)^(?:mac|local|ifname|ip)\\s+", "").trim();
+            } else if (trimmed.startsWith("SysName:")) {
+                sysName = trimmed.substring("SysName:".length()).trim();
+            } else if (trimmed.startsWith("SysDescr:")) {
+                sysDescr = trimmed.substring("SysDescr:".length()).trim();
+            } else if (trimmed.startsWith("MgmtIP:")) {
+                String ipCandidato = trimmed.substring("MgmtIP:".length()).trim();
+                if (ipCandidato.matches("\\d+\\.\\d+\\.\\d+\\.\\d+") && (mgmtIp == null || mgmtIp.isBlank())) {
+                    mgmtIp = ipCandidato;
+                }
+            } else if (trimmed.startsWith("PortID:")) {
+                String val = trimmed.substring("PortID:".length()).trim();
+                portId = val.replaceFirst("(?i)^(?:ifname|mac|local|ifalias)\\s+", "").trim();
+            } else if (trimmed.startsWith("PortDescr:")) {
+                portDescr = trimmed.substring("PortDescr:".length()).trim();
+            } else if (trimmed.startsWith("Capability:")) {
+                String val = trimmed.substring("Capability:".length()).trim();
+                String lowerVal = val.toLowerCase();
+                if (!lowerVal.endsWith(", off")) {
+                    String cap = val.replaceFirst("(?i),\\s*on$", "").trim();
+                    if (!cap.isBlank()) {
+                        capabilities.add(cap);
+                    }
+                }
+            }
+        }
+
+        if (currentIface != null && ((chassisRaw != null && !chassisRaw.isBlank()) || (sysName != null && !sysName.isBlank()))) {
+            neighbors.add(criarLldpNeighborAp(switchId, currentIface, chassisRaw, portId, portDescr, sysName, sysDescr, mgmtIp, capabilities));
+        }
+
+        return neighbors;
+    }
+
+    private static LldpNeighbor criarLldpNeighborAp(
+            String switchId,
+            String localPort,
+            String chassisRaw,
+            String remotePort,
+            String remotePortDesc,
+            String sysName,
+            String sysDescr,
+            String mgmtIp,
+            java.util.Set<String> capabilities
+    ) {
+        String chassisMac = ComwareParser.extrairMacNormalizadoDeChassis(chassisRaw);
+        return new LldpNeighbor(
+                switchId,
+                localPort,
+                chassisRaw != null ? chassisRaw : "",
+                chassisMac,
+                remotePort != null ? remotePort : "",
+                remotePortDesc != null ? remotePortDesc : "",
+                sysName != null ? sysName : "",
+                sysDescr != null ? sysDescr : "",
+                mgmtIp != null ? mgmtIp : "",
+                java.util.Set.copyOf(capabilities)
+        );
     }
 }

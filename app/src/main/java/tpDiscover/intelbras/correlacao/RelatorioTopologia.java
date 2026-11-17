@@ -1,7 +1,13 @@
 package tpDiscover.intelbras.correlacao;
 
 import tpDiscover.intelbras.modelos.GatewayInfo;
+import tpDiscover.intelbras.modelos.LldpNeighbor;
+import tpDiscover.intelbras.modelos.LldpNeighbor.CategoriaInteresse;
+import tpDiscover.intelbras.modelos.LoopDiagnostic;
+import tpDiscover.intelbras.modelos.MacUtils;
 import tpDiscover.intelbras.modelos.SwitchIdentity;
+import tpDiscover.intelbras.parser.ComwareParser;
+import tpDiscover.intelbras.parser.Serie3000Parser;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -35,23 +41,119 @@ public class RelatorioTopologia {
 
     private record LinhaParAPar(String colunaEsquerda, String portaDireita, String equipamentoDireito) {}
 
+    public record EnlaceResumo(String origem, String portaOrigem, String portaDestino, String destino) {}
+
+    public record ResultadoRelatorio(
+            String textoCompleto,
+            List<EnlaceResumo> enlaces,
+            List<LoopDiagnostic> loops,
+            Path arquivoGerado,
+            List<SwitchIdentity> switches,
+            boolean topologiaParcial,
+            List<TopologyEngine.EquipamentoSemAcesso> pendenciasAcesso
+    ) {
+        public ResultadoRelatorio(
+                String textoCompleto,
+                List<EnlaceResumo> enlaces,
+                List<LoopDiagnostic> loops,
+                Path arquivoGerado,
+                List<SwitchIdentity> switches
+        ) {
+            this(textoCompleto, enlaces, loops, arquivoGerado, switches, false, List.of());
+        }
+    }
+
     public static void imprimir(TopologyEngine engine) {
         imprimir(engine, null);
     }
 
     public static void imprimir(TopologyEngine engine, Path pastaDestino) {
-        String relatorio = gerarRelatorioTexto(engine);
-        System.out.println(relatorio);
-
-        // Gera exclusivamente o relatório em PDF consolidando o cenário completo
-        try {
-            Path pdfGerado = ExportadorPlanejadorRede.exportarPdf(engine, pastaDestino);
-            if (pdfGerado != null) {
-                System.out.println("\n[PDF] Relatório executivo da topologia gerado com sucesso em: " + pdfGerado);
-            }
-        } catch (Exception e) {
-            System.err.println("[AVISO] Não foi possível gerar o PDF da topologia: " + e.getMessage());
+        ResultadoRelatorio res = gerarResultado(engine, pastaDestino, true);
+        System.out.println(res.textoCompleto());
+        if (res.arquivoGerado() != null) {
+            System.out.println("\n[PDF] Relatório executivo da topologia gerado com sucesso em: " + res.arquivoGerado());
         }
+    }
+
+    public static ResultadoRelatorio gerarResultado(TopologyEngine engine, Path pastaDestino, boolean exportarArquivo) {
+        if (engine == null) {
+            return new ResultadoRelatorio("", List.of(), List.of(), null, List.of());
+        }
+        List<SwitchIdentity> switches = new ArrayList<>(engine.switchesRegistrados());
+        StringBuilder sb = new StringBuilder();
+        List<EnlaceResumo> enlacesResumo = new ArrayList<>();
+        List<LoopDiagnostic> loops = List.of();
+
+        if (switches.isEmpty()) {
+            formatarMapaTopologia(engine, sb);
+            List<TopologyEngine.EquipamentoSemAcesso> pendenciasVazias = engine.equipamentosSemAcesso();
+            return new ResultadoRelatorio(
+                    sb.toString(),
+                    List.of(),
+                    List.of(),
+                    null,
+                    List.of(),
+                    !pendenciasVazias.isEmpty(),
+                    List.copyOf(pendenciasVazias));
+        }
+
+        TopologyEngine.PlanoGateway plano = engine.analisarPlanoGateway();
+        List<TopologyEngine.ConexaoPassiva> passivas = engine.resolverConexoesPassivasSemAcesso();
+        List<TopologyEngine.EquipamentoSemAcesso> pendencias = engine.equipamentosSemAcesso();
+        Map<String, List<Enlace>> adjacencia = construirGrafoEnlacesDiretos(engine, switches);
+        List<ParEnlace> pares = extrairParesUnicos(switches, adjacencia);
+
+        GatewayInfo gw = plano.gateway();
+        if (gw != null) {
+            for (TopologyEngine.ConexaoGateway cg : plano.conexoesDiretas()) {
+                enlacesResumo.add(new EnlaceResumo(gw.rotuloVisual(), "-", cg.porta(), rotuloVisualSwitch(cg.switchCore())));
+            }
+            for (TopologyEngine.ConexaoLldpUpstream u : plano.conexoesViaLldpExterno()) {
+                enlacesResumo.add(new EnlaceResumo(
+                        rotuloVizinhoLldp(u.vizinhoExterno()),
+                        resolverPortaRemotaCurta(u.vizinhoExterno()),
+                        u.portaLocalFilho(),
+                        rotuloVisualSwitch(u.switchFilho())));
+            }
+            for (TopologyEngine.ConexaoGateway cg : plano.conexoesViaSegmento()) {
+                enlacesResumo.add(new EnlaceResumo(
+                        rotuloSegmentoIncerto(plano), "incerto", cg.porta(), rotuloVisualSwitch(cg.switchCore())));
+            }
+        }
+        for (ParEnlace p : pares) {
+            enlacesResumo.add(new EnlaceResumo(
+                    rotuloVisualSwitch(p.swA()), p.portaA(), p.portaB(), rotuloVisualSwitch(p.swB())));
+        }
+        for (TopologyEngine.ConexaoPassiva cp : passivas) {
+            enlacesResumo.add(new EnlaceResumo(
+                    rotuloVisualSwitch(cp.switchPai()), cp.portaPai(), "passivo",
+                    rotuloEquipamentoSemAcesso(cp.equipamento())));
+        }
+
+        loops = diagnosticarLoopsParaPares(engine, pares);
+        formatarMapaTopologia(engine, switches, plano, passivas, adjacencia, loops, sb);
+
+        boolean topologiaParcial = plano.possuiSegmentoIncerto()
+                || !plano.conexoesViaLldpExterno().isEmpty()
+                || !pendencias.isEmpty();
+
+        Path arquivoGerado = null;
+        if (exportarArquivo) {
+            try {
+                arquivoGerado = ExportadorPlanejadorRede.exportarPdf(engine, pastaDestino);
+            } catch (Exception e) {
+                System.err.println("[AVISO] Não foi possível gerar o PDF da topologia: " + e.getMessage());
+            }
+        }
+        return new ResultadoRelatorio(
+                sb.toString(),
+                List.copyOf(enlacesResumo),
+                List.copyOf(loops),
+                arquivoGerado,
+                List.copyOf(switches),
+                topologiaParcial,
+                List.copyOf(pendencias)
+        );
     }
 
     public static String gerarRelatorioTexto(TopologyEngine engine) {
@@ -73,32 +175,52 @@ public class RelatorioTopologia {
             sb.append("ÁRVORE DA TOPOLOGIA\n");
             sb.append("====================================================================================================\n");
             sb.append("(nenhum switch registrado para exibição da topologia)\n");
+            formatarPendenciasSemAcesso(engine, sb);
             return;
         }
 
-        Optional<GatewayInfo> gwOpt = engine.gatewayIdentificado();
-        List<TopologyEngine.ConexaoGateway> conexoesGw = gwOpt.isPresent()
-                ? engine.identificarConexoesGateway()
-                : List.of();
-
+        TopologyEngine.PlanoGateway plano = engine.analisarPlanoGateway();
+        List<TopologyEngine.ConexaoPassiva> passivas = engine.resolverConexoesPassivasSemAcesso();
         Map<String, List<Enlace>> adjacencia = construirGrafoEnlacesDiretos(engine, switches);
-        formatarEnlacesDiretosParAPar(switches, adjacencia, gwOpt.orElse(null), conexoesGw, sb);
-        formatarArvoreTopologia(switches, adjacencia, gwOpt.orElse(null), conexoesGw, sb);
+        List<ParEnlace> pares = extrairParesUnicos(switches, adjacencia);
+        List<LoopDiagnostic> loops = diagnosticarLoopsParaPares(engine, pares);
+        formatarMapaTopologia(engine, switches, plano, passivas, adjacencia, loops, sb);
+    }
+
+    private static void formatarMapaTopologia(
+            TopologyEngine engine,
+            List<SwitchIdentity> switches,
+            TopologyEngine.PlanoGateway plano,
+            List<TopologyEngine.ConexaoPassiva> passivas,
+            Map<String, List<Enlace>> adjacencia,
+            List<LoopDiagnostic> loops,
+            StringBuilder sb
+    ) {
+        formatarEnlacesDiretosParAPar(switches, adjacencia, plano, passivas, sb);
+        formatarArvoreTopologia(switches, adjacencia, plano, sb);
+        formatarVizinhosExternosLldp(engine, switches, plano.gateway(), sb);
+        formatarPendenciasSemAcesso(engine, sb);
+        formatarDiagnosticoLoops(switches, loops, sb);
     }
 
     private static void formatarEnlacesDiretosParAPar(
             List<SwitchIdentity> switches,
             Map<String, List<Enlace>> adjacencia,
-            GatewayInfo gateway,
-            List<TopologyEngine.ConexaoGateway> conexoesGw,
+            TopologyEngine.PlanoGateway plano,
+            List<TopologyEngine.ConexaoPassiva> passivas,
             StringBuilder sb
     ) {
         sb.append("====================================================================================================\n");
         sb.append("ENLACES DIRETOS (PAR A PAR)\n");
         sb.append("====================================================================================================\n");
 
+        GatewayInfo gateway = plano.gateway();
+        boolean temConexaoGateway = gateway != null && (!plano.conexoesDiretas().isEmpty()
+                || !plano.conexoesViaLldpExterno().isEmpty()
+                || !plano.conexoesViaSegmento().isEmpty());
+
         List<ParEnlace> pares = extrairParesUnicos(switches, adjacencia);
-        if (conexoesGw.isEmpty() && pares.isEmpty()) {
+        if (!temConexaoGateway && pares.isEmpty() && passivas.isEmpty()) {
             if (switches.size() == 1) {
                 sb.append("(apenas 1 equipamento coletado e nenhum roteador/gateway identificado)\n");
             } else {
@@ -115,12 +237,35 @@ public class RelatorioTopologia {
         List<LinhaParAPar> linhas = new ArrayList<>();
 
         if (gateway != null) {
-            for (TopologyEngine.ConexaoGateway cg : conexoesGw) {
+            for (TopologyEngine.ConexaoGateway cg : plano.conexoesDiretas()) {
                 linhas.add(new LinhaParAPar(
                         gateway.rotuloVisual(),
                         "[" + cg.porta() + "]",
                         rotuloVisualSwitch(cg.switchCore())
                 ));
+            }
+            for (TopologyEngine.ConexaoLldpUpstream u : plano.conexoesViaLldpExterno()) {
+                String pRem = resolverPortaRemotaCurta(u.vizinhoExterno());
+                linhas.add(new LinhaParAPar(
+                        rotuloVizinhoLldp(u.vizinhoExterno()) + " [" + pRem + "]",
+                        "[" + u.portaLocalFilho() + "]",
+                        rotuloVisualSwitch(u.switchFilho())
+                ));
+            }
+            if (plano.possuiSegmentoIncerto()) {
+                String segRotulo = rotuloSegmentoIncerto(plano);
+                linhas.add(new LinhaParAPar(
+                        gateway.rotuloVisual(),
+                        "[incerto]",
+                        segRotulo
+                ));
+                for (TopologyEngine.ConexaoGateway cg : plano.conexoesViaSegmento()) {
+                    linhas.add(new LinhaParAPar(
+                            segRotulo + " [incerto]",
+                            "[" + cg.porta() + "]",
+                            rotuloVisualSwitch(cg.switchCore())
+                    ));
+                }
             }
         }
 
@@ -130,6 +275,14 @@ public class RelatorioTopologia {
                     esq,
                     "[" + p.portaB() + "]",
                     rotuloVisualSwitch(p.swB())
+            ));
+        }
+
+        for (TopologyEngine.ConexaoPassiva cp : passivas) {
+            linhas.add(new LinhaParAPar(
+                    rotuloVisualSwitch(cp.switchPai()) + " [" + cp.portaPai() + "]",
+                    "[passivo]",
+                    rotuloEquipamentoSemAcesso(cp.equipamento())
             ));
         }
 
@@ -165,29 +318,53 @@ public class RelatorioTopologia {
     private static void formatarArvoreTopologia(
             List<SwitchIdentity> switches,
             Map<String, List<Enlace>> adjacencia,
-            GatewayInfo gateway,
-            List<TopologyEngine.ConexaoGateway> conexoesGw,
+            TopologyEngine.PlanoGateway plano,
             StringBuilder sb
     ) {
         sb.append("\n====================================================================================================\n");
         sb.append("ÁRVORE DA TOPOLOGIA\n");
         sb.append("====================================================================================================\n");
 
+        GatewayInfo gateway = plano.gateway();
+        boolean temConexaoGateway = gateway != null && (!plano.conexoesDiretas().isEmpty()
+                || !plano.conexoesViaLldpExterno().isEmpty()
+                || !plano.conexoesViaSegmento().isEmpty());
+
         Set<String> visitados = new HashSet<>();
         Set<String> arestasImpressas = new HashSet<>();
 
-        if (gateway != null && !conexoesGw.isEmpty()) {
-            // Caso 1: Roteador/Gateway identificado -> ocupa o topo da árvore e deriva para o(s) switch(es) Core
+        if (plano.possuiSegmentoIncerto() || !plano.conexoesViaLldpExterno().isEmpty()) {
+            sb.append("[ATENÇÃO] TOPOLOGIA PARCIAL: há equipamentos/uplinks sem acesso CLI; não foram inferidos links diretos no Gateway.\n");
+        }
+
+        if (temConexaoGateway) {
+            // Caso 1: Roteador/Gateway identificado -> ocupa o topo da árvore
             sb.append(gateway.rotuloVisual()).append("\n");
 
-            for (TopologyEngine.ConexaoGateway cg : conexoesGw) {
+            for (TopologyEngine.ConexaoGateway cg : plano.conexoesDiretas()) {
+                visitados.add(cg.switchCore().macNormalizado());
+            }
+            for (TopologyEngine.ConexaoLldpUpstream u : plano.conexoesViaLldpExterno()) {
+                visitados.add(u.switchFilho().macNormalizado());
+            }
+            for (TopologyEngine.ConexaoGateway cg : plano.conexoesViaSegmento()) {
                 visitados.add(cg.switchCore().macNormalizado());
             }
 
+            // Agrupa enxames por switch/OLT externo LLDP e pelo bloco de segmento incerto
+            Map<String, List<TopologyEngine.ConexaoLldpUpstream>> gruposLldp = new LinkedHashMap<>();
+            for (TopologyEngine.ConexaoLldpUpstream u : plano.conexoesViaLldpExterno()) {
+                gruposLldp.computeIfAbsent(rotuloVizinhoLldp(u.vizinhoExterno()), k -> new ArrayList<>()).add(u);
+            }
+
+            int totalRamosRaiz = plano.conexoesDiretas().size()
+                    + gruposLldp.size()
+                    + (plano.possuiSegmentoIncerto() ? 1 : 0);
+            int idxRaiz = 0;
+
             Set<String> coresJaExpandidos = new HashSet<>();
-            for (int i = 0; i < conexoesGw.size(); i++) {
-                TopologyEngine.ConexaoGateway cg = conexoesGw.get(i);
-                boolean ultimoCore = (i == conexoesGw.size() - 1);
+            for (TopologyEngine.ConexaoGateway cg : plano.conexoesDiretas()) {
+                boolean ultimoCore = (++idxRaiz == totalRamosRaiz);
                 String conector = ultimoCore ? RAMO_FIM : RAMO_MEIO;
                 String prefixoFilhos = ultimoCore ? CONTINUACAO_VAZIA : CONTINUACAO_MEIO;
 
@@ -207,6 +384,68 @@ public class RelatorioTopologia {
                             adjacencia,
                             sb
                     );
+                }
+            }
+
+            for (Map.Entry<String, List<TopologyEngine.ConexaoLldpUpstream>> grupo : gruposLldp.entrySet()) {
+                boolean ultimoGrupo = (++idxRaiz == totalRamosRaiz);
+                String conectorGrupo = ultimoGrupo ? RAMO_FIM : RAMO_MEIO;
+                String prefixoGrupo = ultimoGrupo ? CONTINUACAO_VAZIA : CONTINUACAO_MEIO;
+
+                sb.append(conectorGrupo)
+                        .append("<-> incerto ")
+                        .append(TRACO_HORIZONTAL).append(" ")
+                        .append(grupo.getKey())
+                        .append("\n");
+
+                List<TopologyEngine.ConexaoLldpUpstream> filhosGrupo = grupo.getValue();
+                for (int j = 0; j < filhosGrupo.size(); j++) {
+                    TopologyEngine.ConexaoLldpUpstream u = filhosGrupo.get(j);
+                    boolean ultimoFilho = (j == filhosGrupo.size() - 1);
+                    String conFilho = prefixoGrupo + (ultimoFilho ? RAMO_FIM : RAMO_MEIO);
+                    String prefNetos = prefixoGrupo + (ultimoFilho ? CONTINUACAO_VAZIA : CONTINUACAO_MEIO);
+
+                    sb.append(conFilho)
+                            .append("<-> ")
+                            .append(u.portaLocalFilho())
+                            .append(" ").append(TRACO_HORIZONTAL).append(" ")
+                            .append(rotuloVisualSwitch(u.switchFilho()))
+                            .append("\n");
+
+                    if (coresJaExpandidos.add(u.switchFilho().macNormalizado())) {
+                        desenharFilhosArvore(u.switchFilho(), prefNetos, visitados, arestasImpressas, adjacencia, sb);
+                    }
+                }
+            }
+
+            if (plano.possuiSegmentoIncerto()) {
+                boolean ultimoSeg = (++idxRaiz == totalRamosRaiz);
+                String conectorSeg = ultimoSeg ? RAMO_FIM : RAMO_MEIO;
+                String prefixoSeg = ultimoSeg ? CONTINUACAO_VAZIA : CONTINUACAO_MEIO;
+
+                sb.append(conectorSeg)
+                        .append("<-> incerto ")
+                        .append(TRACO_HORIZONTAL).append(" ")
+                        .append(rotuloSegmentoIncerto(plano))
+                        .append("\n");
+
+                List<TopologyEngine.ConexaoGateway> segs = plano.conexoesViaSegmento();
+                for (int j = 0; j < segs.size(); j++) {
+                    TopologyEngine.ConexaoGateway cg = segs.get(j);
+                    boolean ultimoFilho = (j == segs.size() - 1);
+                    String conFilho = prefixoSeg + (ultimoFilho ? RAMO_FIM : RAMO_MEIO);
+                    String prefNetos = prefixoSeg + (ultimoFilho ? CONTINUACAO_VAZIA : CONTINUACAO_MEIO);
+
+                    sb.append(conFilho)
+                            .append("<-> ")
+                            .append(cg.porta())
+                            .append(" ").append(TRACO_HORIZONTAL).append(" ")
+                            .append(rotuloVisualSwitch(cg.switchCore()))
+                            .append("\n");
+
+                    if (coresJaExpandidos.add(cg.switchCore().macNormalizado())) {
+                        desenharFilhosArvore(cg.switchCore(), prefNetos, visitados, arestasImpressas, adjacencia, sb);
+                    }
                 }
             }
 
@@ -427,17 +666,63 @@ public class RelatorioTopologia {
             List<SwitchIdentity> switches
     ) {
         Map<String, List<Enlace>> adj = new LinkedHashMap<>();
+        Map<String, Set<String>> portasConfirmadasLldp = new LinkedHashMap<>();
         for (SwitchIdentity sw : switches) {
-            adj.put(sw.macNormalizado(), new ArrayList<>());
+            String id = sw.macNormalizado();
+            adj.put(id, new ArrayList<>());
+            portasConfirmadasLldp.put(id, new LinkedHashSet<>());
         }
 
+        // Fase 1: Enlaces físicos diretos confirmados por LLDP entre equipamentos coletados
         for (SwitchIdentity origem : switches) {
             String idOrigem = origem.macNormalizado();
+            for (TopologyEngine.VizinhoLldpClassificado viz : engine.vizinhosLldpDeInteresse(idOrigem)) {
+                String portaLocal = viz.neighbor().localPort();
+                if (portaLocal == null || portaLocal.isBlank()) continue;
+
+                if (viz.categoria() == CategoriaInteresse.SWITCH_OU_OLT_EXTERNO
+                        || viz.categoria() == CategoriaInteresse.ROTEADOR_UPLINK) {
+                    portasConfirmadasLldp.get(idOrigem).add(portaLocal.toUpperCase());
+                    continue;
+                }
+
+                if (viz.categoria() != CategoriaInteresse.EQUIPAMENTO_COLETADO || viz.switchColetado() == null) {
+                    continue;
+                }
+                SwitchIdentity direto = viz.switchColetado();
+                String idDireto = direto.macNormalizado();
+                if (idDireto.equals(idOrigem)) continue;
+
+                String portaRem = resolverPortaRemotaLldp(engine, idOrigem, portaLocal, viz.neighbor(), idDireto);
+
+                if (engine.ehPortaDeEntradaGateway(idOrigem, portaLocal)
+                        && engine.ehNoNaFronteiraGateway(idDireto)
+                        && ("?".equals(portaRem) || engine.ehPortaDeEntradaGateway(idDireto, portaRem))) {
+                    continue;
+                }
+
+                portasConfirmadasLldp.get(idOrigem).add(portaLocal.toUpperCase());
+                adicionarEnlaceSeAusente(adj.get(idOrigem), new Enlace(portaLocal, portaRem, direto));
+                if (adj.containsKey(idDireto)) {
+                    if (!"?".equals(portaRem)) {
+                        portasConfirmadasLldp.get(idDireto).add(portaRem.toUpperCase());
+                    }
+                    adicionarEnlaceSeAusente(adj.get(idDireto), new Enlace(portaRem, portaLocal, origem));
+                }
+            }
+        }
+
+        // Fase 2: Correlação MAC + ARP para equipamentos/portas sem vizinho LLDP coletado
+        for (SwitchIdentity origem : switches) {
+            String idOrigem = origem.macNormalizado();
+            Set<String> confirmadas = portasConfirmadasLldp.getOrDefault(idOrigem, Set.of());
             Map<String, TopologyEngine.PortaAnalise> portas = engine.analisarPortas(idOrigem);
             List<String> portasOrd = new ArrayList<>(portas.keySet());
             portasOrd.sort(RelatorioTopologia::compararPortas);
 
             for (String porta : portasOrd) {
+                if (confirmadas.contains(porta.toUpperCase())) continue;
+
                 TopologyEngine.PortaAnalise analise = portas.get(porta);
                 if (analise.ehPortaDeAcesso()) continue;
 
@@ -449,10 +734,16 @@ public class RelatorioTopologia {
                     Optional<String> portaRemOpt = engine.portaRemota(idOrigem, idDireto);
                     String portaRem = portaRemOpt.orElse("?");
 
-                    // Se ambos os lados são portas de entrada do Gateway, o roteador está no meio (não há cabo direto entre os dois switches)
                     if (engine.ehPortaDeEntradaGateway(idOrigem, porta)
-                            && portaRemOpt.isPresent()
-                            && engine.ehPortaDeEntradaGateway(idDireto, portaRemOpt.get())) {
+                            && engine.ehNoNaFronteiraGateway(idDireto)
+                            && (portaRemOpt.isEmpty() || engine.ehPortaDeEntradaGateway(idDireto, portaRemOpt.get()))) {
+                        continue;
+                    }
+
+                    if (portaRemOpt.isEmpty()
+                            && !engine.analisarPortas(idDireto).isEmpty()
+                            && (analise.hostsDesconhecidos() >= 3
+                            || (analise.hostsDesconhecidos() >= 1 && engine.possuiInfraestruturaSemAcesso()))) {
                         continue;
                     }
 
@@ -469,6 +760,192 @@ public class RelatorioTopologia {
         }
 
         return adj;
+    }
+
+    static List<LoopDetector.ArestaFisica> extrairArestasFisicas(TopologyEngine engine) {
+        List<SwitchIdentity> switches = new ArrayList<>(engine.switchesRegistrados());
+        if (switches.size() < 2) {
+            return List.of();
+        }
+        Map<String, List<Enlace>> adj = construirGrafoEnlacesDiretos(engine, switches);
+        List<ParEnlace> pares = extrairParesUnicos(switches, adj);
+        List<LoopDetector.ArestaFisica> arestas = new ArrayList<>(pares.size());
+        for (ParEnlace p : pares) {
+            arestas.add(new LoopDetector.ArestaFisica(
+                    p.swA().macNormalizado(),
+                    p.portaA(),
+                    p.swB().macNormalizado(),
+                    p.portaB()
+            ));
+        }
+        return arestas;
+    }
+
+    private static String resolverPortaRemotaLldp(
+            TopologyEngine engine,
+            String idOrigem,
+            String portaLocal,
+            LldpNeighbor lldp,
+            String idDireto
+    ) {
+        // 1. Verifica se o vizinho remoto tem anúncio LLDP recíproco apontando para esta porta
+        for (LldpNeighbor reverso : engine.lldpDe(idDireto)) {
+            Optional<SwitchIdentity> revAlvo = tpDiscover.intelbras.parser.LldpInterestFilter
+                    .resolverSwitchColetado(reverso, engine.switchesRegistrados());
+            if (revAlvo.isPresent() && revAlvo.get().macNormalizado().equalsIgnoreCase(idOrigem)) {
+                String pRevRem = ComwareParser.resolverMelhorPortaRemota(reverso.remotePort(), reverso.remotePortDescription());
+                if (pRevRem.isBlank() || pRevRem.equalsIgnoreCase(portaLocal)) {
+                    if (reverso.localPort() != null && !reverso.localPort().isBlank()) {
+                        return reverso.localPort();
+                    }
+                }
+            }
+        }
+        // 2. Usa remotePort / remotePortDescription do próprio LLDP quando não for apenas um MAC cru
+        String melhor = ComwareParser.resolverMelhorPortaRemota(lldp.remotePort(), lldp.remotePortDescription());
+        if (!melhor.isBlank() && !MacUtils.ehMacValido(MacUtils.normalizar(melhor))) {
+            return melhor;
+        }
+        // 3. Fallback na correlação MAC
+        return engine.portaRemota(idOrigem, idDireto).orElse(!melhor.isBlank() ? melhor : "?");
+    }
+
+    private static void formatarVizinhosExternosLldp(
+            TopologyEngine engine,
+            List<SwitchIdentity> switches,
+            GatewayInfo gateway,
+            StringBuilder sb
+    ) {
+        List<String> linhas = new ArrayList<>();
+        for (SwitchIdentity sw : switches) {
+            for (TopologyEngine.VizinhoLldpClassificado v : engine.vizinhosLldpExternosDeInteresse(sw.macNormalizado())) {
+                if (v.categoria() == CategoriaInteresse.ROTEADOR_UPLINK && gateway != null) {
+                    boolean mesmoGwIp = gateway.ip() != null && gateway.ip().equals(v.neighbor().managementIp());
+                    boolean mesmoGwMac = gateway.mac() != null
+                            && v.neighbor().possuiChassisMacValido()
+                            && gateway.macNormalizado().equalsIgnoreCase(v.neighbor().chassisMacNormalizado());
+                    if (mesmoGwIp || mesmoGwMac) {
+                        continue; // Já exibido como Gateway principal na topologia
+                    }
+                }
+                String pLocal = v.neighbor().localPort().isBlank() ? "?" : v.neighbor().localPort();
+                String pRem = ComwareParser.resolverMelhorPortaRemota(
+                        v.neighbor().remotePort(), v.neighbor().remotePortDescription());
+                String pRemStr = pRem.isBlank() ? "?" : pRem;
+                String ipStr = !v.neighbor().managementIp().isBlank() ? " (" + v.neighbor().managementIp() + ")" : "";
+                String tipo = switch (v.categoria()) {
+                    case ROTEADOR_UPLINK -> "Roteador Uplink";
+                    case SWITCH_OU_OLT_EXTERNO -> "Switch/OLT Externo (sem coleta CLI)";
+                    case ACCESS_POINT -> "Access Point";
+                    case RADIO_INTELBRAS -> "Rádio Intelbras";
+                    default -> "Externo";
+                };
+                linhas.add(String.format("%s [%s] <-> [%s] %s%s [%s]",
+                        rotuloVisualSwitch(sw), pLocal, pRemStr, v.neighbor().rotuloExibicao(), ipStr, tipo));
+            }
+        }
+        if (linhas.isEmpty()) {
+            return;
+        }
+        sb.append("\n====================================================================================================\n");
+        sb.append("VIZINHOS EXTERNOS DE INTERESSE (LLDP: ROTEADOR / SWITCH EXTERNO / APs / RÁDIOS INTELBRAS)\n");
+        sb.append("====================================================================================================\n");
+        for (String linha : linhas) {
+            sb.append(linha).append("\n");
+        }
+    }
+
+    private static void formatarPendenciasSemAcesso(TopologyEngine engine, StringBuilder sb) {
+        List<TopologyEngine.EquipamentoSemAcesso> pendencias = engine.equipamentosSemAcesso();
+        if (pendencias.isEmpty()) {
+            return;
+        }
+        sb.append("\n====================================================================================================\n");
+        sb.append("EQUIPAMENTOS SEM ACESSO CLI / PENDÊNCIAS DE COLETA\n");
+        sb.append("====================================================================================================\n");
+        for (TopologyEngine.EquipamentoSemAcesso eq : pendencias) {
+            String macStr = eq.macNormalizado().isBlank() ? "" : " (" + Serie3000Parser.formatarMacPadrao(eq.macNormalizado()) + ")";
+            sb.append(String.format(" - %s [%s]%s | Categoria: %s | Situação: %s%n",
+                    eq.rotuloModelo(), eq.ipBase(), macStr, eq.categoria(), eq.descricaoMotivo()));
+        }
+    }
+
+    private static String rotuloSegmentoIncerto(TopologyEngine.PlanoGateway plano) {
+        List<TopologyEngine.EquipamentoSemAcesso> suspeitos = plano.switchesIntermediariosSuspeitos();
+        if (suspeitos == null || suspeitos.isEmpty()) {
+            return "Segmento L2 / Switch(es) sem acesso CLI";
+        }
+        List<String> nomes = new ArrayList<>();
+        int lim = Math.min(3, suspeitos.size());
+        for (int i = 0; i < lim; i++) {
+            TopologyEngine.EquipamentoSemAcesso eq = suspeitos.get(i);
+            nomes.add(eq.rotuloModelo() + " (" + eq.ipBase() + ")");
+        }
+        String sufixo = suspeitos.size() > 3 ? " + " + (suspeitos.size() - 3) + " outro(s)" : "";
+        return "Segmento L2 sem acesso [" + String.join(", ", nomes) + sufixo + "]";
+    }
+
+    private static String rotuloVizinhoLldp(LldpNeighbor n) {
+        String ip = !n.managementIp().isBlank() ? " (" + n.managementIp() + ")" : "";
+        return n.rotuloExibicao() + ip;
+    }
+
+    private static String resolverPortaRemotaCurta(LldpNeighbor n) {
+        String pRem = ComwareParser.resolverMelhorPortaRemota(n.remotePort(), n.remotePortDescription());
+        return pRem.isBlank() ? "?" : pRem;
+    }
+
+    private static String rotuloEquipamentoSemAcesso(TopologyEngine.EquipamentoSemAcesso eq) {
+        return eq.rotuloModelo() + " (" + eq.ipBase() + ") [" + eq.motivo() + "]";
+    }
+
+    private static List<LoopDiagnostic> diagnosticarLoopsParaPares(
+            TopologyEngine engine,
+            List<ParEnlace> pares
+    ) {
+        List<LoopDetector.ArestaFisica> arestas = new ArrayList<>(pares.size());
+        for (ParEnlace p : pares) {
+            arestas.add(new LoopDetector.ArestaFisica(
+                    p.swA().macNormalizado(), p.portaA(), p.swB().macNormalizado(), p.portaB()));
+        }
+        return engine.diagnosticarLoops(arestas);
+    }
+
+    private static void formatarDiagnosticoLoops(
+            List<SwitchIdentity> switches,
+            List<LoopDiagnostic> loops,
+            StringBuilder sb
+    ) {
+        if (loops.isEmpty()) {
+            return;
+        }
+
+        Map<String, SwitchIdentity> porId = new LinkedHashMap<>();
+        for (SwitchIdentity sw : switches) {
+            porId.put(sw.macNormalizado(), sw);
+        }
+
+        sb.append("\n====================================================================================================\n");
+        sb.append("[!] DIAGNÓSTICO DE LOOPS E REDUNDÂNCIAS (SOMENTE LEITURA)\n");
+        sb.append("====================================================================================================\n");
+        for (LoopDiagnostic d : loops) {
+            String tag = d.severidade() == LoopDiagnostic.Severidade.CRITICO ? "[CRÍTICO / LOOP]" : "[AVISO / STP]";
+            SwitchIdentity swOrig = porId.get(d.switchOrigemId());
+            String origStr = swOrig != null ? rotuloVisualSwitch(swOrig) : d.switchOrigemId();
+            String portaOrig = d.portaOrigem().isBlank() ? "?" : d.portaOrigem();
+            String destinoStr = "";
+            if (!d.switchDestinoId().isBlank()) {
+                SwitchIdentity swDest = porId.get(d.switchDestinoId());
+                String destNome = swDest != null ? rotuloVisualSwitch(swDest) : d.switchDestinoId();
+                String pDest = d.portaDestino().isBlank() ? "?" : d.portaDestino();
+                destinoStr = " <-> " + destNome + " [" + pDest + "]";
+            }
+            sb.append(String.format("%s %s | %s [%s]%s%n", tag, d.tipo(), origStr, portaOrig, destinoStr));
+            sb.append("   Evidência: ").append(d.evidencia()).append("\n");
+            if (!d.acaoRecomendada().isBlank()) {
+                sb.append("   Sugestão : ").append(d.acaoRecomendada()).append("\n");
+            }
+        }
     }
 
     private static void adicionarEnlaceSeAusente(List<Enlace> lista, Enlace novo) {

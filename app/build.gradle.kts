@@ -16,8 +16,9 @@ repositories {
 }
 
 dependencies {
-    implementation("com.jcraft:jsch:0.1.55")
+    implementation("com.github.mwiede:jsch:0.2.20")
     implementation("commons-net:commons-net:3.11.1")
+    implementation("com.formdev:flatlaf:3.8")
     
     // Use JUnit Jupiter for testing.
     testImplementation(libs.junit.jupiter)

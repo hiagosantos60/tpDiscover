@@ -3,9 +3,15 @@ package tpDiscover.intelbras.correlacao;
 import tpDiscover.intelbras.coleta.LocalGatewayDetector;
 import tpDiscover.intelbras.modelos.ArpEntry;
 import tpDiscover.intelbras.modelos.GatewayInfo;
+import tpDiscover.intelbras.modelos.LldpNeighbor;
+import tpDiscover.intelbras.modelos.LldpNeighbor.CategoriaInteresse;
+import tpDiscover.intelbras.modelos.LoopDiagnostic;
 import tpDiscover.intelbras.modelos.MacEntry;
 import tpDiscover.intelbras.modelos.MacUtils;
+import tpDiscover.intelbras.modelos.OuiLookup;
+import tpDiscover.intelbras.modelos.StpPortState;
 import tpDiscover.intelbras.modelos.SwitchIdentity;
+import tpDiscover.intelbras.parser.LldpInterestFilter;
 import tpDiscover.intelbras.parser.Serie3000Parser;
 
 import java.util.*;
@@ -30,30 +36,147 @@ public class TopologyEngine {
     private final Map<String, String> rotaPadraoPorSwitch = new LinkedHashMap<>();
     private final Map<String, List<ArpEntry>> arpPorSwitch = new LinkedHashMap<>();
     private final Map<String, String> macExternoPorIp = new HashMap<>();
+    private final Map<String, List<LldpNeighbor>> lldpPorSwitch = new LinkedHashMap<>();
+    private final Map<String, List<StpPortState>> stpPorSwitch = new LinkedHashMap<>();
+    private final Map<String, List<LoopDiagnostic>> loopbackHardwarePorSwitch = new LinkedHashMap<>();
+    private final Map<String, Map<String, List<String>>> baggsPorSwitch = new LinkedHashMap<>();
+    private final Map<String, EquipamentoSemAcesso> equipamentosSemAcessoPorIp = new LinkedHashMap<>();
 
     private String gatewayIpManual;
     private String gatewayMacManual;
     private GatewayInfo gatewayFallbackLocal;
+    private Map<String, Map<String, Set<SwitchIdentity>>> mapaVisibilidadeCache;
 
     public record ConexaoGateway(SwitchIdentity switchCore, String porta) {}
 
+    public record EquipamentoSemAcesso(
+            String ip,
+            String rotuloModelo,
+            String categoria,
+            String macNormalizado,
+            String motivo
+    ) {
+        public EquipamentoSemAcesso {
+            ip = ip != null ? ip.trim() : "";
+            rotuloModelo = (rotuloModelo != null && !rotuloModelo.isBlank()) ? rotuloModelo.trim() : "Equipamento";
+            categoria = (categoria != null && !categoria.isBlank()) ? categoria.trim().toUpperCase(Locale.ROOT) : "SWITCH";
+            macNormalizado = macNormalizado != null ? MacUtils.normalizar(macNormalizado) : "";
+            motivo = (motivo != null && !motivo.isBlank()) ? motivo.trim().toUpperCase(Locale.ROOT) : "SEM_CLI";
+        }
+
+        public String ipBase() {
+            int idx = ip.indexOf(':');
+            return (idx > 0 ? ip.substring(0, idx) : ip).trim();
+        }
+
+        public boolean ehComutadorInfra() {
+            return "SWITCH".equals(categoria) || "OLT".equals(categoria);
+        }
+
+        public boolean ehFalhaAutenticacao() {
+            return "FALHA_AUTENTICACAO".equals(motivo);
+        }
+
+        public String descricaoMotivo() {
+            return switch (motivo) {
+                case "FALHA_AUTENTICACAO" -> "Falha de autenticação";
+                case "SEM_SENHA" -> "Sem senha informada";
+                case "TIMEOUT" -> "Tempo esgotado / inacessível";
+                case "CONEXAO_RECUSADA" -> "Conexão CLI recusada";
+                case "ERRO_PROTOCOLO" -> "Erro de protocolo CLI";
+                default -> "Somente leitura passiva (sem CLI)";
+            };
+        }
+    }
+
+    public record PlanoGateway(
+            GatewayInfo gateway,
+            List<ConexaoGateway> conexoesDiretas,
+            List<ConexaoGateway> conexoesViaSegmento,
+            List<ConexaoLldpUpstream> conexoesViaLldpExterno,
+            List<EquipamentoSemAcesso> switchesIntermediariosSuspeitos
+    ) {
+        public boolean possuiSegmentoIncerto() {
+            return !conexoesViaSegmento.isEmpty();
+        }
+    }
+
+    public record ConexaoLldpUpstream(
+            SwitchIdentity switchFilho,
+            String portaLocalFilho,
+            LldpNeighbor vizinhoExterno
+    ) {
+        public ConexaoLldpUpstream {
+            portaLocalFilho = portaLocalFilho != null ? portaLocalFilho.trim() : "";
+        }
+    }
+
+    public record ConexaoPassiva(
+            SwitchIdentity switchPai,
+            String portaPai,
+            EquipamentoSemAcesso equipamento
+    ) {
+        public ConexaoPassiva {
+            portaPai = portaPai != null ? portaPai.trim() : "";
+        }
+    }
+
+    public record VizinhoLldpClassificado(
+            LldpNeighbor neighbor,
+            CategoriaInteresse categoria,
+            SwitchIdentity switchColetado
+    ) {}
+
     public void registrarSwitch(SwitchIdentity identidade) {
         switchesPorId.put(identidade.macNormalizado(), identidade);
+        String base = ipBase(identidade.ip());
+        if (!base.isEmpty()) {
+            equipamentosSemAcessoPorIp.entrySet().removeIf(e -> base.equals(e.getValue().ipBase()));
+        }
+        mapaVisibilidadeCache = null;
     }
 
     public void registrarEntradas(String switchId, List<MacEntry> entradas) {
         entradasPorSwitch.computeIfAbsent(switchId, k -> new ArrayList<>()).addAll(entradas);
+        mapaVisibilidadeCache = null;
     }
 
     public void registrarRotaPadrao(String switchId, String gatewayIp) {
         if (gatewayIp != null && !gatewayIp.isBlank() && !"0.0.0.0".equals(gatewayIp.trim())) {
             rotaPadraoPorSwitch.put(switchId, gatewayIp.trim());
+            mapaVisibilidadeCache = null;
         }
     }
 
     public void registrarEntradasArp(String switchId, List<ArpEntry> entradasArp) {
         if (entradasArp != null && !entradasArp.isEmpty()) {
             arpPorSwitch.computeIfAbsent(switchId, k -> new ArrayList<>()).addAll(entradasArp);
+            mapaVisibilidadeCache = null;
+        }
+    }
+
+    public void registrarLldp(String switchId, List<LldpNeighbor> vizinhos) {
+        if (switchId != null && vizinhos != null && !vizinhos.isEmpty()) {
+            lldpPorSwitch.computeIfAbsent(switchId, k -> new ArrayList<>()).addAll(vizinhos);
+            mapaVisibilidadeCache = null;
+        }
+    }
+
+    public void registrarStp(String switchId, List<StpPortState> estadosStp) {
+        if (switchId != null && estadosStp != null && !estadosStp.isEmpty()) {
+            stpPorSwitch.computeIfAbsent(switchId, k -> new ArrayList<>()).addAll(estadosStp);
+        }
+    }
+
+    public void registrarLoopbackHardware(String switchId, List<LoopDiagnostic> diagnosticos) {
+        if (switchId != null && diagnosticos != null && !diagnosticos.isEmpty()) {
+            loopbackHardwarePorSwitch.computeIfAbsent(switchId, k -> new ArrayList<>()).addAll(diagnosticos);
+        }
+    }
+
+    public void registrarAggregacoes(String switchId, Map<String, List<String>> baggs) {
+        if (switchId != null && baggs != null && !baggs.isEmpty()) {
+            baggsPorSwitch.put(switchId, baggs);
         }
     }
 
@@ -65,6 +188,14 @@ public class TopologyEngine {
         return Collections.unmodifiableList(arpPorSwitch.getOrDefault(switchId, List.of()));
     }
 
+    public List<LldpNeighbor> lldpDe(String switchId) {
+        return Collections.unmodifiableList(lldpPorSwitch.getOrDefault(switchId, List.of()));
+    }
+
+    public List<StpPortState> stpDe(String switchId) {
+        return Collections.unmodifiableList(stpPorSwitch.getOrDefault(switchId, List.of()));
+    }
+
     public Optional<String> rotaPadraoDe(String switchId) {
         return Optional.ofNullable(rotaPadraoPorSwitch.get(switchId));
     }
@@ -72,10 +203,12 @@ public class TopologyEngine {
     public void definirGatewayManual(String ip, String mac) {
         this.gatewayIpManual = (ip != null && !ip.isBlank()) ? ip.trim() : null;
         this.gatewayMacManual = (mac != null && !mac.isBlank()) ? Serie3000Parser.formatarMacPadrao(mac.trim()) : null;
+        mapaVisibilidadeCache = null;
     }
 
     public void definirGatewayFallbackLocal(GatewayInfo gateway) {
         this.gatewayFallbackLocal = gateway;
+        mapaVisibilidadeCache = null;
     }
 
     public void registrarMacExternoParaIp(String ip, String mac) {
@@ -83,8 +216,71 @@ public class TopologyEngine {
             String fmt = Serie3000Parser.formatarMacPadrao(mac.trim());
             if (LocalGatewayDetector.ehMacUnicastValido(MacUtils.normalizar(fmt))) {
                 macExternoPorIp.put(ip.trim(), fmt);
+                mapaVisibilidadeCache = null;
             }
         }
+    }
+
+    /**
+     * Registra um equipamento descoberto ou alvo de coleta que não pôde ser coletado via CLI
+     * (ex.: falha de autenticação, marcado como "sem senha" ou produto sem suporte CLI).
+     */
+    public void registrarEquipamentoSemAcesso(EquipamentoSemAcesso eq) {
+        if (eq == null || eq.ipBase().isBlank() || ehIpDeSwitchRegistrado(eq.ipBase())) {
+            return;
+        }
+        equipamentosSemAcessoPorIp.put(eq.ipBase(), eq);
+        if (!eq.macNormalizado().isBlank()) {
+            registrarMacExternoParaIp(eq.ipBase(), Serie3000Parser.formatarMacPadrao(eq.macNormalizado()));
+        }
+    }
+
+    /**
+     * Lista equipamentos sem acesso CLI enriquecidos com MAC resolvido (quando encontrado em ARP/scan).
+     */
+    public List<EquipamentoSemAcesso> equipamentosSemAcesso() {
+        List<EquipamentoSemAcesso> lista = new ArrayList<>();
+        for (EquipamentoSemAcesso eq : equipamentosSemAcessoPorIp.values()) {
+            if (ehIpDeSwitchRegistrado(eq.ipBase())) {
+                continue;
+            }
+            String macResolvido = resolverMacParaEquipamentoSemAcesso(eq);
+            if (!macResolvido.equals(eq.macNormalizado())) {
+                lista.add(new EquipamentoSemAcesso(
+                        eq.ip(), eq.rotuloModelo(), eq.categoria(), macResolvido, eq.motivo()));
+            } else {
+                lista.add(eq);
+            }
+        }
+        return lista;
+    }
+
+    public boolean possuiInfraestruturaSemAcesso() {
+        return equipamentosSemAcesso().stream().anyMatch(EquipamentoSemAcesso::ehComutadorInfra);
+    }
+
+    public String resolverMacParaEquipamentoSemAcesso(EquipamentoSemAcesso eq) {
+        if (eq == null) {
+            return "";
+        }
+        if (!eq.macNormalizado().isBlank()) {
+            return eq.macNormalizado();
+        }
+        String externo = macExternoPorIp.get(eq.ipBase());
+        if (externo != null && !externo.isBlank()) {
+            return MacUtils.normalizar(externo);
+        }
+        return buscarMacPorIpNoArpDosSwitches(eq.ipBase())
+                .map(MacUtils::normalizar)
+                .orElse("");
+    }
+
+    private static String ipBase(String ip) {
+        if (ip == null) {
+            return "";
+        }
+        int idx = ip.indexOf(':');
+        return (idx > 0 ? ip.substring(0, idx) : ip).trim();
     }
 
     /**
@@ -125,6 +321,302 @@ public class TopologyEngine {
             if (cg.switchCore().macNormalizado().equalsIgnoreCase(switchId)
                     && cg.porta().equalsIgnoreCase(porta)) {
                 return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Indica se o switch informado está na fronteira superior coletada voltada ao Roteador/Gateway
+     * (ou seja, aparece em identificarConexoesGateway()).
+     */
+    public boolean ehNoNaFronteiraGateway(String switchId) {
+        if (switchId == null) return false;
+        for (ConexaoGateway cg : identificarConexoesGateway()) {
+            if (cg.switchCore().macNormalizado().equalsIgnoreCase(switchId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean ehUplinkDeFronteiraGateway(String switchId, String porta) {
+        return ehPortaDeEntradaGateway(switchId, porta);
+    }
+
+    /**
+     * Analisa como o Gateway se conecta à borda superior coletada, separando conexões diretas
+     * confirmadas, conexões mediadas por LLDP de switch/OLT externo não coletado e uplinks em
+     * domínio L2 incerto (quando switches core falharam na coleta ou 3+ folhas compartilham a
+     * mesma nuvem L2 de uplink).
+     */
+    public PlanoGateway analisarPlanoGateway() {
+        Optional<GatewayInfo> gwOpt = gatewayIdentificado();
+        if (gwOpt.isEmpty()) {
+            return new PlanoGateway(null, List.of(), List.of(), List.of(), List.of());
+        }
+
+        GatewayInfo gw = gwOpt.get();
+        String gwNorm = gw.macNormalizado();
+        List<ConexaoGateway> todas = identificarConexoesGateway();
+        if (todas.isEmpty()) {
+            return new PlanoGateway(gw, List.of(), List.of(), List.of(), List.of());
+        }
+
+        List<ConexaoPassiva> passivas = resolverConexoesPassivasSemAcesso();
+        Set<String> ipsPassivos = new HashSet<>();
+        for (ConexaoPassiva cp : passivas) {
+            ipsPassivos.add(cp.equipamento().ipBase());
+        }
+
+        List<EquipamentoSemAcesso> suspectsInfraUpstream = new ArrayList<>();
+        for (EquipamentoSemAcesso eq : equipamentosSemAcesso()) {
+            if (eq.ehComutadorInfra() && !ipsPassivos.contains(eq.ipBase())) {
+                suspectsInfraUpstream.add(eq);
+            }
+        }
+
+        List<ConexaoLldpUpstream> viaLldpExterno = new ArrayList<>();
+        List<ConexaoGateway> restantes = new ArrayList<>();
+        Set<String> idsLldpExterno = new HashSet<>();
+
+        for (ConexaoGateway cg : todas) {
+            String swId = cg.switchCore().macNormalizado();
+            Optional<LldpNeighbor> lldpSwOpt = encontrarVizinhoLldpExternoNaPorta(swId, cg.porta());
+            if (lldpSwOpt.isPresent()) {
+                viaLldpExterno.add(new ConexaoLldpUpstream(cg.switchCore(), cg.porta(), lldpSwOpt.get()));
+                idsLldpExterno.add(swId);
+            } else {
+                restantes.add(cg);
+            }
+        }
+
+        Map<String, SwitchIdentity> restantesPorId = new LinkedHashMap<>();
+        for (ConexaoGateway cg : restantes) {
+            restantesPorId.put(cg.switchCore().macNormalizado(), cg.switchCore());
+        }
+
+        int mutuaVisibilidade = 0;
+        int hostsExtrasAlemGatewayMax = 0;
+        int hostsExtrasIntelbrasMax = 0;
+        boolean algumCgVeMacDeSuspeito = false;
+        boolean restanteVeLldpExterno = false;
+
+        for (ConexaoGateway cg : restantes) {
+            String swId = cg.switchCore().macNormalizado();
+            PortaAnalise pa = analisarPortas(swId).get(cg.porta());
+            if (pa == null) continue;
+
+            boolean veOutro = false;
+            for (SwitchIdentity vis : pa.switchesVisiveis()) {
+                String visId = vis.macNormalizado();
+                if (!visId.equals(swId) && restantesPorId.containsKey(visId)) {
+                    veOutro = true;
+                }
+                if (idsLldpExterno.contains(visId)) {
+                    restanteVeLldpExterno = true;
+                }
+            }
+            if (veOutro) {
+                mutuaVisibilidade++;
+            }
+
+            int extras = 0;
+            int extrasIntelbras = 0;
+            for (String macHost : pa.macsHostsDesconhecidos()) {
+                String norm = MacUtils.normalizar(macHost);
+                if (norm.isBlank() || MacUtils.pertenceAoSwitch(norm, gwNorm)) {
+                    continue;
+                }
+                extras++;
+                if (OuiLookup.ehIntelbras(norm)) {
+                    extrasIntelbras++;
+                }
+                for (EquipamentoSemAcesso eq : suspectsInfraUpstream) {
+                    if (!eq.macNormalizado().isBlank() && MacUtils.pertenceAoSwitch(norm, eq.macNormalizado())) {
+                        algumCgVeMacDeSuspeito = true;
+                    }
+                }
+            }
+            hostsExtrasAlemGatewayMax = Math.max(hostsExtrasAlemGatewayMax, extras);
+            hostsExtrasIntelbrasMax = Math.max(hostsExtrasIntelbrasMax, extrasIntelbras);
+        }
+
+        boolean nenhumSuspeitoTemMac = suspectsInfraUpstream.stream()
+                .allMatch(eq -> eq.macNormalizado().isBlank());
+
+        boolean segmentoIncerto = false;
+        if (!suspectsInfraUpstream.isEmpty()) {
+            if (restantes.size() >= 2) {
+                segmentoIncerto = true;
+            } else if (restantes.size() == 1 && (algumCgVeMacDeSuspeito
+                    || (nenhumSuspeitoTemMac && hostsExtrasIntelbrasMax >= 1))) {
+                segmentoIncerto = true;
+            }
+        }
+        if (!segmentoIncerto) {
+            if (restantes.size() >= 3 && mutuaVisibilidade >= 2) {
+                segmentoIncerto = true;
+            } else if (restantes.size() == 2 && mutuaVisibilidade >= 2 && hostsExtrasAlemGatewayMax >= 5) {
+                segmentoIncerto = true;
+            } else if (!viaLldpExterno.isEmpty() && restanteVeLldpExterno) {
+                segmentoIncerto = true;
+            }
+        }
+
+        if (segmentoIncerto) {
+            return new PlanoGateway(gw, List.of(), List.copyOf(restantes), List.copyOf(viaLldpExterno),
+                    List.copyOf(suspectsInfraUpstream));
+        }
+        return new PlanoGateway(gw, List.copyOf(restantes), List.of(), List.copyOf(viaLldpExterno),
+                List.of());
+    }
+
+    private Optional<LldpNeighbor> encontrarVizinhoLldpExternoNaPorta(String switchId, String porta) {
+        if (switchId == null || porta == null) {
+            return Optional.empty();
+        }
+        boolean temRouterGatewayNaPorta = false;
+        LldpNeighbor switchExterno = null;
+        for (VizinhoLldpClassificado v : vizinhosLldpDeInteresse(switchId)) {
+            if (v.neighbor().localPort() == null || !v.neighbor().localPort().equalsIgnoreCase(porta)) {
+                continue;
+            }
+            if (v.categoria() == CategoriaInteresse.ROTEADOR_UPLINK) {
+                temRouterGatewayNaPorta = true;
+            } else if (v.categoria() == CategoriaInteresse.SWITCH_OU_OLT_EXTERNO && switchExterno == null) {
+                switchExterno = v.neighbor();
+            }
+        }
+        if (temRouterGatewayNaPorta) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(switchExterno);
+    }
+
+    /**
+     * Tenta posicionar passivamente equipamentos sem acesso CLI (ou que falharam autenticação) em
+     * portas de acesso únicas de switches coletados usando MAC conhecido no scan/ARP.
+     */
+    public List<ConexaoPassiva> resolverConexoesPassivasSemAcesso() {
+        List<EquipamentoSemAcesso> todos = equipamentosSemAcesso();
+        if (todos.isEmpty() || switchesPorId.isEmpty()) {
+            return List.of();
+        }
+
+        List<VizinhoLldpClassificado> todosLldp = new ArrayList<>();
+        for (SwitchIdentity sw : switchesPorId.values()) {
+            todosLldp.addAll(vizinhosLldpDeInteresse(sw.macNormalizado()));
+        }
+
+        Map<String, Map<String, PortaAnalise>> analisesPorSwitch = new LinkedHashMap<>();
+        for (SwitchIdentity sw : switchesPorId.values()) {
+            analisesPorSwitch.put(sw.macNormalizado(), analisarPortas(sw.macNormalizado()));
+        }
+
+        List<ConexaoPassiva> resultado = new ArrayList<>();
+        for (EquipamentoSemAcesso eq : todos) {
+            if (jaRepresentadoPorLldp(eq, todosLldp)) {
+                continue;
+            }
+            String macEq = eq.macNormalizado();
+            if (macEq.isBlank()) {
+                continue;
+            }
+
+            List<ConexaoPassiva> candidatosExatos = new ArrayList<>();
+            List<ConexaoPassiva> candidatosPorOffset = new ArrayList<>();
+            for (SwitchIdentity sw : switchesPorId.values()) {
+                String swId = sw.macNormalizado();
+                Map<String, PortaAnalise> portas = analisesPorSwitch.getOrDefault(swId, Map.of());
+                for (PortaAnalise pa : portas.values()) {
+                    if (!pa.switchesVisiveis().isEmpty()) {
+                        continue;
+                    }
+                    if (ehPortaDeEntradaGateway(swId, pa.porta())) {
+                        continue;
+                    }
+                    boolean portaUplinkExterno = false;
+                    for (VizinhoLldpClassificado v : vizinhosLldpDeInteresse(swId)) {
+                        if (v.neighbor().localPort() != null
+                                && v.neighbor().localPort().equalsIgnoreCase(pa.porta())
+                                && (v.categoria() == CategoriaInteresse.ROTEADOR_UPLINK
+                                || v.categoria() == CategoriaInteresse.SWITCH_OU_OLT_EXTERNO)) {
+                            portaUplinkExterno = true;
+                            break;
+                        }
+                    }
+                    if (portaUplinkExterno) {
+                        continue;
+                    }
+                    boolean encontrouExato = false;
+                    boolean encontrouPorOffset = false;
+                    for (String macHost : pa.macsHostsDesconhecidos()) {
+                        String norm = MacUtils.normalizar(macHost);
+                        if (norm.isBlank()) {
+                            continue;
+                        }
+                        if (norm.equalsIgnoreCase(macEq)) {
+                            encontrouExato = true;
+                            break;
+                        }
+                        if (MacUtils.pertenceAoSwitch(macEq, norm)) {
+                            encontrouPorOffset = true;
+                        }
+                    }
+                    if (encontrouExato) {
+                        candidatosExatos.add(new ConexaoPassiva(sw, pa.porta(), eq));
+                    } else if (encontrouPorOffset) {
+                        candidatosPorOffset.add(new ConexaoPassiva(sw, pa.porta(), eq));
+                    }
+                }
+            }
+
+            List<ConexaoPassiva> escolhidos = !candidatosExatos.isEmpty() ? candidatosExatos : candidatosPorOffset;
+            if (escolhidos.size() == 1) {
+                resultado.add(escolhidos.get(0));
+            }
+        }
+        return resultado;
+    }
+
+    /**
+     * Retorna os equipamentos sem acesso que não puderam ser conectados passivamente em nenhuma porta
+     * (nem representados por LLDP), para exibição no inventário de pendências do relatório.
+     */
+    public List<EquipamentoSemAcesso> equipamentosSemAcessoIsolados(List<ConexaoPassiva> passivas) {
+        Set<String> ipsPosicionados = new HashSet<>();
+        if (passivas != null) {
+            for (ConexaoPassiva cp : passivas) {
+                ipsPosicionados.add(cp.equipamento().ipBase());
+            }
+        }
+        List<VizinhoLldpClassificado> todosLldp = new ArrayList<>();
+        for (SwitchIdentity sw : switchesPorId.values()) {
+            todosLldp.addAll(vizinhosLldpDeInteresse(sw.macNormalizado()));
+        }
+
+        List<EquipamentoSemAcesso> isolados = new ArrayList<>();
+        for (EquipamentoSemAcesso eq : equipamentosSemAcesso()) {
+            if (!ipsPosicionados.contains(eq.ipBase()) && !jaRepresentadoPorLldp(eq, todosLldp)) {
+                isolados.add(eq);
+            }
+        }
+        return isolados;
+    }
+
+    private boolean jaRepresentadoPorLldp(EquipamentoSemAcesso eq, List<VizinhoLldpClassificado> todosLldp) {
+        String ipEq = eq.ipBase();
+        String macEq = eq.macNormalizado();
+        for (VizinhoLldpClassificado v : todosLldp) {
+            if (!ipEq.isBlank() && ipEq.equals(ipBase(v.neighbor().managementIp()))) {
+                return true;
+            }
+            if (!macEq.isBlank() && v.neighbor().possuiChassisMacValido()) {
+                String chNorm = v.neighbor().chassisMacNormalizado();
+                if (LocalGatewayDetector.ehMacUnicastValido(chNorm) && MacUtils.pertenceAoSwitch(chNorm, macEq)) {
+                    return true;
+                }
             }
         }
         return false;
@@ -268,10 +760,21 @@ public class TopologyEngine {
         Map<String, String> resultado = new LinkedHashMap<>();
         for (String idS : switchesPorId.keySet()) {
             String portaEncontrada = null;
-            for (MacEntry e : entradasPorSwitch.getOrDefault(idS, List.of())) {
-                if (e.macNormalizado().equalsIgnoreCase(gwMacNormalizado)) {
-                    portaEncontrada = e.port();
+            for (LldpNeighbor n : lldpPorSwitch.getOrDefault(idS, List.of())) {
+                if (n.possuiChassisMacValido()
+                        && (n.chassisMacNormalizado().equalsIgnoreCase(gwMacNormalizado)
+                        || MacUtils.pertenceAoSwitch(n.chassisMacNormalizado(), gwMacNormalizado))
+                        && n.localPort() != null && !n.localPort().isBlank()) {
+                    portaEncontrada = n.localPort();
                     break;
+                }
+            }
+            if (portaEncontrada == null) {
+                for (MacEntry e : entradasPorSwitch.getOrDefault(idS, List.of())) {
+                    if (e.macNormalizado().equalsIgnoreCase(gwMacNormalizado)) {
+                        portaEncontrada = e.port();
+                        break;
+                    }
                 }
             }
             if (portaEncontrada == null) {
@@ -342,6 +845,20 @@ public class TopologyEngine {
                         gatewayFallbackLocal.ip(),
                         Serie3000Parser.formatarMacPadrao(gatewayFallbackLocal.mac())
                 ));
+            }
+        }
+
+        // 4) Fallback via LLDP: roteador de uplink anunciado diretamente pelos switches coletados
+        for (List<LldpNeighbor> vizinhos : lldpPorSwitch.values()) {
+            for (LldpNeighbor n : vizinhos) {
+                if (LldpInterestFilter.classificar(n, switchesPorId.values(), Optional.empty())
+                        == CategoriaInteresse.ROTEADOR_UPLINK && n.possuiChassisMacValido()) {
+                    String macFmt = Serie3000Parser.formatarMacPadrao(n.chassisMacNormalizado());
+                    String ipGw = (n.managementIp() != null && !n.managementIp().isBlank())
+                            ? n.managementIp()
+                            : buscarIpPorMacNoArpDosSwitches(n.chassisMacNormalizado()).orElse(null);
+                    return Optional.of(new GatewayInfo(ipGw, macFmt));
+                }
             }
         }
 
@@ -439,6 +956,9 @@ public class TopologyEngine {
      *    Z está atrás de Y a partir de (X, Px).
      */
     private Map<String, Map<String, Set<SwitchIdentity>>> construirMapaVisibilidade() {
+        if (mapaVisibilidadeCache != null) {
+            return mapaVisibilidadeCache;
+        }
         Map<String, Map<String, Set<SwitchIdentity>>> visiveis = new LinkedHashMap<>();
 
         for (String switchId : switchesPorId.keySet()) {
@@ -450,6 +970,14 @@ public class TopologyEngine {
                 }
                 porPorta.computeIfAbsent(entry.port(), k -> new LinkedHashSet<>());
                 vizinho.ifPresent(sw -> porPorta.get(entry.port()).add(sw));
+            }
+            // Reforça visibilidade direta nas portas onde o LLDP já confirmou outro switch coletado
+            for (LldpNeighbor lldp : lldpPorSwitch.getOrDefault(switchId, List.of())) {
+                if (lldp.localPort() == null || lldp.localPort().isBlank()) continue;
+                Optional<SwitchIdentity> vizColetado = LldpInterestFilter.resolverSwitchColetado(lldp, switchesPorId.values());
+                if (vizColetado.isPresent() && !vizColetado.get().macNormalizado().equals(switchId)) {
+                    porPorta.computeIfAbsent(lldp.localPort(), k -> new LinkedHashSet<>()).add(vizColetado.get());
+                }
             }
             visiveis.put(switchId, porPorta);
         }
@@ -535,6 +1063,7 @@ public class TopologyEngine {
             }
         } while (alterou && iteracoes < maxIteracoes);
 
+        mapaVisibilidadeCache = visiveis;
         return visiveis;
     }
 
@@ -858,5 +1387,93 @@ public class TopologyEngine {
         static ResultadoInferencia semCandidatos() {
             return new ResultadoInferencia(Tipo.SEM_CANDIDATOS, List.of(), Set.of());
         }
+    }
+
+    /**
+     * Retorna os vizinhos LLDP filtrados de interesse em um equipamento coletado:
+     * switches/OLTs/APs coletados, roteador de uplink, Access Points e rádios Intelbras
+     * (descartando estações finais, telefones IP e equipamentos irrelevantes).
+     */
+    public List<VizinhoLldpClassificado> vizinhosLldpDeInteresse(String switchId) {
+        List<LldpNeighbor> brutos = lldpPorSwitch.getOrDefault(switchId, List.of());
+        if (brutos.isEmpty()) {
+            return List.of();
+        }
+        Optional<GatewayInfo> gwOpt = gatewayIdentificado();
+        Collection<SwitchIdentity> todos = switchesPorId.values();
+        List<VizinhoLldpClassificado> resultado = new ArrayList<>();
+        Set<String> chaves = new LinkedHashSet<>();
+
+        for (LldpNeighbor n : brutos) {
+            CategoriaInteresse cat = LldpInterestFilter.classificar(n, todos, gwOpt);
+            if (cat == CategoriaInteresse.OUTRO_IGNORAR) {
+                continue;
+            }
+            SwitchIdentity coletado = LldpInterestFilter.resolverSwitchColetado(n, todos).orElse(null);
+            if (coletado != null && coletado.macNormalizado().equalsIgnoreCase(switchId)) {
+                continue; // auto-loop tratado no LoopDetector
+            }
+            String chave = (n.localPort() != null ? n.localPort().toUpperCase() : "")
+                    + "|" + cat
+                    + "|" + (coletado != null ? coletado.macNormalizado() : n.rotuloExibicao());
+            if (chaves.add(chave)) {
+                resultado.add(new VizinhoLldpClassificado(n, cat, coletado));
+            }
+        }
+        return resultado;
+    }
+
+    /**
+     * Retorna apenas os vizinhos LLDP externos de interesse (Roteador de uplink, APs e rádios Intelbras)
+     * que ainda não fazem parte da lista de equipamentos coletados via CLI.
+     */
+    public List<VizinhoLldpClassificado> vizinhosLldpExternosDeInteresse(String switchId) {
+        List<VizinhoLldpClassificado> todos = vizinhosLldpDeInteresse(switchId);
+        List<VizinhoLldpClassificado> externos = new ArrayList<>();
+        for (VizinhoLldpClassificado v : todos) {
+            if (v.categoria() != CategoriaInteresse.EQUIPAMENTO_COLETADO) {
+                externos.add(v);
+            }
+        }
+        return externos;
+    }
+
+    /**
+     * Verifica se a porta informada está em estado de bloqueio STP (Alternate/Backup/Discarding).
+     */
+    public boolean portaBloqueadaPorStp(String switchId, String porta) {
+        if (switchId == null || porta == null || porta.isBlank()) return false;
+        String portaSemBagg = porta.contains("(") ? porta.substring(0, porta.indexOf('(')).trim() : porta.trim();
+        for (StpPortState s : stpPorSwitch.getOrDefault(switchId, List.of())) {
+            if ((s.port().equalsIgnoreCase(porta.trim()) || s.port().equalsIgnoreCase(portaSemBagg))
+                    && s.estaBloqueada()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public Map<String, List<String>> baggsDe(String switchId) {
+        return Collections.unmodifiableMap(baggsPorSwitch.getOrDefault(switchId, Map.of()));
+    }
+
+    /**
+     * Executa diagnóstico somente-leitura completo de loops, auto-loops, MAC flapping e anéis L2.
+     */
+    public List<LoopDiagnostic> diagnosticarLoops() {
+        List<LoopDetector.ArestaFisica> arestas = RelatorioTopologia.extrairArestasFisicas(this);
+        return diagnosticarLoops(arestas);
+    }
+
+    public List<LoopDiagnostic> diagnosticarLoops(List<LoopDetector.ArestaFisica> arestasTopologia) {
+        return LoopDetector.analisar(
+                switchesPorId,
+                entradasPorSwitch,
+                lldpPorSwitch,
+                stpPorSwitch,
+                loopbackHardwarePorSwitch,
+                baggsPorSwitch,
+                arestasTopologia
+        );
     }
 }

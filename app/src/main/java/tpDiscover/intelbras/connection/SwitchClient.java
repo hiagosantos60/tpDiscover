@@ -23,4 +23,17 @@ public interface SwitchClient {
     default String bannerInicial() {
         return "";
     }
+
+    /** Identifica o protocolo ativo da sessão ("SSH" ou "Telnet"). */
+    default String protocolo() {
+        return "CLI";
+    }
+
+    /**
+     * Credencial que efetivamente autenticou a sessão (pode ser uma alternativa da cadeia de fallback).
+     * Retorna {@code null} se a implementação não rastrear essa informação.
+     */
+    default CredencialLogin credencialEfetiva() {
+        return null;
+    }
 }
