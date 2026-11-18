@@ -1,90 +1,188 @@
 package tpDiscover.intelbras.gui;
 
 import tpDiscover.intelbras.coleta.ColetorEmLote;
+import tpDiscover.intelbras.coleta.CredencialAcesso;
+import tpDiscover.intelbras.gui.SwingThemeHelper.IconKind;
 
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTextField;
+import javax.swing.ScrollPaneConstants;
 import javax.swing.SpinnerNumberModel;
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Aba "Avançado": ajustes opcionais de paralelismo/protocolo, gateway manual e informações do projeto.
+ * Aba "Avançado": ajustes opcionais, agrupados por assunto e com uma explicação curta em cada item.
+ * Nada aqui é necessário para uma coleta normal.
  */
 public class AvancadoViewPanel extends JPanel {
 
     private final JSpinner spnConcorrencia = new JSpinner(new SpinnerNumberModel(ColetorEmLote.CONCORRENCIA_PADRAO, 1, 64, 1));
-    private final JCheckBox chkLldp = new JCheckBox("Expandir switches esquecidos via LLDP (Onda 2)", true);
-    private final JCheckBox chkSnmp = new JCheckBox("Usar sonda SNMPv2c (public) durante o scan", true);
+    private final JCheckBox chkLldp = new JCheckBox("Encontrar switches vizinhos automaticamente (LLDP)", true);
+    private final JCheckBox chkSnmp = new JCheckBox("Identificar modelos via SNMP (comunidade public)", true);
     private final JTextField txtGatewayIp = new JTextField(16);
     private final JTextField txtGatewayMac = new JTextField(18);
+    private final JButton btnCredenciaisExtras = new JButton();
+    private final List<CredencialAcesso> credenciaisAlternativas = new ArrayList<>(CredencialAcesso.presetsPadrao());
 
     public AvancadoViewPanel() {
-        setLayout(new BorderLayout(0, 12));
+        setLayout(new BorderLayout());
         setOpaque(false);
 
-        SwingThemeHelper.configurarPlaceholder(txtGatewayIp, "Opcional (ex: 10.1.40.1)");
-        SwingThemeHelper.configurarPlaceholder(txtGatewayMac, "Opcional (ex: 0009-0F09-1E0A)");
+        SwingThemeHelper.configurarPlaceholder(txtGatewayIp, "Ex.: 10.1.40.1");
+        SwingThemeHelper.configurarPlaceholder(txtGatewayMac, "Ex.: 0009-0F09-1E0A");
+        chkLldp.setOpaque(false);
+        chkSnmp.setOpaque(false);
 
-        JPanel cardConfig = SwingThemeHelper.criarCardArredondado();
-        cardConfig.setLayout(new GridBagLayout());
-        GridBagConstraints gc = new GridBagConstraints();
-        gc.insets = new Insets(7, 6, 7, 10);
-        gc.anchor = GridBagConstraints.WEST;
-        gc.fill = GridBagConstraints.HORIZONTAL;
+        JPanel coluna = new JPanel();
+        coluna.setOpaque(false);
+        coluna.setLayout(new BoxLayout(coluna, BoxLayout.Y_AXIS));
 
-        gc.gridx = 0; gc.gridy = 0; gc.gridwidth = 2; gc.weightx = 1.0;
-        cardConfig.add(SwingThemeHelper.criarTituloSecao("Opções Avançadas de Descoberta e Coleta"), gc);
+        // Credenciais
+        SwingThemeHelper.estilizarBotaoCompacto(btnCredenciaisExtras);
+        btnCredenciaisExtras.setIcon(SwingThemeHelper.criarIcone(IconKind.KEY, SwingThemeHelper.TEXT_SECONDARY));
+        btnCredenciaisExtras.addActionListener(e -> abrirDialogCredenciaisExtras());
+        atualizarRotuloCredenciaisExtras();
+        JPanel credWrap = new JPanel(new BorderLayout());
+        credWrap.setOpaque(false);
+        credWrap.add(btnCredenciaisExtras, BorderLayout.WEST);
+        coluna.add(criarSecao("Senhas alternativas",
+                "Se a senha principal for recusada, o tpDiscover tenta estas combinações automaticamente (ex.: OLTs com senha de fábrica).",
+                credWrap, null));
+        coluna.add(espaco());
 
-        gc.gridwidth = 1;
-        gc.gridy = 1; gc.gridx = 0; gc.weightx = 0;
-        cardConfig.add(new JLabel("Concorrência CLI (threads paralelas):"), gc);
-        gc.gridx = 1; gc.weightx = 1.0;
+        // Descoberta
+        JPanel desc = new JPanel(new GridBagLayout());
+        desc.setOpaque(false);
+        adicionarOpcao(desc, 0, chkLldp, "Pergunta a cada switch quem está ligado nele e inclui os vizinhos que o scan não achou.");
+        adicionarOpcao(desc, 1, chkSnmp, "Ajuda a reconhecer o modelo exato durante a varredura. Desative se a rede bloquear SNMP.");
+        coluna.add(criarSecao("Descoberta", null, desc, null));
+        coluna.add(espaco());
+
+        // Desempenho
         JPanel spnWrap = new JPanel(new BorderLayout());
         spnWrap.setOpaque(false);
+        spnConcorrencia.setPreferredSize(new Dimension(90, spnConcorrencia.getPreferredSize().height));
         spnWrap.add(spnConcorrencia, BorderLayout.WEST);
-        cardConfig.add(spnWrap, gc);
+        coluna.add(criarSecao("Equipamentos coletados ao mesmo tempo",
+                "Valores maiores terminam mais rápido; reduza se houver muitas falhas por tempo esgotado.",
+                spnWrap, null));
+        coluna.add(espaco());
 
-        gc.gridy = 2; gc.gridx = 0; gc.gridwidth = 2;
-        chkLldp.setOpaque(false);
-        cardConfig.add(chkLldp, gc);
+        // Gateway
+        JPanel gw = new JPanel(new GridBagLayout());
+        gw.setOpaque(false);
+        GridBagConstraints g = new GridBagConstraints();
+        g.anchor = GridBagConstraints.WEST;
+        g.fill = GridBagConstraints.HORIZONTAL;
+        g.insets = new Insets(0, 0, 8, 12);
+        g.gridx = 0; g.gridy = 0;
+        gw.add(rotulo("IP"), g);
+        g.gridx = 1; g.weightx = 1;
+        gw.add(txtGatewayIp, g);
+        g.gridx = 0; g.gridy = 1; g.weightx = 0;
+        gw.add(rotulo("MAC"), g);
+        g.gridx = 1; g.weightx = 1;
+        gw.add(txtGatewayMac, g);
+        coluna.add(criarSecao("Gateway (opcional)",
+                "Normalmente detectado sozinho. Preencha só se a topologia não mostrar o roteador correto.",
+                gw, null));
+        coluna.add(espaco());
 
-        gc.gridy = 3;
-        chkSnmp.setOpaque(false);
-        cardConfig.add(chkSnmp, gc);
-
-        gc.gridwidth = 1;
-        gc.gridy = 4; gc.gridx = 0; gc.weightx = 0;
-        cardConfig.add(new JLabel("Gateway manual — IP (opcional):"), gc);
-        gc.gridx = 1; gc.weightx = 1.0;
-        cardConfig.add(txtGatewayIp, gc);
-
-        gc.gridy = 5; gc.gridx = 0; gc.weightx = 0;
-        cardConfig.add(new JLabel("Gateway manual — MAC (opcional):"), gc);
-        gc.gridx = 1; gc.weightx = 1.0;
-        cardConfig.add(txtGatewayMac, gc);
-
-        JPanel cardSobre = SwingThemeHelper.criarCardArredondado();
-        cardSobre.setLayout(new BorderLayout(0, 6));
-        cardSobre.add(SwingThemeHelper.criarTituloSecao("Sobre o tpDiscover Intelbras"), BorderLayout.NORTH);
+        // Sobre
         JLabel sobreTxt = new JLabel(
-                "<html>Ferramenta de mapeamento topológico e diagnóstico L2 somente-leitura para redes Intelbras.<br>"
-                        + "Suporta Comware, Série 3000/Max, S2050G-A / S30-Lite / PoE Max, SG MR / MR L2+ / S-Series, OLTs (G08/G16/4840E, AN6000/6001/5516, 8820I/G) e APs/Rádios.<br>"
-                        + "Nenhuma configuração de switch ou porta é alterada durante o scan ou coleta.</html>"
-        );
+                "<html><div style='width:620px'>Ferramenta de mapeamento de topologia e diagnóstico de loops para redes Intelbras. "
+                        + "Suporta Comware, Série 3000/Max, S2050G-A / S30-Lite / PoE Max, SG MR / MR L2+ / S-Series, "
+                        + "OLTs (G08/G16/4840E, AN6000/6001/5516, 8820I/G) e APs/Rádios.<br><br>"
+                        + "<b>Somente leitura:</b> nenhuma configuração de switch ou porta é alterada.</div></html>");
         sobreTxt.setForeground(SwingThemeHelper.TEXT_MUTED);
-        cardSobre.add(sobreTxt, BorderLayout.CENTER);
+        coluna.add(criarSecao("Sobre o tpDiscover", null, sobreTxt, null));
 
-        JPanel wrapper = new JPanel(new BorderLayout(0, 12));
-        wrapper.setOpaque(false);
-        wrapper.add(cardConfig, BorderLayout.NORTH);
-        wrapper.add(cardSobre, BorderLayout.CENTER);
-        add(wrapper, BorderLayout.NORTH);
+        JPanel topo = new JPanel(new BorderLayout());
+        topo.setOpaque(false);
+        topo.add(coluna, BorderLayout.NORTH);
+        JScrollPane scroll = new JScrollPane(topo);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.setOpaque(false);
+        scroll.getViewport().setOpaque(false);
+        scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        add(scroll, BorderLayout.CENTER);
+    }
+
+    private JPanel criarSecao(String titulo, String descricao, JComponent conteudo, JComponent extra) {
+        JPanel card = SwingThemeHelper.criarCardArredondado();
+        card.setLayout(new BorderLayout(0, 12));
+        card.add(SwingThemeHelper.criarCabecalho(titulo, descricao), BorderLayout.NORTH);
+        card.add(conteudo, BorderLayout.CENTER);
+        if (extra != null) card.add(extra, BorderLayout.SOUTH);
+        card.setAlignmentX(LEFT_ALIGNMENT);
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height + 400));
+        return card;
+    }
+
+    private void adicionarOpcao(JPanel p, int linha, JCheckBox chk, String ajuda) {
+        GridBagConstraints g = new GridBagConstraints();
+        g.gridx = 0;
+        g.gridy = linha * 2;
+        g.anchor = GridBagConstraints.WEST;
+        g.weightx = 1;
+        g.fill = GridBagConstraints.HORIZONTAL;
+        g.insets = new Insets(linha == 0 ? 0 : 10, 0, 0, 0);
+        p.add(chk, g);
+        g.gridy = linha * 2 + 1;
+        g.insets = new Insets(2, 28, 0, 0);
+        p.add(SwingThemeHelper.criarTextoAjuda(ajuda), g);
+    }
+
+    private static JLabel rotulo(String t) {
+        JLabel l = new JLabel(t);
+        l.setForeground(SwingThemeHelper.TEXT_SECONDARY);
+        return l;
+    }
+
+    private static JComponent espaco() {
+        JPanel p = new JPanel();
+        p.setOpaque(false);
+        p.setPreferredSize(new Dimension(1, 12));
+        p.setMaximumSize(new Dimension(Integer.MAX_VALUE, 12));
+        p.setAlignmentX(LEFT_ALIGNMENT);
+        return p;
+    }
+
+    private void abrirDialogCredenciaisExtras() {
+        List<CredencialAcesso> editadas = CredenciaisExtrasDialog.exibirDialogo(this, credenciaisAlternativas);
+        if (editadas != null) {
+            credenciaisAlternativas.clear();
+            credenciaisAlternativas.addAll(editadas);
+            atualizarRotuloCredenciaisExtras();
+        }
+    }
+
+    private void atualizarRotuloCredenciaisExtras() {
+        int n = credenciaisAlternativas.size();
+        btnCredenciaisExtras.setText("Gerenciar senhas alternativas (" + n + (n == 1 ? " cadastrada)" : " cadastradas)"));
+    }
+
+    public void setEstadoExecucao(boolean executando) {
+        btnCredenciaisExtras.setEnabled(!executando);
+    }
+
+    public List<CredencialAcesso> getCredenciaisAlternativas() {
+        return List.copyOf(credenciaisAlternativas);
     }
 
     public int getConcorrencia() {

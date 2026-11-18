@@ -44,7 +44,8 @@ public class DiscoverySessionService {
             List<CredencialAcesso> credenciaisAlternativas,
             List<DiscoveredProduct> produtosConhecidosPreviamente,
             List<ColetorEmLote.ColetaDispositivoSnapshot> snapshotsPreservados,
-            List<TopologyEngine.EquipamentoSemAcesso> equipamentosSemAcessoInformados
+            List<TopologyEngine.EquipamentoSemAcesso> equipamentosSemAcessoInformados,
+            boolean gerarArquivoRelatorio
     ) {
         public DiscoveryRequest {
             scanSpecs = scanSpecs != null ? List.copyOf(scanSpecs) : List.of();
@@ -59,6 +60,31 @@ public class DiscoverySessionService {
                     ? List.copyOf(snapshotsPreservados) : List.of();
             equipamentosSemAcessoInformados = equipamentosSemAcessoInformados != null
                     ? List.copyOf(equipamentosSemAcessoInformados) : List.of();
+        }
+
+        /** Compatibilidade (CLI): sempre exporta o arquivo PDF/HTML ao final da coleta. */
+        public DiscoveryRequest(
+                List<String> scanSpecs,
+                List<SwitchTarget> alvosManuais,
+                String usuarioPadrao,
+                String senhaPadrao,
+                boolean apenasScan,
+                boolean expandirViaLldp,
+                boolean usarSnmp,
+                int concorrencia,
+                String gatewayIpManual,
+                String gatewayMacManual,
+                Path pastaSaidaPdf,
+                Path salvarAlvosEm,
+                List<CredencialAcesso> credenciaisAlternativas,
+                List<DiscoveredProduct> produtosConhecidosPreviamente,
+                List<ColetorEmLote.ColetaDispositivoSnapshot> snapshotsPreservados,
+                List<TopologyEngine.EquipamentoSemAcesso> equipamentosSemAcessoInformados
+        ) {
+            this(scanSpecs, alvosManuais, usuarioPadrao, senhaPadrao, apenasScan, expandirViaLldp,
+                    usarSnmp, concorrencia, gatewayIpManual, gatewayMacManual, pastaSaidaPdf, salvarAlvosEm,
+                    credenciaisAlternativas, produtosConhecidosPreviamente, snapshotsPreservados,
+                    equipamentosSemAcessoInformados, true);
         }
 
         public DiscoveryRequest(
@@ -352,7 +378,8 @@ public class DiscoverySessionService {
         Path pastaDestino = req.pastaSaidaPdf() != null
                 ? req.pastaSaidaPdf().toAbsolutePath().normalize()
                 : Path.of("").toAbsolutePath().normalize();
-        RelatorioTopologia.ResultadoRelatorio relatorio = RelatorioTopologia.gerarResultado(engine, pastaDestino, true);
+        RelatorioTopologia.ResultadoRelatorio relatorio = RelatorioTopologia.gerarResultado(
+                engine, pastaDestino, req.gerarArquivoRelatorio());
         cb.onRelatorioGerado(relatorio);
         if (relatorio.arquivoGerado() != null) {
             cb.onLog("[PDF] Relatório gerado em: " + relatorio.arquivoGerado());

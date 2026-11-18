@@ -36,7 +36,7 @@ public class TargetTableModel extends AbstractTableModel {
     public static final int COL_STATUS = 5;
 
     private static final String[] COLUNAS = {
-            "Coletar", "IP / Porta", "Produto / Modelo", "Usuário", "Senha indiv.", "Status"
+            "Coletar", "Endereço IP", "Produto", "Usuário", "Senha", "Situação"
     };
 
     private final List<DiscoveredTargetRow> linhas = new ArrayList<>();
@@ -365,13 +365,21 @@ public class TargetTableModel extends AbstractTableModel {
     }
 
     public List<TopologyEngine.EquipamentoSemAcesso> extrairEquipamentosSemAcesso() {
+        return extrairEquipamentosSemAcesso(false);
+    }
+
+    /**
+     * @param incluirTodasFalhas quando true (geração do PDF final), equipamentos em FALHA entram como
+     *                           pendência mesmo se ainda estiverem marcados para recoleta.
+     */
+    public List<TopologyEngine.EquipamentoSemAcesso> extrairEquipamentosSemAcesso(boolean incluirTodasFalhas) {
         List<TopologyEngine.EquipamentoSemAcesso> lista = new ArrayList<>();
         for (DiscoveredTargetRow r : linhas) {
             if (r.isEhGateway()) continue;
             String motivo = switch (r.getEstado()) {
                 case SEM_SENHA -> "SEM_SENHA";
                 case NAO_SUPORTADO_CLI -> "SEM_CLI";
-                case FALHA -> !r.isSelecionado() ? "FALHA_AUTENTICACAO" : null;
+                case FALHA -> (incluirTodasFalhas || !r.isSelecionado()) ? "FALHA_AUTENTICACAO" : null;
                 default -> null;
             };
             if (motivo == null) continue;
@@ -479,16 +487,17 @@ public class TargetTableModel extends AbstractTableModel {
     }
 
     public static void configurarRenderersEColunas(JTable table) {
-        table.setRowHeight(30);
+        table.setRowHeight(34);
         table.setFillsViewportHeight(true);
         table.setAutoCreateRowSorter(false);
-        table.setShowHorizontalLines(false);
+        table.setShowHorizontalLines(true);
+        table.setGridColor(SwingThemeHelper.BORDER_SUBTLE);
         table.setShowVerticalLines(false);
         table.setIntercellSpacing(new java.awt.Dimension(0, 1));
 
         TableColumnModel cm = table.getColumnModel();
-        cm.getColumn(COL_SELECIONADO).setMaxWidth(64);
-        cm.getColumn(COL_SELECIONADO).setMinWidth(56);
+        cm.getColumn(COL_SELECIONADO).setMaxWidth(84);
+        cm.getColumn(COL_SELECIONADO).setMinWidth(76);
         cm.getColumn(COL_IP_PORTA).setPreferredWidth(130);
         cm.getColumn(COL_MODELO).setPreferredWidth(290);
         cm.getColumn(COL_USUARIO).setPreferredWidth(100);
@@ -531,7 +540,7 @@ public class TargetTableModel extends AbstractTableModel {
             String txt = value != null ? value.toString().trim() : "";
             super.getTableCellRendererComponent(table, txt.isEmpty() ? placeholder : txt, isSelected, hasFocus, row, column);
             if (!isSelected) {
-                setBackground(row % 2 == 0 ? SwingThemeHelper.BG_CARD : SwingThemeHelper.BG_TABLE_ALT);
+                setBackground(SwingThemeHelper.BG_CARD);
                 setForeground(txt.isEmpty() ? SwingThemeHelper.TEXT_MUTED : SwingThemeHelper.TEXT_PRIMARY);
             }
             return this;
@@ -546,7 +555,7 @@ public class TargetTableModel extends AbstractTableModel {
             String exibicao = senha.isEmpty() ? "(padrão)" : "••••••••";
             super.getTableCellRendererComponent(table, exibicao, isSelected, hasFocus, row, column);
             if (!isSelected) {
-                setBackground(row % 2 == 0 ? SwingThemeHelper.BG_CARD : SwingThemeHelper.BG_TABLE_ALT);
+                setBackground(SwingThemeHelper.BG_CARD);
                 setForeground(senha.isEmpty() ? SwingThemeHelper.TEXT_MUTED : SwingThemeHelper.TEXT_PRIMARY);
             }
             return this;
@@ -577,6 +586,20 @@ public class TargetTableModel extends AbstractTableModel {
         }
     }
 
+    private record PontoStatus(Color cor) implements javax.swing.Icon {
+        @Override public int getIconWidth() { return 8; }
+        @Override public int getIconHeight() { return 8; }
+
+        @Override
+        public void paintIcon(Component c, java.awt.Graphics g, int x, int y) {
+            java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+            g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(cor);
+            g2.fillOval(x, y, 8, 8);
+            g2.dispose();
+        }
+    }
+
     private static final class StatusCellRenderer extends DefaultTableCellRenderer {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
@@ -584,32 +607,23 @@ public class TargetTableModel extends AbstractTableModel {
             JLabel lbl = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
             String texto = value != null ? value.toString() : "";
             lbl.setToolTipText(texto.isBlank() ? null : texto);
-            lbl.setBorder(new EmptyBorder(2, 6, 2, 6));
+            lbl.setBorder(new EmptyBorder(2, 10, 2, 10));
             lbl.setHorizontalAlignment(SwingConstants.LEFT);
-            if (!isSelected && table.getModel() instanceof TargetTableModel model) {
+            lbl.setIconTextGap(8);
+            if (table.getModel() instanceof TargetTableModel model) {
                 int modelRow = table.convertRowIndexToModel(row);
                 EstadoColeta estado = model.getLinhas().get(modelRow).getEstado();
-                switch (estado) {
-                    case OK -> {
-                        lbl.setBackground(SwingThemeHelper.STATUS_OK_BG);
-                        lbl.setForeground(SwingThemeHelper.STATUS_OK_FG);
-                    }
-                    case FALHA -> {
-                        lbl.setBackground(SwingThemeHelper.STATUS_ERR_BG);
-                        lbl.setForeground(SwingThemeHelper.STATUS_ERR_FG);
-                    }
-                    case COLETANDO -> {
-                        lbl.setBackground(SwingThemeHelper.STATUS_RUN_BG);
-                        lbl.setForeground(SwingThemeHelper.STATUS_RUN_FG);
-                    }
-                    case NAO_SUPORTADO_CLI, SEM_SENHA -> {
-                        lbl.setBackground(SwingThemeHelper.STATUS_WARN_BG);
-                        lbl.setForeground(SwingThemeHelper.STATUS_WARN_FG);
-                    }
-                    case AGUARDANDO -> {
-                        lbl.setBackground(SwingThemeHelper.STATUS_IDLE_BG);
-                        lbl.setForeground(SwingThemeHelper.STATUS_IDLE_FG);
-                    }
+                Color cor = switch (estado) {
+                    case OK -> SwingThemeHelper.STATUS_OK_FG;
+                    case FALHA -> SwingThemeHelper.STATUS_ERR_FG;
+                    case COLETANDO -> SwingThemeHelper.STATUS_RUN_FG;
+                    case NAO_SUPORTADO_CLI, SEM_SENHA -> SwingThemeHelper.STATUS_WARN_FG;
+                    case AGUARDANDO -> SwingThemeHelper.STATUS_IDLE_FG;
+                };
+                lbl.setIcon(new PontoStatus(cor));
+                if (!isSelected) {
+                    lbl.setBackground(SwingThemeHelper.BG_CARD);
+                    lbl.setForeground(cor);
                 }
                 lbl.setOpaque(true);
             }

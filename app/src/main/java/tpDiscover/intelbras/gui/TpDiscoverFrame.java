@@ -1,6 +1,5 @@
 package tpDiscover.intelbras.gui;
 
-import com.formdev.flatlaf.FlatClientProperties;
 import tpDiscover.intelbras.coleta.AlvosLoader;
 import tpDiscover.intelbras.coleta.ColetorEmLote;
 import tpDiscover.intelbras.coleta.DiscoverySessionService.DiscoveryRequest;
@@ -23,6 +22,7 @@ import javax.swing.WindowConstants;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -51,7 +51,7 @@ public class TpDiscoverFrame extends JFrame {
 
     private final JToggleButton navColeta = new JToggleButton("Coleta", true);
     private final JToggleButton navEquipamentos = new JToggleButton("Equipamentos (0)");
-    private final JToggleButton navTopologia = new JToggleButton("Topologia & Loops");
+    private final JToggleButton navTopologia = new JToggleButton("Topologia");
     private final JToggleButton navAvancado = new JToggleButton("Avançado");
     private final JLabel lblStatusBadge = new JLabel("Pronto");
 
@@ -68,6 +68,11 @@ public class TpDiscoverFrame extends JFrame {
 
     private DiscoverySwingWorker workerAtual;
     private AtomicBoolean cancelamentoAtual;
+
+    /** Há coleta na sessão cujo PDF ainda não foi gerado. */
+    private boolean pdfPendente;
+    /** Fecha a janela assim que a geração do PDF final terminar (pedido feito ao sair). */
+    private boolean fecharAoTerminar;
 
     public TpDiscoverFrame() {
         super("tpDiscover Intelbras");
@@ -90,12 +95,13 @@ public class TpDiscoverFrame extends JFrame {
         SwingThemeHelper.aplicarTemaMultiplataforma();
         TpDiscoverFrame frame = new TpDiscoverFrame();
         frame.setVisible(true);
+        frame.coletaPanel.getTxtSenha().requestFocusInWindow();
     }
 
     private void inicializarLayout() {
         setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
-        setMinimumSize(new Dimension(880, 620));
-        setSize(1020, 720);
+        setMinimumSize(new Dimension(940, 680));
+        setSize(1120, 800);
         setLocationRelativeTo(null);
 
         JPanel root = new JPanel(new BorderLayout(0, 0));
@@ -104,7 +110,7 @@ public class TpDiscoverFrame extends JFrame {
         root.add(criarBarraSuperior(), BorderLayout.NORTH);
 
         containerCards.setOpaque(false);
-        containerCards.setBorder(BorderFactory.createEmptyBorder(14, 16, 14, 16));
+        containerCards.setBorder(BorderFactory.createEmptyBorder(18, 22, 20, 22));
         containerCards.add(coletaPanel, CARD_COLETA);
         containerCards.add(equipamentosPanel, CARD_EQUIPAMENTOS);
         containerCards.add(topologiaPanel, CARD_TOPOLOGIA);
@@ -115,49 +121,107 @@ public class TpDiscoverFrame extends JFrame {
     }
 
     private JPanel criarBarraSuperior() {
-        JPanel bar = new JPanel(new BorderLayout(12, 0));
+        JPanel bar = new JPanel(new BorderLayout(24, 0));
         bar.setBackground(SwingThemeHelper.BG_HEADER);
         bar.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, SwingThemeHelper.BORDER_SUBTLE),
-                BorderFactory.createEmptyBorder(8, 16, 8, 16)
+                BorderFactory.createEmptyBorder(0, 22, 0, 22)
         ));
 
-        JPanel esquerda = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-        esquerda.setOpaque(false);
+        // Marca
+        JLabel logo = new JLabel(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.NETWORK, Color.WHITE, 16)) {
+            @Override
+            protected void paintComponent(java.awt.Graphics g) {
+                java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+                g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setPaint(new java.awt.GradientPaint(0, 0, SwingThemeHelper.ACCENT_HOVER,
+                        getWidth(), getHeight(), SwingThemeHelper.ACCENT_PRESSED));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        logo.setPreferredSize(new Dimension(30, 30));
+        logo.setHorizontalAlignment(JLabel.CENTER);
 
-        JLabel brand = new JLabel("tpDiscover");
-        brand.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.NETWORK, SwingThemeHelper.ACCENT_PRIMARY));
-        brand.setIconTextGap(8);
-        brand.setFont(brand.getFont().deriveFont(Font.BOLD, 14.5f));
-        brand.setForeground(SwingThemeHelper.TEXT_PRIMARY);
-        brand.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 12));
-        esquerda.add(brand);
+        JLabel nome = new JLabel("tpDiscover");
+        nome.setFont(nome.getFont().deriveFont(Font.BOLD, nome.getFont().getSize2D() + 2f));
+        nome.setForeground(SwingThemeHelper.TEXT_PRIMARY);
+        JLabel sub = new JLabel("Intelbras");
+        sub.setFont(sub.getFont().deriveFont(sub.getFont().getSize2D() - 1.5f));
+        sub.setForeground(SwingThemeHelper.TEXT_MUTED);
+        JPanel nomes = new JPanel(new BorderLayout(0, -2));
+        nomes.setOpaque(false);
+        nomes.add(nome, BorderLayout.NORTH);
+        nomes.add(sub, BorderLayout.SOUTH);
 
-        navColeta.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.PLAY, SwingThemeHelper.TEXT_PRIMARY));
-        navEquipamentos.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.LIST, SwingThemeHelper.TEXT_PRIMARY));
-        navTopologia.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.NETWORK, SwingThemeHelper.TEXT_PRIMARY));
-        navAvancado.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.SLIDERS, SwingThemeHelper.TEXT_PRIMARY));
+        JPanel marca = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        marca.setOpaque(false);
+        marca.add(logo);
+        marca.add(nomes);
+        JPanel marcaWrap = new JPanel(new java.awt.GridBagLayout());
+        marcaWrap.setOpaque(false);
+        marcaWrap.add(marca);
+        bar.add(marcaWrap, BorderLayout.WEST);
+
+        // Navegação
+        JPanel nav = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+        nav.setOpaque(false);
+        Color corIconeNav = SwingThemeHelper.TEXT_MUTED;
+        navColeta.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.SEARCH, corIconeNav));
+        navEquipamentos.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.LIST, corIconeNav));
+        navTopologia.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.NETWORK, corIconeNav));
+        navAvancado.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.SLIDERS, corIconeNav));
 
         ButtonGroup group = new ButtonGroup();
         for (JToggleButton btn : new JToggleButton[]{navColeta, navEquipamentos, navTopologia, navAvancado}) {
             SwingThemeHelper.estilizarNavTab(btn);
+            btn.setIconTextGap(8);
             group.add(btn);
-            esquerda.add(btn);
+            nav.add(btn);
         }
-        bar.add(esquerda, BorderLayout.CENTER);
+        bar.add(nav, BorderLayout.CENTER);
 
-        lblStatusBadge.putClientProperty(FlatClientProperties.STYLE,
-                "arc: 999; background: #2D3139; border: 1,1,1,1,#3F4552,1,999");
-        lblStatusBadge.setOpaque(true);
-        lblStatusBadge.setForeground(SwingThemeHelper.TEXT_MUTED);
-        lblStatusBadge.setBorder(BorderFactory.createEmptyBorder(4, 12, 4, 12));
-
-        JPanel direita = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 2));
+        // Status
+        SwingThemeHelper.estilizarBadgeStatus(lblStatusBadge, SwingThemeHelper.TipoStatus.IDLE);
+        JPanel direita = new JPanel(new java.awt.GridBagLayout());
         direita.setOpaque(false);
         direita.add(lblStatusBadge);
         bar.add(direita, BorderLayout.EAST);
 
         return bar;
+    }
+
+    /** Atualiza o texto do badge do cabeçalho e escolhe a cor conforme o conteúdo/estado. */
+    private void atualizarBadge(String texto) {
+        lblStatusBadge.setText(texto);
+        String t = texto == null ? "" : texto.toLowerCase(java.util.Locale.ROOT);
+        SwingThemeHelper.TipoStatus tipo;
+        if (t.contains("erro")) {
+            tipo = SwingThemeHelper.TipoStatus.ERR;
+        } else if (t.contains("falha")) {
+            tipo = SwingThemeHelper.TipoStatus.WARN;
+        } else if (t.contains("cancelado") || t.equals("pronto")) {
+            tipo = SwingThemeHelper.TipoStatus.IDLE;
+        } else if (emExecucao() && !t.contains("gerado")) {
+            tipo = SwingThemeHelper.TipoStatus.RUN;
+        } else {
+            tipo = SwingThemeHelper.TipoStatus.OK;
+        }
+        SwingThemeHelper.estilizarBadgeStatus(lblStatusBadge, tipo);
+    }
+
+    /** Coloca um ícone de alerta colorido na aba Topologia quando o diagnóstico pede atenção. */
+    private void atualizarSinalTopologia() {
+        SwingThemeHelper.TipoStatus tipo = topologiaPanel.getTipoStatus();
+        if (tipo == SwingThemeHelper.TipoStatus.ERR || tipo == SwingThemeHelper.TipoStatus.WARN) {
+            navTopologia.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.ALERT, SwingThemeHelper.corTexto(tipo)));
+            navTopologia.setToolTipText(tipo == SwingThemeHelper.TipoStatus.ERR
+                    ? "Possível loop crítico detectado" : "A topologia tem avisos");
+        } else {
+            navTopologia.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.NETWORK, SwingThemeHelper.TEXT_MUTED));
+            navTopologia.setToolTipText(null);
+        }
     }
 
     private void registrarEventos() {
@@ -169,6 +233,8 @@ public class TpDiscoverFrame extends JFrame {
         coletaPanel.getBtnExecutarTudo().addActionListener(e -> iniciarExecucao(false, false));
         coletaPanel.getBtnApenasEscanear().addActionListener(e -> iniciarExecucao(true, false));
         coletaPanel.getBtnCancelar().addActionListener(e -> solicitarCancelamento());
+        coletaPanel.getBtnGerarPdf().addActionListener(e -> gerarPdfFinal());
+        topologiaPanel.getBtnGerarPdf().addActionListener(e -> gerarPdfFinal());
 
         equipamentosPanel.getBtnColetarSelecionados().addActionListener(e -> {
             selecionarAba(CARD_COLETA);
@@ -199,6 +265,25 @@ public class TpDiscoverFrame extends JFrame {
                         return;
                     }
                     solicitarCancelamento();
+                } else if (pdfPendente && !sessaoSnapshotsPorIp.isEmpty()) {
+                    int op = JOptionPane.showConfirmDialog(
+                            TpDiscoverFrame.this,
+                            "A coleta desta sessão ainda não virou PDF.\nDeseja gerar o relatório PDF antes de sair?",
+                            "Gerar PDF antes de sair?",
+                            JOptionPane.YES_NO_CANCEL_OPTION,
+                            JOptionPane.QUESTION_MESSAGE
+                    );
+                    if (op == JOptionPane.CANCEL_OPTION || op == JOptionPane.CLOSED_OPTION) {
+                        return;
+                    }
+                    if (op == JOptionPane.YES_OPTION) {
+                        fecharAoTerminar = true;
+                        gerarPdfFinal();
+                        if (emExecucao()) {
+                            return; // fecha automaticamente quando o PDF terminar
+                        }
+                        fecharAoTerminar = false;
+                    }
                 }
                 dispose();
             }
@@ -247,17 +332,17 @@ public class TpDiscoverFrame extends JFrame {
             } else if (modo == ModoOrigem.FAIXA_CIDR) {
                 String spec = coletaPanel.getScanCidr();
                 if (spec.isEmpty()) {
-                    exibirAviso("Informe uma faixa ou CIDR para varredura (ex.: 10.1.40.0/24).");
                     selecionarAba(CARD_COLETA);
-                    coletaPanel.getTxtScanCidr().requestFocusInWindow();
+                    SwingThemeHelper.marcarCampoComErro(coletaPanel.getTxtScanCidr());
+                    exibirAviso("Informe a faixa de IPs que deseja varrer (ex.: 10.1.40.0/24).");
                     return;
                 }
                 try {
                     NetworkScanTarget.interpretarEspecificacoes(spec);
                 } catch (IllegalArgumentException ex) {
-                    exibirAviso(ex.getMessage());
                     selecionarAba(CARD_COLETA);
-                    coletaPanel.getTxtScanCidr().requestFocusInWindow();
+                    SwingThemeHelper.marcarCampoComErro(coletaPanel.getTxtScanCidr());
+                    exibirAviso(ex.getMessage());
                     return;
                 }
                 scanSpecs.add(spec);
@@ -272,15 +357,16 @@ public class TpDiscoverFrame extends JFrame {
                         && !sessaoSnapshotsPorIp.isEmpty()
                         && tableModel.contarPorEstado(DiscoveredTargetRow.EstadoColeta.SEM_SENHA) > 0;
                 if (alvosManuais.isEmpty() && !podeRegerarComPreservados) {
-                    exibirAviso("Adicione ou marque ao menos um equipamento na aba 'Equipamentos'.");
+                    exibirAviso("Nenhum equipamento marcado. Adicione ou marque ao menos um na aba Equipamentos.");
                     selecionarAba(CARD_EQUIPAMENTOS);
                     return;
                 }
             } else {
                 if (!apenasScan && senhaPadrao.isEmpty()) {
-                    exibirAviso("Informe a senha padrão para autenticar nos equipamentos descobertos.");
                     selecionarAba(CARD_COLETA);
-                    coletaPanel.getTxtSenha().requestFocusInWindow();
+                    SwingThemeHelper.marcarCampoComErro(coletaPanel.getTxtSenha());
+                    exibirAviso("Informe a senha para acessar os equipamentos.\n"
+                            + "(Para só ver quais equipamentos existem, use 'Só procurar equipamentos'.)");
                     return;
                 }
                 alvosManuais = tableModel.extrairOverridesManuais(usuarioPadrao, senhaPadrao);
@@ -291,8 +377,8 @@ public class TpDiscoverFrame extends JFrame {
         }
 
         if (!apenasScan && usuarioPadrao.isBlank() && alvosManuais.isEmpty() && sessaoSnapshotsPorIp.isEmpty()) {
-            exibirAviso("Informe o usuário padrão (ex.: admin).");
-            coletaPanel.getTxtUsuario().requestFocusInWindow();
+            SwingThemeHelper.marcarCampoComErro(coletaPanel.getTxtUsuario());
+            exibirAviso("Informe o usuário de acesso (ex.: admin).");
             return;
         }
 
@@ -321,15 +407,59 @@ public class TpDiscoverFrame extends JFrame {
                 avancadoPanel.getGatewayMac(),
                 pastaPdf,
                 null,
-                coletaPanel.getCredenciaisAlternativas(),
+                avancadoPanel.getCredenciaisAlternativas(),
                 produtosConhecidos,
                 snapshotsPreservados,
-                semAcessoInformados
+                semAcessoInformados,
+                false // coletas/testes de acesso só atualizam a prévia; o PDF sai em "Finalizar e gerar PDF"
         );
 
+        dispararWorker(req, apenasScan ? "Preparando scan..." : "Iniciando coleta...");
+    }
+
+    /**
+     * Gera o relatório PDF uma única vez, a partir da telemetria já coletada na sessão
+     * (não reconecta nos equipamentos).
+     */
+    private void gerarPdfFinal() {
+        if (emExecucao()) return;
+        equipamentosPanel.finalizarEdicaoTabela();
+        if (sessaoSnapshotsPorIp.isEmpty()) {
+            exibirAviso("Nenhum equipamento foi coletado com sucesso ainda. Faça uma coleta antes de gerar o PDF.");
+            fecharAoTerminar = false;
+            return;
+        }
+        Path pastaPdf = coletaPanel.getPastaSaida();
+        topologiaPanel.setPastaSaidaAtual(pastaPdf);
+        topologiaPanel.limparParaNovaExecucao();
+
+        DiscoveryRequest req = new DiscoveryRequest(
+                List.of(),
+                List.of(),
+                coletaPanel.getUsuarioPadrao().isBlank() ? "admin" : coletaPanel.getUsuarioPadrao(),
+                coletaPanel.getSenhaPadrao(),
+                false,
+                false,
+                false,
+                avancadoPanel.getConcorrencia(),
+                avancadoPanel.getGatewayIp(),
+                avancadoPanel.getGatewayMac(),
+                pastaPdf,
+                null,
+                avancadoPanel.getCredenciaisAlternativas(),
+                List.copyOf(sessaoProdutosPorIp.values()),
+                List.copyOf(sessaoSnapshotsPorIp.values()),
+                tableModel.extrairEquipamentosSemAcesso(true),
+                true
+        );
+        coletaPanel.appendLog("Gerando relatório PDF final com " + sessaoSnapshotsPorIp.size() + " equipamento(s) coletado(s)...");
+        dispararWorker(req, "Gerando relatório PDF...");
+    }
+
+    private void dispararWorker(DiscoveryRequest req, String tituloInicial) {
         cancelamentoAtual = new AtomicBoolean(false);
         atualizarEstadoExecucao(true);
-        coletaPanel.prepararNovaExecucao(apenasScan ? "Preparando scan..." : "Iniciando coleta...", true);
+        coletaPanel.prepararNovaExecucao(tituloInicial, true);
 
         workerAtual = new DiscoverySwingWorker(
                 req,
@@ -337,17 +467,27 @@ public class TpDiscoverFrame extends JFrame {
                 coletaPanel,
                 topologiaPanel,
                 cancelamentoAtual,
-                lblStatusBadge::setText,
-                () -> atualizarEstadoExecucao(false),
-                res -> registrarEstadoSessao(res, apenasScan)
+                this::atualizarBadge,
+                this::aoTerminarExecucao,
+                res -> registrarEstadoSessao(res, req)
         );
         workerAtual.execute();
     }
 
-    private void registrarEstadoSessao(DiscoverySessionResult res, boolean apenasScan) {
+    private void aoTerminarExecucao() {
+        atualizarEstadoExecucao(false);
+        if (fecharAoTerminar) {
+            fecharAoTerminar = false;
+            dispose();
+        }
+    }
+
+    private void registrarEstadoSessao(DiscoverySessionResult res, DiscoveryRequest req) {
         if (res == null || res.cancelado()) {
+            fecharAoTerminar = false;
             return;
         }
+        boolean apenasScan = req.apenasScan();
         if (res.scanResult() != null) {
             for (DiscoveredProduct p : res.scanResult().produtosInteresse()) {
                 sessaoProdutosPorIp.put(p.ip(), p);
@@ -367,6 +507,20 @@ public class TpDiscoverFrame extends JFrame {
                 }
             }
             equipamentosPanel.setModoIncremental(!sessaoSnapshotsPorIp.isEmpty());
+
+            boolean pdfGerado = req.gerarArquivoRelatorio()
+                    && res.relatorio() != null
+                    && res.relatorio().arquivoGerado() != null;
+            if (req.gerarArquivoRelatorio()) {
+                pdfPendente = !pdfGerado && !sessaoSnapshotsPorIp.isEmpty();
+                if (!pdfGerado) {
+                    fecharAoTerminar = false; // falhou: mantém a janela aberta para o usuário ver o erro
+                }
+            } else {
+                pdfPendente = !sessaoSnapshotsPorIp.isEmpty();
+            }
+        } else if (res.possuiErroFatal()) {
+            fecharAoTerminar = false;
         }
     }
 
@@ -381,6 +535,16 @@ public class TpDiscoverFrame extends JFrame {
     private void atualizarEstadoExecucao(boolean executando) {
         coletaPanel.setEstadoExecucao(executando);
         equipamentosPanel.setEstadoExecucao(executando);
+        avancadoPanel.setEstadoExecucao(executando);
+        if (executando) {
+            lblStatusBadge.setText("Trabalhando...");
+            SwingThemeHelper.estilizarBadgeStatus(lblStatusBadge, SwingThemeHelper.TipoStatus.RUN);
+        } else {
+            atualizarSinalTopologia();
+        }
+        boolean podeGerar = pdfPendente && !sessaoSnapshotsPorIp.isEmpty();
+        coletaPanel.setGerarPdfDisponivel(podeGerar);
+        topologiaPanel.setGerarPdfDisponivel(podeGerar, executando);
     }
 
     private boolean emExecucao() {

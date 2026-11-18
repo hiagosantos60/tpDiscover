@@ -200,20 +200,34 @@ public class DiscoverySwingWorker extends SwingWorker<DiscoverySessionResult, Vo
                             .count();
                     boolean parcial = res.relatorio().topologiaParcial() || falhas > 0;
                     String bannerMsg;
-                    if (criticos > 0) {
+                    java.nio.file.Path arquivo = res.relatorio().arquivoGerado();
+                    if (request.gerarArquivoRelatorio()) {
+                        bannerMsg = arquivo != null
+                                ? "PDF gerado: " + arquivo.getFileName()
+                                        + (criticos > 0 ? " — atenção: " + criticos + " loop(s) crítico(s)!" : "")
+                                : "Não foi possível gerar o arquivo do relatório. Veja o log abaixo.";
+                        coletaPanel.definirStatusFinal(bannerMsg, 100, arquivo != null ? "PDF gerado" : "Erro no PDF");
+                        notificarBadge(arquivo != null ? "PDF gerado" : "Erro no PDF");
+                    } else if (criticos > 0) {
                         bannerMsg = "Atenção: " + criticos + " loop(s) crítico(s) detectado(s)! " + msg;
                     } else if (parcial) {
                         int qtdPend = Math.max(falhas, res.relatorio().pendenciasAcesso().size());
-                        bannerMsg = "Topologia parcial (" + qtdPend + " equipamento(s) sem acesso CLI ou falha de login) — ajuste as senhas em Equipamentos.";
+                        bannerMsg = "Topologia parcial: " + qtdPend + " equipamento(s) sem acesso. Corrija as senhas e recolete, ou gere o PDF assim mesmo.";
                     } else {
-                        bannerMsg = "Topologia e PDF prontos! " + res.relatorio().enlaces().size() + " enlace(s) mapeado(s).";
+                        bannerMsg = "Topologia atualizada: " + res.relatorio().enlaces().size()
+                                + " enlace(s). Terminou os testes? Clique em 'Finalizar e gerar PDF'.";
                     }
+                    if (!request.gerarArquivoRelatorio()) {
+                        coletaPanel.appendLog("Prévia da topologia atualizada (nenhum PDF gravado). "
+                                + "Use 'Finalizar e gerar PDF' quando concluir os testes de acesso.");
+                    }
+                    boolean finalPdf = request.gerarArquivoRelatorio();
                     coletaPanel.exibirResumoConclusao(
                             bannerMsg,
-                            res.relatorio().arquivoGerado(),
+                            arquivo,
                             criticos > 0,
-                            parcial,
-                            parcial || falhas > 0);
+                            !finalPdf && parcial,
+                            !finalPdf && (parcial || falhas > 0));
                 } else if (okConsolidado == 0) {
                     coletaPanel.appendLog("Nenhum equipamento coletado com sucesso — confira usuários/senhas na aba Equipamentos.");
                     if (falhas > 0) {
