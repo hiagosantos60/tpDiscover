@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+import tpDiscover.intelbras.util.Compat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -63,7 +64,7 @@ class PromptETerminadorTest {
 
         ConnectionConfig cfg = new ConnectionConfig("10.1.40.84", "admin", "admin", 22, 23, 5_000);
         TerminalStreamHelper.entrarModoPrivilegiado(in, out, cfg, "Telnet", "\r\n",
-                "SG-5204-MR-L2+> ", List.of("admin"), null);
+                "SG-5204-MR-L2+> ", Compat.listOf("admin"), null);
         sim.join();
 
         // "enable\r\n" em 1 write + "admin\r\n" em 7 writes de 1 byte
@@ -87,7 +88,7 @@ class PromptETerminadorTest {
         }
 
         synchronized String texto() {
-            return buf.toString(StandardCharsets.US_ASCII);
+            return new String(buf.toByteArray(), StandardCharsets.US_ASCII);
         }
     }
 }

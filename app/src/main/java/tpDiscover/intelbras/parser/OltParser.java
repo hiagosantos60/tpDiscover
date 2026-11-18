@@ -14,6 +14,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Parser para a CLI das OLTs Intelbras:
  *  - Linha EPON / GPON Cassete (4840E, 4880E, G16, G08)
@@ -54,7 +55,7 @@ public class OltParser {
      * Detecta se a saída de "show version" / "show system" pertence a uma OLT Intelbras (4840E, G16, G08, etc.).
      */
     public boolean ehDispositivoOlt(String rawOutput) {
-        if (rawOutput == null || rawOutput.isBlank()) {
+        if (rawOutput == null || Compat.isBlank(rawOutput)) {
             return false;
         }
         String lower = rawOutput.toLowerCase();
@@ -75,7 +76,7 @@ public class OltParser {
 
     /** Detecta banner/prompt de OLTs FiberHome/Intelbras (AN6000, AN6001-G16, AN5516-04). */
     public boolean ehBannerOltAn(String banner) {
-        if (banner == null || banner.isBlank()) return false;
+        if (banner == null || Compat.isBlank(banner)) return false;
         String lower = banner.toLowerCase();
         return lower.contains("zzzzzzzzzzzz")
                 || lower.contains("an6000")
@@ -87,7 +88,7 @@ public class OltParser {
 
     /** Detecta banner/prompt de OLTs 8820I / 8820G. */
     public boolean ehBannerOlt8820(String banner) {
-        if (banner == null || banner.isBlank()) return false;
+        if (banner == null || Compat.isBlank(banner)) return false;
         String lower = banner.toLowerCase();
         return lower.contains("olt 8820")
                 || lower.contains("8820i")
@@ -101,7 +102,7 @@ public class OltParser {
      */
     public List<MacEntry> parseMacAddressTable(String switchId, String rawOutput) {
         List<MacEntry> entries = new ArrayList<>();
-        if (rawOutput == null || rawOutput.isBlank()) {
+        if (rawOutput == null || Compat.isBlank(rawOutput)) {
             return entries;
         }
 
@@ -109,7 +110,7 @@ public class OltParser {
         String limpo = rawOutput.replaceAll("(?i)[.]{2,}\\s*press\\s+enter\\s+to\\s+next\\s+line[^.\\r\\n]*[.]{2,}", "\n");
 
         for (String line : limpo.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
 
             Matcher m1 = MAC_FIRST_LINE.matcher(trimmed);
@@ -166,12 +167,12 @@ public class OltParser {
      * Extrai o IP do gateway padrão (0.0.0.0/0) da saída de "show ip route" na OLT.
      */
     public Optional<String> parseDefaultGatewayIp(String rawOutput) {
-        if (rawOutput == null || rawOutput.isBlank()) {
+        if (rawOutput == null || Compat.isBlank(rawOutput)) {
             return Optional.empty();
         }
         Pattern ipv4 = Pattern.compile("\\b" + IPV4_REGEX + "\\b");
         for (String line : rawOutput.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
             if (DEFAULT_ROUTE_LINE.matcher(trimmed).find()) {
                 Matcher mIp = ipv4.matcher(trimmed);
@@ -191,13 +192,13 @@ public class OltParser {
      */
     public List<ArpEntry> parseArpTable(String rawOutput) {
         List<ArpEntry> entries = new ArrayList<>();
-        if (rawOutput == null || rawOutput.isBlank()) {
+        if (rawOutput == null || Compat.isBlank(rawOutput)) {
             return entries;
         }
         Pattern macFinder = Pattern.compile(MAC_ANY_REGEX);
         Pattern ipFinder = Pattern.compile("^\\s*(?:[a-z]+\\s+)?" + IPV4_REGEX + "\\b");
         for (String line : rawOutput.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
 
             Matcher mIp = ipFinder.matcher(trimmed);
@@ -225,7 +226,7 @@ public class OltParser {
     }
 
     private static String extrairPortaFisicaOlt(String token) {
-        if (token == null || token.isBlank()) return null;
+        if (token == null || Compat.isBlank(token)) return null;
         String t = token.trim().replaceFirst("[,;]$", "");
         String lower = t.toLowerCase();
         if (ehPortaInternaCpu(t) || lower.startsWith("vlan") || t.equals("-") || t.startsWith("--")) {
@@ -303,13 +304,13 @@ public class OltParser {
             }
         }
 
-        if (deviceName == null || deviceName.isBlank()) {
+        if (deviceName == null || Compat.isBlank(deviceName)) {
             deviceName = "OLT-" + ip;
         }
-        if (productId == null || productId.isBlank()) {
+        if (productId == null || Compat.isBlank(productId)) {
             productId = "OLT Intelbras";
         }
-        if (mac != null && mac.isBlank()) {
+        if (mac != null && Compat.isBlank(mac)) {
             mac = null;
         }
 
@@ -329,14 +330,14 @@ public class OltParser {
      * Retorna lista vazia caso o equipamento não suporte LLDP ou esteja desabilitado.
      */
     public static List<LldpNeighbor> parseLldpNeighbors(String switchId, String rawOutput) {
-        if (rawOutput == null || rawOutput.isBlank()) {
-            return List.of();
+        if (rawOutput == null || Compat.isBlank(rawOutput)) {
+            return Compat.listOf();
         }
         String lower = rawOutput.toLowerCase();
         if (lower.contains("not enabled") || lower.contains("invalid input")
                 || lower.contains("unknown command") || lower.contains("unrecognized command")
                 || lower.contains("protocol is disable")) {
-            return List.of();
+            return Compat.listOf();
         }
 
         List<LldpNeighbor> parsed = parseLldpInterfaceBdcom(switchId, rawOutput);
@@ -351,12 +352,12 @@ public class OltParser {
             parsed = s30.parseLldpS2050Lite(switchId, rawOutput);
         }
         if (parsed.isEmpty()) {
-            return List.of();
+            return Compat.listOf();
         }
 
         List<LldpNeighbor> normalizados = new ArrayList<>(parsed.size());
         for (LldpNeighbor n : parsed) {
-            String portaLocal = n.localPort() != null && !n.localPort().isBlank()
+            String portaLocal = n.localPort() != null && !Compat.isBlank(n.localPort())
                     ? normalizarPorta(n.localPort())
                     : "";
             normalizados.add(new LldpNeighbor(
@@ -413,7 +414,7 @@ public class OltParser {
                 continue;
             }
             Matcher mKv = keyVal.matcher(line);
-            if (!mKv.matches() || portaAtual.isBlank()) continue;
+            if (!mKv.matches() || Compat.isBlank(portaAtual)) continue;
             String k = mKv.group(1).trim().toLowerCase();
             String v = mKv.group(2).trim();
             if (k.startsWith("chassis id")) {
@@ -441,10 +442,10 @@ public class OltParser {
     private static void adicionarSeValido(
             List<LldpNeighbor> out, String switchId, String portaLocal, String chassisId,
             String portId, String portDesc, String sysName, String sysDesc, String mgmtIp, String capabilitiesRaw) {
-        if (portaLocal.isBlank() || (chassisId.isBlank() && sysName.isBlank())) return;
+        if (Compat.isBlank(portaLocal) || (Compat.isBlank(chassisId) && Compat.isBlank(sysName))) return;
         String chassisMac = chassisId.matches(MAC_ANY_REGEX) ? Serie3000Parser.formatarMacPadrao(chassisId) : null;
         Set<String> caps = new LinkedHashSet<>();
-        if (capabilitiesRaw != null && !capabilitiesRaw.isBlank()) {
+        if (capabilitiesRaw != null && !Compat.isBlank(capabilitiesRaw)) {
             for (String token : capabilitiesRaw.split("[,\\s]+")) {
                 String t = token.trim();
                 if (!t.isEmpty()) caps.add(t);
@@ -468,7 +469,7 @@ public class OltParser {
      */
     public List<StpPortState> parseSpanningTree(String switchId, String rawOutput) {
         List<StpPortState> estados = new ArrayList<>();
-        if (rawOutput == null || rawOutput.isBlank()) return estados;
+        if (rawOutput == null || Compat.isBlank(rawOutput)) return estados;
 
         String lower = rawOutput.toLowerCase();
         if (lower.contains("protocol status :disabled")
@@ -488,7 +489,7 @@ public class OltParser {
 
         Pattern stpBrief = Pattern.compile("(?i)^\\s*([a-z]+\\d+(?:/\\d+){0,2})\\s+(enabled|disabled)\\s+\\d+\\s+\\d+\\s+(\\S+)\\s+(\\S+)\\s*$");
         for (String line : rawOutput.split("\\R")) {
-            Matcher m = stpBrief.matcher(line.strip());
+            Matcher m = stpBrief.matcher(Compat.strip(line));
             if (!m.matches()) continue;
             boolean hab = !m.group(2).equalsIgnoreCase("disabled");
             String roleRaw = m.group(3).toUpperCase().replace("PORT", "");
@@ -502,7 +503,7 @@ public class OltParser {
     /** Extrai slots ativos de "show card" nas OLTs AN5516/AN6000/AN6001. */
     public List<Integer> extrairSlotsAtivosAn(String showCardOut) {
         List<Integer> slots = new ArrayList<>();
-        if (showCardOut == null || showCardOut.isBlank()) return slots;
+        if (showCardOut == null || Compat.isBlank(showCardOut)) return slots;
         Pattern linhaSlot = Pattern.compile("^\\s*(\\d{1,2})\\s+\\S+.*$");
         for (String line : showCardOut.split("\\R")) {
             Matcher m = linhaSlot.matcher(line);
@@ -524,7 +525,7 @@ public class OltParser {
         if (mModelo.find()) {
             productId = "OLT " + mModelo.group(1).toUpperCase();
         }
-        if (productId == null || productId.isBlank()) {
+        if (productId == null || Compat.isBlank(productId)) {
             productId = "OLT AN";
         }
 
@@ -538,7 +539,7 @@ public class OltParser {
                 }
             }
         }
-        if (deviceName == null || deviceName.isBlank()) {
+        if (deviceName == null || Compat.isBlank(deviceName)) {
             deviceName = productId.replace(' ', '-');
         }
 
@@ -547,14 +548,14 @@ public class OltParser {
     }
 
     private static String extrairMacManageVlanAn(String ip, String showManageVlanOut) {
-        if (showManageVlanOut == null || showManageVlanOut.isBlank()) return null;
+        if (showManageVlanOut == null || Compat.isBlank(showManageVlanOut)) return null;
         Pattern macProp = Pattern.compile("(?i)ethernet\\s+address\\s*[:=]\\s*" + MAC_ANY_REGEX);
         Pattern inetProp = Pattern.compile("(?i)\\binet\\s*[:=]\\s*" + IPV4_REGEX);
 
         String primeiroMac = null;
         String macBlocoAtual = null;
         for (String line : showManageVlanOut.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) {
                 macBlocoAtual = null;
                 continue;
@@ -578,7 +579,7 @@ public class OltParser {
     /** Faz o parse da saída "show mac-address all" (AN6000/AN6001) e "show fdb slot" (AN5516). */
     public List<MacEntry> parseMacTableAn(String switchId, String rawOutput) {
         List<MacEntry> entries = new ArrayList<>();
-        if (rawOutput == null || rawOutput.isBlank()) return entries;
+        if (rawOutput == null || Compat.isBlank(rawOutput)) return entries;
 
         // Ex AN6000/AN6001 UPLINK/PON: "4  5  --  00:1a:3f:a0:03:32  1000" ou "19  5  --  DC-9F-DB-EE-63-51  1000"
         Pattern linhaSlotPortOnu = Pattern.compile(
@@ -591,7 +592,7 @@ public class OltParser {
                 "^\\s*(\\d{1,2}/\\d{1,2})\\s+" + MAC_ANY_REGEX + "\\s+(\\d{1,4})(?:\\s.*)?$");
 
         for (String line : rawOutput.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
 
             Matcher m1 = linhaSlotPortOnu.matcher(trimmed);
@@ -623,7 +624,7 @@ public class OltParser {
     /** Faz o parse da saída "show arp-table all" nas OLTs AN6000 / AN6001. */
     public List<ArpEntry> parseArpTableAn(String rawOutput) {
         List<ArpEntry> entries = new ArrayList<>();
-        if (rawOutput == null || rawOutput.isBlank()) return entries;
+        if (rawOutput == null || Compat.isBlank(rawOutput)) return entries;
 
         Pattern linhaIpMac = Pattern.compile("(?i)^\\s*" + IPV4_REGEX + "\\s+MAC\\s*\\(\\s*" + MAC_ANY_REGEX + "\\s*\\).*");
         Pattern logPortProp = Pattern.compile("(?i)\\blog_port\\s*[:=]\\s*([^,\\s]+)");
@@ -633,7 +634,7 @@ public class OltParser {
         String pendingPorta = null;
 
         for (String line : rawOutput.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) {
                 if (pendingIp != null) {
                     entries.add(new ArpEntry(pendingIp, pendingMac, pendingPorta));
@@ -671,14 +672,14 @@ public class OltParser {
 
     /** Extrai gateway padrão de "show ipv4 route" / "show static-route running-config" priorizando o próximo salto na sub-rede ARP local. */
     public Optional<String> parseDefaultGatewayAn(String rawOutput, String mgmtIp, List<ArpEntry> entradasArp) {
-        if (rawOutput == null || rawOutput.isBlank()) return Optional.empty();
+        if (rawOutput == null || Compat.isBlank(rawOutput)) return Optional.empty();
         Set<String> candidatos = new LinkedHashSet<>();
         Pattern viaPattern = Pattern.compile("(?i)\\b(?:via|0\\.0\\.0\\.0\\s+0\\.0\\.0\\.0)\\s+" + IPV4_REGEX + "\\b");
         Pattern outraRotaPrefixo = Pattern.compile("^\\s*(?:[A-Za-z*]+\\s+)?" + IPV4_REGEX + "/\\d+");
 
         boolean emRotaPadrao = false;
         for (String line : rawOutput.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) {
                 emRotaPadrao = false;
                 continue;
@@ -743,8 +744,8 @@ public class OltParser {
                 }
             }
         }
-        if (deviceName == null || deviceName.isBlank()) {
-            if (hostnamePadrao != null && !hostnamePadrao.isBlank() && !"OLT".equalsIgnoreCase(hostnamePadrao)
+        if (deviceName == null || Compat.isBlank(deviceName)) {
+            if (hostnamePadrao != null && !Compat.isBlank(hostnamePadrao) && !"OLT".equalsIgnoreCase(hostnamePadrao)
                     && !"intelbras-olt".equalsIgnoreCase(hostnamePadrao)) {
                 deviceName = hostnamePadrao;
             } else {
@@ -753,7 +754,7 @@ public class OltParser {
         }
 
         String mac = null;
-        if (interfaceOut != null && !interfaceOut.isBlank()) {
+        if (interfaceOut != null && !Compat.isBlank(interfaceOut)) {
             Pattern pMac = Pattern.compile(MAC_ANY_REGEX);
             String fallbackMac = null;
             for (String line : interfaceOut.split("\\R")) {
@@ -775,12 +776,12 @@ public class OltParser {
     /** Faz o parse da saída "bridge show mac all" das OLTs 8820I / 8820G. */
     public List<MacEntry> parseMacTable8820(String switchId, String rawOutput) {
         List<MacEntry> entries = new ArrayList<>();
-        if (rawOutput == null || rawOutput.isBlank()) return entries;
+        if (rawOutput == null || Compat.isBlank(rawOutput)) return entries;
 
         Pattern mac8820 = Pattern.compile(
                 "(?i)^.*?" + MAC_ANY_REGEX + "\\s+(x?eth|gpon|epon|pon|ge|xe)\\s*(\\d+(?:/\\d+)?)\\s+vlan\\s+(\\d{1,4})(?:\\s+(static|dynamic))?.*$");
         for (String line : rawOutput.split("[\\r\\n]+")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty() || trimmed.startsWith("Loading")) continue;
             Matcher m = mac8820.matcher(trimmed);
             if (!m.matches()) continue;

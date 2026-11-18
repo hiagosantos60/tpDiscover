@@ -31,6 +31,7 @@ import java.awt.RenderingHints;
 import java.util.ArrayList;
 import java.util.List;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Aba "Equipamentos": lista dos alvos descobertos/adicionados, com credenciais individuais,
  * barra de ferramentas agrupada em menus e resumo dos estados no rodapé.
@@ -282,7 +283,7 @@ public class EquipamentosViewPanel extends JPanel {
             if (res != JOptionPane.OK_OPTION) return;
             try {
                 SwitchTarget alvo = TargetTableModel.parsearEnderecoTarget(fIp.getText(), fUser.getText(), new String(fPass.getPassword()));
-                tableModel.mesclarAlvosImportados(List.of(alvo), "Manual");
+                tableModel.mesclarAlvosImportados(Compat.listOf(alvo), "Manual");
                 return;
             } catch (IllegalArgumentException ex) {
                 JOptionPane.showMessageDialog(this, ex.getMessage(), "Verifique o endereço", JOptionPane.WARNING_MESSAGE);
@@ -371,7 +372,7 @@ public class EquipamentosViewPanel extends JPanel {
         }
         String novoUser = fUser.getText().trim();
         String novaPass = new String(fPass.getPassword());
-        if (novoUser.isBlank() && novaPass.isEmpty()) {
+        if (Compat.isBlank(novoUser) && novaPass.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Informe um usuário ou uma senha para aplicar.", "Atenção", JOptionPane.WARNING_MESSAGE);
             return;
         }

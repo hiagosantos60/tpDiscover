@@ -290,12 +290,15 @@ public class TelnetSwitchClient implements SwitchClient {
     }
 
     private String mensagemAmigavelIo(IOException e) {
-        return switch (classificarErroIo(e)) {
-            case TIMEOUT -> "Timeout na conexão Telnet com " + config.ip();
-            case INALCANCAVEL -> "Não foi possível alcançar " + config.ip() + ":" + config.portaTelnet()
+        switch (classificarErroIo(e)) {
+            case TIMEOUT:
+                return "Timeout na conexão Telnet com " + config.ip();
+            case INALCANCAVEL:
+                return "Não foi possível alcançar " + config.ip() + ":" + config.portaTelnet()
                     + " - Telnet pode estar desabilitado no equipamento, ou IP/rede incorretos";
-            default -> "Erro de rede no Telnet com " + config.ip() + ": " + e.getMessage();
-        };
+            default:
+                return "Erro de rede no Telnet com " + config.ip() + ": " + e.getMessage();
+        }
     }
 
     @Override
@@ -408,7 +411,7 @@ public class TelnetSwitchClient implements SwitchClient {
         }
 
         void iniciar() {
-            Thread.startVirtualThread(() -> {
+            Thread pump = new Thread(() -> {
                 byte[] temp = new byte[2048];
                 try {
                     while (!stopped) {
@@ -437,7 +440,9 @@ public class TelnetSwitchClient implements SwitchClient {
                         lock.notifyAll();
                     }
                 }
-            });
+            }, "telnet-pump");
+            pump.setDaemon(true);
+            pump.start();
         }
 
         void parar() {
@@ -594,7 +599,7 @@ public class TelnetSwitchClient implements SwitchClient {
 
         private int processarByte(int val) throws IOException {
             switch (state) {
-                case DATA -> {
+                case DATA: {
                     if (val == IAC) {
                         state = State.IAC;
                         return -1;
@@ -604,25 +609,36 @@ public class TelnetSwitchClient implements SwitchClient {
                     }
                     return val;
                 }
-                case IAC -> {
+                case IAC: {
                     switch (val) {
-                        case WILL -> state = State.WILL;
-                        case WONT -> state = State.WONT;
-                        case DO -> state = State.DO;
-                        case DONT -> state = State.DONT;
-                        case SB -> {
+                        case WILL:
+                            state = State.WILL;
+                            break;
+                        case WONT:
+                            state = State.WONT;
+                            break;
+                        case DO:
+                            state = State.DO;
+                            break;
+                        case DONT:
+                            state = State.DONT;
+                            break;
+                        case SB: {
                             subOpt.reset();
                             state = State.SB;
+                            break;
                         }
-                        case IAC -> {
+                        case IAC: {
                             state = State.DATA;
                             return IAC;
                         }
-                        default -> state = State.DATA;
+                        default:
+                            state = State.DATA;
+                            break;
                     }
                     return -1;
                 }
-                case WILL -> {
+                case WILL: {
                     registrarIac("WILL:" + val);
                     if (val == OPT_ECHO) {
                         serverWillEcho = true;
@@ -635,12 +651,12 @@ public class TelnetSwitchClient implements SwitchClient {
                     state = State.DATA;
                     return -1;
                 }
-                case WONT -> {
+                case WONT: {
                     registrarIac("WONT:" + val);
                     state = State.DATA;
                     return -1;
                 }
-                case DO -> {
+                case DO: {
                     registrarIac("DO:" + val);
                     if (val == OPT_SGA || val == OPT_TTYPE) {
                         enviarIacOnce(willSent, WILL, val);
@@ -650,12 +666,12 @@ public class TelnetSwitchClient implements SwitchClient {
                     state = State.DATA;
                     return -1;
                 }
-                case DONT -> {
+                case DONT: {
                     registrarIac("DONT:" + val);
                     state = State.DATA;
                     return -1;
                 }
-                case SB -> {
+                case SB: {
                     if (val == IAC) {
                         state = State.SB_IAC;
                     } else if (subOpt.size() < 64) {
@@ -663,7 +679,7 @@ public class TelnetSwitchClient implements SwitchClient {
                     }
                     return -1;
                 }
-                case SB_IAC -> {
+                case SB_IAC: {
                     if (val == SE) {
                         byte[] sb = subOpt.toByteArray();
                         if (sb.length >= 2 && (sb[0] & 0xFF) == OPT_TTYPE && (sb[1] & 0xFF) == 1) {

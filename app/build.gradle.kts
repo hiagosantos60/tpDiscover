@@ -17,6 +17,8 @@ repositories {
 
 dependencies {
     implementation("com.github.mwiede:jsch:0.2.20")
+    // No Java 8 o JDK não tem Ed25519/X25519: o JSch usa o Bouncy Castle para ssh-ed25519 e curve25519
+    runtimeOnly("org.bouncycastle:bcprov-jdk18on:1.78.1")
     implementation("commons-net:commons-net:3.11.1")
     implementation("com.formdev:flatlaf:3.8")
     
@@ -25,32 +27,110 @@ dependencies {
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
+    // Servidor SSH embutido para validar o cliente SSH (JSch) no Java 8 em testes
+    testImplementation("org.apache.sshd:sshd-core:2.12.1")
+    testImplementation("net.i2p.crypto:eddsa:0.3.0")
+    testRuntimeOnly("org.slf4j:slf4j-nop:1.7.36")
+
     // This dependency is used by the application.
     implementation(libs.guava)
 }
 
-// Apply a specific Java toolchain to ease working on different environments.
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
-    }
-}
-
 application {
-    // Define the main class for the application.
     mainClass = "tpDiscover.intelbras.App"
 }
 
-tasks.named<Test>("test") {
-    // Use JUnit Platform for unit tests.
-    useJUnitPlatform()
-    jvmArgs("-Dfile.encoding=UTF-8", "-Dsun.stdout.encoding=UTF-8", "-Dsun.stderr.encoding=UTF-8")
-}
+// ---------------------------------------------------------------------------------------------
+// Alvo único: Java 8 (Windows 7, 8, 10 e 11 com JRE 8).
+//
+// - Compilação: qualquer JDK 17+ que rode o Gradle, com --release 8 (bytecode e API do Java 8;
+//   usar um método do Java 9+ quebra a compilação).
+// - Testes e "run": sempre num runtime Java 8 real. Informe -Pjava8Home=... ou JAVA8_HOME, ou
+//   deixe o build encontrar um JRE/JDK 8 instalado nas pastas padrão do Windows.
+// ---------------------------------------------------------------------------------------------
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
+    options.release = 8
+    options.compilerArgs.add("-Xlint:-options")
+}
+
+fun ehJava8(dir: File): Boolean {
+    val release = File(dir, "release")
+    val exe = File(dir, "bin/java.exe").takeIf { it.exists() } ?: File(dir, "bin/java")
+    if (!exe.exists()) return false
+    if (release.exists()) return release.readText().contains("JAVA_VERSION=\"1.8")
+    return dir.name.contains("1.8") || dir.name.matches(Regex(".*(jdk|jre)-?8.*"))
+}
+
+fun localizarJava8(): String? {
+    val informado = providers.gradleProperty("java8Home").orNull ?: providers.environmentVariable("JAVA8_HOME").orNull
+    if (informado != null) return informado
+    val raizes = listOf(
+        "C:/Program Files/Java", "C:/Program Files (x86)/Java", "C:/Program Files/Eclipse Adoptium",
+        "C:/Program Files/Zulu", "C:/Program Files/Amazon Corretto", "C:/Program Files/Microsoft"
+    )
+    return raizes.map(::File).filter { it.isDirectory }
+        .flatMap { (it.listFiles() ?: emptyArray()).toList() }
+        .filter { it.isDirectory && ehJava8(it) }
+        .sortedByDescending { it.name }
+        .firstOrNull()?.invariantSeparatorsPath
+}
+
+val java8Home: String? = localizarJava8()
+val extensaoExe = if (System.getProperty("os.name").lowercase().contains("win")) ".exe" else ""
+
+tasks.named<Test>("test") {
+    useJUnitPlatform()
+    jvmArgs("-Dfile.encoding=UTF-8")
+    val home = java8Home
+    if (home != null) {
+        executable = "$home/bin/java$extensaoExe"
+        doFirst { logger.lifecycle("Testes no runtime Java 8: $home") }
+    } else {
+        doFirst {
+            throw GradleException(
+                "Java 8 não encontrado. Os testes rodam apenas no Java 8: instale um JRE/JDK 8 " +
+                    "ou informe -Pjava8Home=<pasta> (ou a variável JAVA8_HOME)."
+            )
+        }
+    }
 }
 
 tasks.withType<JavaExec> {
-    jvmArgs("-Dfile.encoding=UTF-8", "-Dsun.stdout.encoding=UTF-8", "-Dsun.stderr.encoding=UTF-8")
+    jvmArgs("-Dfile.encoding=UTF-8")
+    val home = java8Home
+    if (home != null) setExecutable("$home/bin/java$extensaoExe")
+}
+
+// JAR único (aplicativo + dependências) para distribuir: java -jar tpDiscover.jar
+val jarCompleto by tasks.registering(Jar::class) {
+    group = "distribution"
+    description = "Gera build/distribuicao/tpDiscover.jar com todas as dependências (Java 8)."
+    archiveFileName.set("tpDiscover.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("distribuicao"))
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes(
+            "Main-Class" to "tpDiscover.intelbras.App",
+            "Implementation-Title" to "tpDiscover",
+            "Created-By" to "Gradle (--release 8)"
+        )
+    }
+    from(sourceSets.main.get().output)
+    val runtime = configurations.runtimeClasspath
+    dependsOn(runtime)
+    from({ runtime.get().filter { it.name.endsWith(".jar") }.map { zipTree(it) } }) {
+        // assinaturas de jars (ex.: Bouncy Castle) não valem no jar combinado; versões 9+ não são usadas no Java 8
+        exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/*.EC",
+            "META-INF/MANIFEST.MF", "META-INF/versions/**", "module-info.class", "META-INF/INDEX.LIST")
+    }
+}
+
+val distribuicaoWindows by tasks.registering(Copy::class) {
+    group = "distribution"
+    description = "Monta build/distribuicao com tpDiscover.jar e o atalho tpDiscover.bat."
+    dependsOn(jarCompleto)
+    from("src/distribuicao")
+    into(layout.buildDirectory.dir("distribuicao"))
 }

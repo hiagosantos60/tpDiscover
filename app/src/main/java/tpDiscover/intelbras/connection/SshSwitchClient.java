@@ -182,13 +182,19 @@ public class SshSwitchClient implements SwitchClient {
     }
 
     private String mensagemAmigavel(JSchException e) {
-        return switch (classificarErroJsch(e)) {
-            case FALHA_AUTENTICACAO -> "Usuário ou senha incorretos para " + config.ip() + " (SSH)";
-            case TIMEOUT -> "Timeout ao conectar em " + config.ip() + " - verifique se o IP está acessível";
-            case INALCANCAVEL -> "Não foi possível alcançar " + config.ip() + ":" + config.portaSsh()
+        switch (classificarErroJsch(e)) {
+            case FALHA_AUTENTICACAO:
+                return "Usuário ou senha incorretos para " + config.ip() + " (SSH)";
+            case TIMEOUT:
+                return "Timeout ao conectar em " + config.ip() + " - verifique se o IP está acessível";
+            case INALCANCAVEL:
+                return "Não foi possível alcançar " + config.ip() + ":" + config.portaSsh()
                     + " - SSH pode estar desabilitado no equipamento, ou IP/rede incorretos";
-            case ERRO_PROTOCOLO -> "Falha SSH ao conectar em " + config.ip() + ": " + e.getMessage();
-        };
+            case ERRO_PROTOCOLO:
+                return "Falha SSH ao conectar em " + config.ip() + ": " + e.getMessage();
+            default:
+                throw new IllegalStateException("Valor inesperado: " + (classificarErroJsch(e)));
+        }
     }
 
     @Override

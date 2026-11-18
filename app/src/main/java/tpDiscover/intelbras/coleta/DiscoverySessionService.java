@@ -20,6 +20,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import java.nio.file.Paths;
+import java.util.stream.Collectors;
+import tpDiscover.intelbras.util.Compat;
 /**
  * Orquestra uma sessão completa de descoberta, coleta paralela somente-leitura,
  * correlação de topologia, detecção de loops e geração do relatório PDF.
@@ -28,38 +31,157 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class DiscoverySessionService {
 
-    public record DiscoveryRequest(
-            List<String> scanSpecs,
-            List<SwitchTarget> alvosManuais,
-            String usuarioPadrao,
-            String senhaPadrao,
-            boolean apenasScan,
-            boolean expandirViaLldp,
-            boolean usarSnmp,
-            int concorrencia,
-            String gatewayIpManual,
-            String gatewayMacManual,
-            Path pastaSaidaPdf,
-            Path salvarAlvosEm,
-            List<CredencialAcesso> credenciaisAlternativas,
-            List<DiscoveredProduct> produtosConhecidosPreviamente,
-            List<ColetorEmLote.ColetaDispositivoSnapshot> snapshotsPreservados,
-            List<TopologyEngine.EquipamentoSemAcesso> equipamentosSemAcessoInformados,
-            boolean gerarArquivoRelatorio
-    ) {
-        public DiscoveryRequest {
-            scanSpecs = scanSpecs != null ? List.copyOf(scanSpecs) : List.of();
-            alvosManuais = alvosManuais != null ? List.copyOf(alvosManuais) : List.of();
+    public static final class DiscoveryRequest {
+        private final List<String> scanSpecs;
+        private final List<SwitchTarget> alvosManuais;
+        private final String usuarioPadrao;
+        private final String senhaPadrao;
+        private final boolean apenasScan;
+        private final boolean expandirViaLldp;
+        private final boolean usarSnmp;
+        private final int concorrencia;
+        private final String gatewayIpManual;
+        private final String gatewayMacManual;
+        private final Path pastaSaidaPdf;
+        private final Path salvarAlvosEm;
+        private final List<CredencialAcesso> credenciaisAlternativas;
+        private final List<DiscoveredProduct> produtosConhecidosPreviamente;
+        private final List<ColetorEmLote.ColetaDispositivoSnapshot> snapshotsPreservados;
+        private final List<TopologyEngine.EquipamentoSemAcesso> equipamentosSemAcessoInformados;
+        private final boolean gerarArquivoRelatorio;
+
+        public DiscoveryRequest(List<String> scanSpecs, List<SwitchTarget> alvosManuais, String usuarioPadrao, String senhaPadrao, boolean apenasScan, boolean expandirViaLldp, boolean usarSnmp, int concorrencia, String gatewayIpManual, String gatewayMacManual, Path pastaSaidaPdf, Path salvarAlvosEm, List<CredencialAcesso> credenciaisAlternativas, List<DiscoveredProduct> produtosConhecidosPreviamente, List<ColetorEmLote.ColetaDispositivoSnapshot> snapshotsPreservados, List<TopologyEngine.EquipamentoSemAcesso> equipamentosSemAcessoInformados, boolean gerarArquivoRelatorio) {
+            scanSpecs = scanSpecs != null ? Compat.listCopyOf(scanSpecs) : Compat.listOf();
+            alvosManuais = alvosManuais != null ? Compat.listCopyOf(alvosManuais) : Compat.listOf();
             concorrencia = Math.max(1, concorrencia);
             credenciaisAlternativas = credenciaisAlternativas != null
-                    ? List.copyOf(credenciaisAlternativas)
+                    ? Compat.listCopyOf(credenciaisAlternativas)
                     : CredencialAcesso.presetsPadrao();
             produtosConhecidosPreviamente = produtosConhecidosPreviamente != null
-                    ? List.copyOf(produtosConhecidosPreviamente) : List.of();
+                    ? Compat.listCopyOf(produtosConhecidosPreviamente) : Compat.listOf();
             snapshotsPreservados = snapshotsPreservados != null
-                    ? List.copyOf(snapshotsPreservados) : List.of();
+                    ? Compat.listCopyOf(snapshotsPreservados) : Compat.listOf();
             equipamentosSemAcessoInformados = equipamentosSemAcessoInformados != null
-                    ? List.copyOf(equipamentosSemAcessoInformados) : List.of();
+                    ? Compat.listCopyOf(equipamentosSemAcessoInformados) : Compat.listOf();
+            this.scanSpecs = scanSpecs;
+            this.alvosManuais = alvosManuais;
+            this.usuarioPadrao = usuarioPadrao;
+            this.senhaPadrao = senhaPadrao;
+            this.apenasScan = apenasScan;
+            this.expandirViaLldp = expandirViaLldp;
+            this.usarSnmp = usarSnmp;
+            this.concorrencia = concorrencia;
+            this.gatewayIpManual = gatewayIpManual;
+            this.gatewayMacManual = gatewayMacManual;
+            this.pastaSaidaPdf = pastaSaidaPdf;
+            this.salvarAlvosEm = salvarAlvosEm;
+            this.credenciaisAlternativas = credenciaisAlternativas;
+            this.produtosConhecidosPreviamente = produtosConhecidosPreviamente;
+            this.snapshotsPreservados = snapshotsPreservados;
+            this.equipamentosSemAcessoInformados = equipamentosSemAcessoInformados;
+            this.gerarArquivoRelatorio = gerarArquivoRelatorio;
+        }
+
+        public List<String> scanSpecs() {
+            return scanSpecs;
+        }
+
+        public List<SwitchTarget> alvosManuais() {
+            return alvosManuais;
+        }
+
+        public String usuarioPadrao() {
+            return usuarioPadrao;
+        }
+
+        public String senhaPadrao() {
+            return senhaPadrao;
+        }
+
+        public boolean apenasScan() {
+            return apenasScan;
+        }
+
+        public boolean expandirViaLldp() {
+            return expandirViaLldp;
+        }
+
+        public boolean usarSnmp() {
+            return usarSnmp;
+        }
+
+        public int concorrencia() {
+            return concorrencia;
+        }
+
+        public String gatewayIpManual() {
+            return gatewayIpManual;
+        }
+
+        public String gatewayMacManual() {
+            return gatewayMacManual;
+        }
+
+        public Path pastaSaidaPdf() {
+            return pastaSaidaPdf;
+        }
+
+        public Path salvarAlvosEm() {
+            return salvarAlvosEm;
+        }
+
+        public List<CredencialAcesso> credenciaisAlternativas() {
+            return credenciaisAlternativas;
+        }
+
+        public List<DiscoveredProduct> produtosConhecidosPreviamente() {
+            return produtosConhecidosPreviamente;
+        }
+
+        public List<ColetorEmLote.ColetaDispositivoSnapshot> snapshotsPreservados() {
+            return snapshotsPreservados;
+        }
+
+        public List<TopologyEngine.EquipamentoSemAcesso> equipamentosSemAcessoInformados() {
+            return equipamentosSemAcessoInformados;
+        }
+
+        public boolean gerarArquivoRelatorio() {
+            return gerarArquivoRelatorio;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof DiscoveryRequest)) return false;
+            DiscoveryRequest o = (DiscoveryRequest) obj;
+            return java.util.Objects.equals(scanSpecs, o.scanSpecs)
+                    && java.util.Objects.equals(alvosManuais, o.alvosManuais)
+                    && java.util.Objects.equals(usuarioPadrao, o.usuarioPadrao)
+                    && java.util.Objects.equals(senhaPadrao, o.senhaPadrao)
+                    && apenasScan == o.apenasScan
+                    && expandirViaLldp == o.expandirViaLldp
+                    && usarSnmp == o.usarSnmp
+                    && concorrencia == o.concorrencia
+                    && java.util.Objects.equals(gatewayIpManual, o.gatewayIpManual)
+                    && java.util.Objects.equals(gatewayMacManual, o.gatewayMacManual)
+                    && java.util.Objects.equals(pastaSaidaPdf, o.pastaSaidaPdf)
+                    && java.util.Objects.equals(salvarAlvosEm, o.salvarAlvosEm)
+                    && java.util.Objects.equals(credenciaisAlternativas, o.credenciaisAlternativas)
+                    && java.util.Objects.equals(produtosConhecidosPreviamente, o.produtosConhecidosPreviamente)
+                    && java.util.Objects.equals(snapshotsPreservados, o.snapshotsPreservados)
+                    && java.util.Objects.equals(equipamentosSemAcessoInformados, o.equipamentosSemAcessoInformados)
+                    && gerarArquivoRelatorio == o.gerarArquivoRelatorio;
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(scanSpecs, alvosManuais, usuarioPadrao, senhaPadrao, apenasScan, expandirViaLldp, usarSnmp, concorrencia, gatewayIpManual, gatewayMacManual, pastaSaidaPdf, salvarAlvosEm, credenciaisAlternativas, produtosConhecidosPreviamente, snapshotsPreservados, equipamentosSemAcessoInformados, gerarArquivoRelatorio);
+        }
+
+        @Override
+        public String toString() {
+            return "DiscoveryRequest[scanSpecs=" + scanSpecs + ", alvosManuais=" + alvosManuais + ", usuarioPadrao=" + usuarioPadrao + ", senhaPadrao=" + senhaPadrao + ", apenasScan=" + apenasScan + ", expandirViaLldp=" + expandirViaLldp + ", usarSnmp=" + usarSnmp + ", concorrencia=" + concorrencia + ", gatewayIpManual=" + gatewayIpManual + ", gatewayMacManual=" + gatewayMacManual + ", pastaSaidaPdf=" + pastaSaidaPdf + ", salvarAlvosEm=" + salvarAlvosEm + ", credenciaisAlternativas=" + credenciaisAlternativas + ", produtosConhecidosPreviamente=" + produtosConhecidosPreviamente + ", snapshotsPreservados=" + snapshotsPreservados + ", equipamentosSemAcessoInformados=" + equipamentosSemAcessoInformados + ", gerarArquivoRelatorio=" + gerarArquivoRelatorio + "]";
         }
 
         /** Compatibilidade (CLI): sempre exporta o arquivo PDF/HTML ao final da coleta. */
@@ -103,22 +225,102 @@ public class DiscoverySessionService {
         ) {
             this(scanSpecs, alvosManuais, usuarioPadrao, senhaPadrao, apenasScan, expandirViaLldp,
                     usarSnmp, concorrencia, gatewayIpManual, gatewayMacManual, pastaSaidaPdf, salvarAlvosEm,
-                    CredencialAcesso.presetsPadrao(), List.of(), List.of(), List.of());
+                    CredencialAcesso.presetsPadrao(), Compat.listOf(), Compat.listOf(), Compat.listOf());
         }
     }
 
-    public record DiscoverySessionResult(
-            boolean cancelado,
-            String erroFatal,
-            NetworkScanner.ScanResult scanResult,
-            List<SwitchTarget> alvosConsolidados,
-            ColetorEmLote.ResultadoColeta resultadoColeta,
-            RelatorioTopologia.ResultadoRelatorio relatorio,
-            long duracaoScanMs,
-            long duracaoColetaMs,
-            List<ColetorEmLote.ColetaDispositivoSnapshot> snapshotsConsolidados,
-            List<DiscoveredProduct> produtosConsolidados
-    ) {
+    public static final class DiscoverySessionResult {
+        private final boolean cancelado;
+        private final String erroFatal;
+        private final NetworkScanner.ScanResult scanResult;
+        private final List<SwitchTarget> alvosConsolidados;
+        private final ColetorEmLote.ResultadoColeta resultadoColeta;
+        private final RelatorioTopologia.ResultadoRelatorio relatorio;
+        private final long duracaoScanMs;
+        private final long duracaoColetaMs;
+        private final List<ColetorEmLote.ColetaDispositivoSnapshot> snapshotsConsolidados;
+        private final List<DiscoveredProduct> produtosConsolidados;
+
+        public DiscoverySessionResult(boolean cancelado, String erroFatal, NetworkScanner.ScanResult scanResult, List<SwitchTarget> alvosConsolidados, ColetorEmLote.ResultadoColeta resultadoColeta, RelatorioTopologia.ResultadoRelatorio relatorio, long duracaoScanMs, long duracaoColetaMs, List<ColetorEmLote.ColetaDispositivoSnapshot> snapshotsConsolidados, List<DiscoveredProduct> produtosConsolidados) {
+            this.cancelado = cancelado;
+            this.erroFatal = erroFatal;
+            this.scanResult = scanResult;
+            this.alvosConsolidados = alvosConsolidados;
+            this.resultadoColeta = resultadoColeta;
+            this.relatorio = relatorio;
+            this.duracaoScanMs = duracaoScanMs;
+            this.duracaoColetaMs = duracaoColetaMs;
+            this.snapshotsConsolidados = snapshotsConsolidados;
+            this.produtosConsolidados = produtosConsolidados;
+        }
+
+        public boolean cancelado() {
+            return cancelado;
+        }
+
+        public String erroFatal() {
+            return erroFatal;
+        }
+
+        public NetworkScanner.ScanResult scanResult() {
+            return scanResult;
+        }
+
+        public List<SwitchTarget> alvosConsolidados() {
+            return alvosConsolidados;
+        }
+
+        public ColetorEmLote.ResultadoColeta resultadoColeta() {
+            return resultadoColeta;
+        }
+
+        public RelatorioTopologia.ResultadoRelatorio relatorio() {
+            return relatorio;
+        }
+
+        public long duracaoScanMs() {
+            return duracaoScanMs;
+        }
+
+        public long duracaoColetaMs() {
+            return duracaoColetaMs;
+        }
+
+        public List<ColetorEmLote.ColetaDispositivoSnapshot> snapshotsConsolidados() {
+            return snapshotsConsolidados;
+        }
+
+        public List<DiscoveredProduct> produtosConsolidados() {
+            return produtosConsolidados;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof DiscoverySessionResult)) return false;
+            DiscoverySessionResult o = (DiscoverySessionResult) obj;
+            return cancelado == o.cancelado
+                    && java.util.Objects.equals(erroFatal, o.erroFatal)
+                    && java.util.Objects.equals(scanResult, o.scanResult)
+                    && java.util.Objects.equals(alvosConsolidados, o.alvosConsolidados)
+                    && java.util.Objects.equals(resultadoColeta, o.resultadoColeta)
+                    && java.util.Objects.equals(relatorio, o.relatorio)
+                    && duracaoScanMs == o.duracaoScanMs
+                    && duracaoColetaMs == o.duracaoColetaMs
+                    && java.util.Objects.equals(snapshotsConsolidados, o.snapshotsConsolidados)
+                    && java.util.Objects.equals(produtosConsolidados, o.produtosConsolidados);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(cancelado, erroFatal, scanResult, alvosConsolidados, resultadoColeta, relatorio, duracaoScanMs, duracaoColetaMs, snapshotsConsolidados, produtosConsolidados);
+        }
+
+        @Override
+        public String toString() {
+            return "DiscoverySessionResult[cancelado=" + cancelado + ", erroFatal=" + erroFatal + ", scanResult=" + scanResult + ", alvosConsolidados=" + alvosConsolidados + ", resultadoColeta=" + resultadoColeta + ", relatorio=" + relatorio + ", duracaoScanMs=" + duracaoScanMs + ", duracaoColetaMs=" + duracaoColetaMs + ", snapshotsConsolidados=" + snapshotsConsolidados + ", produtosConsolidados=" + produtosConsolidados + "]";
+        }
+
         public DiscoverySessionResult(
                 boolean cancelado,
                 String erroFatal,
@@ -130,11 +332,11 @@ public class DiscoverySessionService {
                 long duracaoColetaMs
         ) {
             this(cancelado, erroFatal, scanResult, alvosConsolidados, resultadoColeta, relatorio,
-                    duracaoScanMs, duracaoColetaMs, List.of(), List.of());
+                    duracaoScanMs, duracaoColetaMs, Compat.listOf(), Compat.listOf());
         }
 
         public boolean possuiErroFatal() {
-            return erroFatal != null && !erroFatal.isBlank();
+            return erroFatal != null && !Compat.isBlank(erroFatal);
         }
     }
 
@@ -166,7 +368,7 @@ public class DiscoverySessionService {
         DiscoverySessionListener cb = listener != null ? listener : new DiscoverySessionListener() {};
         AtomicBoolean cancelFlag = cancelar != null ? cancelar : new AtomicBoolean(false);
 
-        List<DiscoveredProduct> produtosDescobertos = List.of();
+        List<DiscoveredProduct> produtosDescobertos = Compat.listOf();
         NetworkScanner.ScanResult scanRes = null;
         long duracaoScanMs = 0L;
 
@@ -189,7 +391,7 @@ public class DiscoverySessionService {
             cb.onScanIniciado(ips.size(), req.scanSpecs());
 
             ProductFingerprinter.ProbeConfig probeCfg = new ProductFingerprinter.ProbeConfig(
-                    500, 900, req.usarSnmp(), List.of("public")
+                    500, 900, req.usarSnmp(), Compat.listOf("public")
             );
             NetworkScanner scanner = new NetworkScanner(probeCfg, Math.max(16, req.concorrencia() * 2));
             scanRes = scanner.escanear(ips, cb::onScanProgresso, cancelFlag);
@@ -203,7 +405,7 @@ public class DiscoverySessionService {
                     scanRes.hostsIgnorados().size()));
 
             if (cancelFlag.get()) {
-                return new DiscoverySessionResult(true, null, scanRes, List.of(), null, null, duracaoScanMs, 0L);
+                return new DiscoverySessionResult(true, null, scanRes, Compat.listOf(), null, null, duracaoScanMs, 0L);
             }
         }
 
@@ -237,7 +439,7 @@ public class DiscoverySessionService {
         for (DiscoveredProduct p : produtosDescobertos) {
             produtoPorIp.put(extrairIpBase(p.ip()), p);
         }
-        List<DiscoveredProduct> produtosConsolidados = List.copyOf(produtoPorIp.values());
+        List<DiscoveredProduct> produtosConsolidados = Compat.listCopyOf(produtoPorIp.values());
 
         if (alvos.isEmpty() && req.snapshotsPreservados().isEmpty()) {
             return erroFatal("Nenhum switch/AP/OLT elegível para coleta encontrado.", scanRes, duracaoScanMs);
@@ -266,10 +468,10 @@ public class DiscoverySessionService {
         for (DiscoveredProduct p : produtosConsolidados) {
             String ipBase = extrairIpBase(p.ip());
             familiasPorIp.put(ipBase, p.familia());
-            if (!p.protocoloPreferido().isBlank()) {
+            if (!Compat.isBlank(p.protocoloPreferido())) {
                 protocolosPreferidosPorIp.put(ipBase, p.protocoloPreferido());
             }
-            if (!p.macConhecido().isBlank()) {
+            if (!Compat.isBlank(p.macConhecido())) {
                 engine.registrarMacExternoParaIp(ipBase, p.macConhecido());
             }
         }
@@ -282,7 +484,7 @@ public class DiscoverySessionService {
         int numPreservados = 0;
         for (ColetorEmLote.ColetaDispositivoSnapshot snap : req.snapshotsPreservados()) {
             String ipSnap = snap.identidade() != null ? extrairIpBase(snap.identidade().ip()) : "";
-            if (!ipSnap.isBlank() && !ipsTentados.contains(ipSnap)) {
+            if (!Compat.isBlank(ipSnap) && !ipsTentados.contains(ipSnap)) {
                 ColetorEmLote.registrarSnapshotNoEngine(snap, engine);
                 numPreservados++;
             }
@@ -334,7 +536,7 @@ public class DiscoverySessionService {
             );
             duracaoColetaMs = System.currentTimeMillis() - inicioColeta;
         } else {
-            coletaRes = new ColetorEmLote.ResultadoColeta(List.of(), List.of(), List.of());
+            coletaRes = new ColetorEmLote.ResultadoColeta(Compat.listOf(), Compat.listOf(), Compat.listOf());
         }
 
         List<ColetorEmLote.ColetaDispositivoSnapshot> snapshotsConsolidados = consolidarSnapshots(
@@ -351,7 +553,7 @@ public class DiscoverySessionService {
         List<SwitchIdentity> todosSwitchesOk = snapshotsConsolidados.stream()
                 .map(ColetorEmLote.ColetaDispositivoSnapshot::identidade)
                 .filter(id -> id != null)
-                .toList();
+                .collect(Collectors.toList());
 
         if (!todosSwitchesOk.isEmpty()) {
             ColetorEmLote.aplicarFallbackGatewayLocal(todosSwitchesOk, engine);
@@ -377,7 +579,7 @@ public class DiscoverySessionService {
 
         Path pastaDestino = req.pastaSaidaPdf() != null
                 ? req.pastaSaidaPdf().toAbsolutePath().normalize()
-                : Path.of("").toAbsolutePath().normalize();
+                : Paths.get("").toAbsolutePath().normalize();
         RelatorioTopologia.ResultadoRelatorio relatorio = RelatorioTopologia.gerarResultado(
                 engine, pastaDestino, req.gerarArquivoRelatorio());
         cb.onRelatorioGerado(relatorio);
@@ -409,10 +611,10 @@ public class DiscoverySessionService {
             for (ColetorEmLote.ColetaDispositivoSnapshot s : preservados) {
                 if (s == null || s.identidade() == null) continue;
                 String ipBase = extrairIpBase(s.identidade().ip());
-                if (!ipBase.isBlank() && ipsTentadosNestaEtapa != null && ipsTentadosNestaEtapa.contains(ipBase)) {
+                if (!Compat.isBlank(ipBase) && ipsTentadosNestaEtapa != null && ipsTentadosNestaEtapa.contains(ipBase)) {
                     continue;
                 }
-                String chave = ipBase.isBlank() ? s.identidade().macNormalizado() : ipBase;
+                String chave = Compat.isBlank(ipBase) ? s.identidade().macNormalizado() : ipBase;
                 porChave.put(chave, s);
             }
         }
@@ -420,11 +622,11 @@ public class DiscoverySessionService {
             for (ColetorEmLote.ColetaDispositivoSnapshot s : novos) {
                 if (s == null || s.identidade() == null) continue;
                 String ipBase = extrairIpBase(s.identidade().ip());
-                String chave = ipBase.isBlank() ? s.identidade().macNormalizado() : ipBase;
+                String chave = Compat.isBlank(ipBase) ? s.identidade().macNormalizado() : ipBase;
                 porChave.put(chave, s);
             }
         }
-        return List.copyOf(porChave.values());
+        return Compat.listCopyOf(porChave.values());
     }
 
     private static void registrarPendenciasSemAcesso(
@@ -478,7 +680,7 @@ public class DiscoverySessionService {
         if (p == null) {
             return fallback;
         }
-        if (p.modeloInferido() != null && !p.modeloInferido().isBlank()) {
+        if (p.modeloInferido() != null && !Compat.isBlank(p.modeloInferido())) {
             return p.modeloInferido();
         }
         return p.familia() != null ? p.familia().rotulo() : fallback;
@@ -488,26 +690,36 @@ public class DiscoverySessionService {
         if (p == null) {
             return "SWITCH";
         }
-        return switch (p.familia()) {
-            case OLT -> "OLT";
-            case ACCESS_POINT -> (p.modeloInferido().toLowerCase(Locale.ROOT).contains("wom")
+        switch (p.familia()) {
+            case OLT:
+                return "OLT";
+            case ACCESS_POINT:
+                return (p.modeloInferido().toLowerCase(Locale.ROOT).contains("wom")
                     || p.modeloInferido().toLowerCase(Locale.ROOT).contains("apc"))
                     ? "RADIO" : "AP";
-            case ROTEADOR_GATEWAY -> "ROUTER";
-            default -> "SWITCH";
-        };
+            case ROTEADOR_GATEWAY:
+                return "ROUTER";
+            default:
+                return "SWITCH";
+        }
     }
 
     private static String mapearMotivoFalha(SwitchConnectionException.Tipo tipo) {
         if (tipo == null) {
             return "ERRO_PROTOCOLO";
         }
-        return switch (tipo) {
-            case FALHA_AUTENTICACAO -> "FALHA_AUTENTICACAO";
-            case TIMEOUT -> "TIMEOUT";
-            case INALCANCAVEL -> "CONEXAO_RECUSADA";
-            case ERRO_PROTOCOLO -> "ERRO_PROTOCOLO";
-        };
+        switch (tipo) {
+            case FALHA_AUTENTICACAO:
+                return "FALHA_AUTENTICACAO";
+            case TIMEOUT:
+                return "TIMEOUT";
+            case INALCANCAVEL:
+                return "CONEXAO_RECUSADA";
+            case ERRO_PROTOCOLO:
+                return "ERRO_PROTOCOLO";
+            default:
+                throw new IllegalStateException("Valor inesperado: " + (tipo));
+        }
     }
 
     private static String extrairIpBase(String ip) {
@@ -519,10 +731,10 @@ public class DiscoverySessionService {
     }
 
     private static DiscoverySessionResult erroFatal(String msg, NetworkScanner.ScanResult scanRes, long duracaoScanMs) {
-        return new DiscoverySessionResult(false, msg, scanRes, List.of(), null, null, duracaoScanMs, 0L);
+        return new DiscoverySessionResult(false, msg, scanRes, Compat.listOf(), null, null, duracaoScanMs, 0L);
     }
 
     private static boolean possuiTexto(String s) {
-        return s != null && !s.isBlank();
+        return s != null && !Compat.isBlank(s);
     }
 }

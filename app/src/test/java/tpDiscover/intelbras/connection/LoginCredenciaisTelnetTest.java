@@ -16,6 +16,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import tpDiscover.intelbras.util.Compat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -41,6 +42,9 @@ class LoginCredenciaisTelnetTest {
                             if (sessaoSwitch(s, true, "admin", "Admin@1234", "SG-2404-MR>", "Admin@1234")) {
                                 return;
                             }
+                        } catch (java.net.SocketException fimDaSessao) {
+                            // O cliente fecha a 1ª sessão (Ctrl+C + desconexão) antes de reconectar em modo
+                            // raw: o "connection reset" encerra só esta sessão, como num switch real.
                         }
                     }
                 } catch (IOException e) {
@@ -59,6 +63,31 @@ class LoginCredenciaisTelnetTest {
             assertEquals(2, conexoes.get(), "deve cair no socket raw NVT (\\r\\0) após detectar o CR/LF duplo");
             assertTrue(saida.contains("Hardware Version"));
             assertTrue(cli.credencialEfetiva().mesmoParQue("admin", "Admin@1234"));
+        }
+    }
+
+    /** Equipamento sem senha: credencial só com usuário (senha em branco) deve autenticar. */
+    @Test
+    void deveAutenticarSomenteComUsuarioQuandoSenhaEmBranco() throws Exception {
+        try (ServerSocket server = new ServerSocket(0, 5, InetAddress.getLoopbackAddress())) {
+            CompletableFuture<Void> sim = CompletableFuture.runAsync(() -> {
+                try (Socket s = server.accept()) {
+                    sessaoSwitch(s, false, "admin", "", "SW-SEM-SENHA>", "");
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+
+            ConnectionConfig cfg = ConnectionConfig.comOpcoes(
+                    "127.0.0.1", "admin", "", server.getLocalPort(), 6_000, true);
+            TelnetSwitchClient cli = new TelnetSwitchClient(cfg);
+            cli.connect();
+            String saida = cli.executarComando("show version");
+            cli.desconectar();
+            sim.join();
+
+            assertTrue(saida.contains("Hardware Version"), saida);
+            assertTrue(cli.credencialEfetiva().mesmoParQue("admin", ""));
         }
     }
 
@@ -95,7 +124,7 @@ class LoginCredenciaisTelnetTest {
 
             ConnectionConfig cfg = ConnectionConfig.comOpcoes(
                             "127.0.0.1", "admin", "Admin@1234", server.getLocalPort(), 6_000, true)
-                    .comCredenciaisAlternativas(List.of(new CredencialLogin("admin", "admin", "Padrão de fábrica")));
+                    .comCredenciaisAlternativas(Compat.listOf(new CredencialLogin("admin", "admin", "Padrão de fábrica")));
             TelnetSwitchClient cli = new TelnetSwitchClient(cfg);
             cli.connect();
             String saida = cli.executarComando("show version");
@@ -103,7 +132,7 @@ class LoginCredenciaisTelnetTest {
             sim.join();
 
             assertEquals(1, conexoes.get());
-            assertEquals(List.of("Admin@1234", "admin"), senhasRecebidas);
+            assertEquals(Compat.listOf("Admin@1234", "admin"), senhasRecebidas);
             assertTrue(saida.contains("S3028G-B"));
             assertTrue(cli.credencialEfetiva().mesmoParQue("admin", "admin"));
             assertEquals("Padrão de fábrica", cli.credencialEfetiva().rotulo());
@@ -141,13 +170,13 @@ class LoginCredenciaisTelnetTest {
 
             ConnectionConfig cfg = ConnectionConfig.comOpcoes(
                             "127.0.0.1", "admin", "Admin@1234", server.getLocalPort(), 6_000, true)
-                    .comCredenciaisAlternativas(List.of(new CredencialLogin("admin", "admin")));
+                    .comCredenciaisAlternativas(Compat.listOf(new CredencialLogin("admin", "admin")));
             TelnetSwitchClient cli = new TelnetSwitchClient(cfg);
             cli.connect();
             cli.desconectar();
             sim.join();
 
-            assertEquals(List.of("admin/Admin@1234", "admin/admin"), paresRecebidos);
+            assertEquals(Compat.listOf("admin/Admin@1234", "admin/admin"), paresRecebidos);
             assertTrue(cli.credencialEfetiva().mesmoParQue("admin", "admin"));
         }
     }
@@ -181,7 +210,7 @@ class LoginCredenciaisTelnetTest {
 
             ConnectionConfig cfg = ConnectionConfig.comOpcoes(
                             "127.0.0.1", "admin", "errada1", server.getLocalPort(), 6_000, true)
-                    .comCredenciaisAlternativas(List.of(new CredencialLogin("admin", "errada2")));
+                    .comCredenciaisAlternativas(Compat.listOf(new CredencialLogin("admin", "errada2")));
             TelnetSwitchClient cli = new TelnetSwitchClient(cfg);
             SwitchConnectionException ex = assertThrows(SwitchConnectionException.class, cli::connect);
             cli.desconectar();
@@ -225,20 +254,20 @@ class LoginCredenciaisTelnetTest {
 
             ConnectionConfig cfg = ConnectionConfig.comOpcoes(
                             "127.0.0.1", "admin", "Admin@1234", server.getLocalPort(), 6_000, true)
-                    .comCredenciaisAlternativas(List.of(new CredencialLogin("admin", "admin")));
+                    .comCredenciaisAlternativas(Compat.listOf(new CredencialLogin("admin", "admin")));
             TelnetSwitchClient cli = new TelnetSwitchClient(cfg);
             cli.connect();
             cli.desconectar();
             sim.join();
 
-            assertEquals(List.of("Admin@1234", "admin"), senhasEnable);
+            assertEquals(Compat.listOf("Admin@1234", "admin"), senhasEnable);
         }
     }
 
     @Test
     void cadeiaDeCredenciaisDeveRemoverDuplicatasEManterPrincipalPrimeiro() {
         ConnectionConfig cfg = ConnectionConfig.padrao("10.1.40.10", "admin", "Admin@1234")
-                .comCredenciaisAlternativas(List.of(
+                .comCredenciaisAlternativas(Compat.listOf(
                         new CredencialLogin("admin", "Admin@1234"),
                         new CredencialLogin("admin", "admin"),
                         new CredencialLogin("", "x"),
@@ -320,7 +349,7 @@ class LoginCredenciaisTelnetTest {
         while (true) {
             int b = in.read();
             if (b < 0) {
-                return buf.size() > 0 ? buf.toString(StandardCharsets.UTF_8) : null;
+                return buf.size() > 0 ? new String(buf.toByteArray(), StandardCharsets.UTF_8) : null;
             }
             if (b == 255) {
                 pularIac(in);
@@ -336,10 +365,10 @@ class LoginCredenciaisTelnetTest {
                         in.unread(prox);
                     }
                 }
-                return buf.toString(StandardCharsets.UTF_8);
+                return new String(buf.toByteArray(), StandardCharsets.UTF_8);
             }
             if (b == '\n') {
-                return buf.toString(StandardCharsets.UTF_8);
+                return new String(buf.toByteArray(), StandardCharsets.UTF_8);
             }
             buf.write(b);
         }

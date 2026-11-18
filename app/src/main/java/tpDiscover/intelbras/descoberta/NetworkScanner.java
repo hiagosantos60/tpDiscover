@@ -14,7 +14,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -23,6 +22,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import tpDiscover.intelbras.util.Compat;
+import java.util.concurrent.ExecutorService;
 /**
  * Scanner paralelo de rede (Virtual Threads) que descobre produtos de rede Intelbras
  * usando TCP pre-probe, banners SSH/HTTP/Telnet, SNMP e cruzamento com cache ARP local (OUI).
@@ -34,13 +35,63 @@ public class NetworkScanner {
             "(\\d{1,3}(?:\\.\\d{1,3}){3}).*?([0-9a-fA-F]{2}(?:[:-][0-9a-fA-F]{2}){5})"
     );
 
-    public record ScanResult(
-            List<DiscoveredProduct> produtosInteresse,
-            List<DiscoveredProduct> hostsIgnorados,
-            int totalIpsVerificados,
-            long duracaoMillis,
-            boolean cancelado
-    ) {
+    public static final class ScanResult {
+        private final List<DiscoveredProduct> produtosInteresse;
+        private final List<DiscoveredProduct> hostsIgnorados;
+        private final int totalIpsVerificados;
+        private final long duracaoMillis;
+        private final boolean cancelado;
+
+        public ScanResult(List<DiscoveredProduct> produtosInteresse, List<DiscoveredProduct> hostsIgnorados, int totalIpsVerificados, long duracaoMillis, boolean cancelado) {
+            this.produtosInteresse = produtosInteresse;
+            this.hostsIgnorados = hostsIgnorados;
+            this.totalIpsVerificados = totalIpsVerificados;
+            this.duracaoMillis = duracaoMillis;
+            this.cancelado = cancelado;
+        }
+
+        public List<DiscoveredProduct> produtosInteresse() {
+            return produtosInteresse;
+        }
+
+        public List<DiscoveredProduct> hostsIgnorados() {
+            return hostsIgnorados;
+        }
+
+        public int totalIpsVerificados() {
+            return totalIpsVerificados;
+        }
+
+        public long duracaoMillis() {
+            return duracaoMillis;
+        }
+
+        public boolean cancelado() {
+            return cancelado;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof ScanResult)) return false;
+            ScanResult o = (ScanResult) obj;
+            return java.util.Objects.equals(produtosInteresse, o.produtosInteresse)
+                    && java.util.Objects.equals(hostsIgnorados, o.hostsIgnorados)
+                    && totalIpsVerificados == o.totalIpsVerificados
+                    && duracaoMillis == o.duracaoMillis
+                    && cancelado == o.cancelado;
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(produtosInteresse, hostsIgnorados, totalIpsVerificados, duracaoMillis, cancelado);
+        }
+
+        @Override
+        public String toString() {
+            return "ScanResult[produtosInteresse=" + produtosInteresse + ", hostsIgnorados=" + hostsIgnorados + ", totalIpsVerificados=" + totalIpsVerificados + ", duracaoMillis=" + duracaoMillis + ", cancelado=" + cancelado + "]";
+        }
+
         public ScanResult(
                 List<DiscoveredProduct> produtosInteresse,
                 List<DiscoveredProduct> hostsIgnorados,
@@ -81,7 +132,7 @@ public class NetworkScanner {
     public ScanResult escanear(List<String> ips, ScanProgressListener listener, AtomicBoolean cancelar) {
         long inicio = System.currentTimeMillis();
         if (ips == null || ips.isEmpty()) {
-            return new ScanResult(List.of(), List.of(), 0, 0, false);
+            return new ScanResult(Compat.listOf(), Compat.listOf(), 0, 0, false);
         }
 
         Map<String, String> cacheArpLocal = lerCacheArpLocal();
@@ -90,7 +141,8 @@ public class NetworkScanner {
         int total = ips.size();
         List<Optional<DiscoveredProduct>> brutos = new ArrayList<>();
 
-        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+        ExecutorService executor = Compat.novoExecutor("scan", Math.max(1, maxConcorrencia));
+        try {
             List<Future<Optional<DiscoveredProduct>>> futures = new ArrayList<>(total);
             for (String ip : ips) {
                 futures.add(executor.submit(() -> {
@@ -119,6 +171,8 @@ public class NetworkScanner {
                 } catch (Exception ignored) {
                 }
             }
+        } finally {
+            Compat.encerrarEAguardar(executor);
         }
 
         Comparator<DiscoveredProduct> porIpNumerico = Comparator.comparingLong(p -> NetworkScanTarget.ipv4ParaLong(p.ip()));
@@ -126,7 +180,7 @@ public class NetworkScanner {
         List<DiscoveredProduct> ignorados = new ArrayList<>();
 
         for (Optional<DiscoveredProduct> opt : brutos) {
-            if (opt.isEmpty()) continue;
+            if (!opt.isPresent()) continue;
             DiscoveredProduct p = opt.get();
             if (p.ehProdutoRedeInteresse()) {
                 interesse.add(p);
@@ -150,8 +204,8 @@ public class NetworkScanner {
             String usuarioPadrao,
             String senhaPadrao
     ) {
-        if (produtos == null || produtos.isEmpty() || usuarioPadrao == null || usuarioPadrao.isBlank()) {
-            return List.of();
+        if (produtos == null || produtos.isEmpty() || usuarioPadrao == null || Compat.isBlank(usuarioPadrao)) {
+            return Compat.listOf();
         }
         List<SwitchTarget> alvos = new ArrayList<>();
         for (DiscoveredProduct p : produtos) {
@@ -194,7 +248,7 @@ public class NetworkScanner {
      */
     public static Map<String, String> lerCacheArpLocal() {
         Map<String, String> mapa = new HashMap<>();
-        for (List<String> cmd : List.of(List.of("ip", "neigh", "show"), List.of("arp", "-a"))) {
+        for (List<String> cmd : Compat.listOf(Compat.listOf("ip", "neigh", "show"), Compat.listOf("arp", "-a"))) {
             try {
                 Process proc = new ProcessBuilder(cmd).redirectErrorStream(true).start();
                 boolean terminou = proc.waitFor(1500, TimeUnit.MILLISECONDS);

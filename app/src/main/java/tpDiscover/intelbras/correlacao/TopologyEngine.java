@@ -16,6 +16,8 @@ import tpDiscover.intelbras.parser.Serie3000Parser;
 
 import java.util.*;
 
+import java.util.stream.Collectors;
+import tpDiscover.intelbras.util.Compat;
 /**
  * Motor de correlação de topologia via tabela MAC (com suporte a detecção de Roteador/Gateway via Rota + ARP).
  *
@@ -47,21 +49,103 @@ public class TopologyEngine {
     private GatewayInfo gatewayFallbackLocal;
     private Map<String, Map<String, Set<SwitchIdentity>>> mapaVisibilidadeCache;
 
-    public record ConexaoGateway(SwitchIdentity switchCore, String porta) {}
+    public static final class ConexaoGateway {
+        private final SwitchIdentity switchCore;
+        private final String porta;
 
-    public record EquipamentoSemAcesso(
-            String ip,
-            String rotuloModelo,
-            String categoria,
-            String macNormalizado,
-            String motivo
-    ) {
-        public EquipamentoSemAcesso {
+        public ConexaoGateway(SwitchIdentity switchCore, String porta) {
+            this.switchCore = switchCore;
+            this.porta = porta;
+        }
+
+        public SwitchIdentity switchCore() {
+            return switchCore;
+        }
+
+        public String porta() {
+            return porta;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof ConexaoGateway)) return false;
+            ConexaoGateway o = (ConexaoGateway) obj;
+            return java.util.Objects.equals(switchCore, o.switchCore)
+                    && java.util.Objects.equals(porta, o.porta);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(switchCore, porta);
+        }
+
+        @Override
+        public String toString() {
+            return "ConexaoGateway[switchCore=" + switchCore + ", porta=" + porta + "]";
+        }
+    }
+
+    public static final class EquipamentoSemAcesso {
+        private final String ip;
+        private final String rotuloModelo;
+        private final String categoria;
+        private final String macNormalizado;
+        private final String motivo;
+
+        public EquipamentoSemAcesso(String ip, String rotuloModelo, String categoria, String macNormalizado, String motivo) {
             ip = ip != null ? ip.trim() : "";
-            rotuloModelo = (rotuloModelo != null && !rotuloModelo.isBlank()) ? rotuloModelo.trim() : "Equipamento";
-            categoria = (categoria != null && !categoria.isBlank()) ? categoria.trim().toUpperCase(Locale.ROOT) : "SWITCH";
+            rotuloModelo = (rotuloModelo != null && !Compat.isBlank(rotuloModelo)) ? rotuloModelo.trim() : "Equipamento";
+            categoria = (categoria != null && !Compat.isBlank(categoria)) ? categoria.trim().toUpperCase(Locale.ROOT) : "SWITCH";
             macNormalizado = macNormalizado != null ? MacUtils.normalizar(macNormalizado) : "";
-            motivo = (motivo != null && !motivo.isBlank()) ? motivo.trim().toUpperCase(Locale.ROOT) : "SEM_CLI";
+            motivo = (motivo != null && !Compat.isBlank(motivo)) ? motivo.trim().toUpperCase(Locale.ROOT) : "SEM_CLI";
+            this.ip = ip;
+            this.rotuloModelo = rotuloModelo;
+            this.categoria = categoria;
+            this.macNormalizado = macNormalizado;
+            this.motivo = motivo;
+        }
+
+        public String ip() {
+            return ip;
+        }
+
+        public String rotuloModelo() {
+            return rotuloModelo;
+        }
+
+        public String categoria() {
+            return categoria;
+        }
+
+        public String macNormalizado() {
+            return macNormalizado;
+        }
+
+        public String motivo() {
+            return motivo;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof EquipamentoSemAcesso)) return false;
+            EquipamentoSemAcesso o = (EquipamentoSemAcesso) obj;
+            return java.util.Objects.equals(ip, o.ip)
+                    && java.util.Objects.equals(rotuloModelo, o.rotuloModelo)
+                    && java.util.Objects.equals(categoria, o.categoria)
+                    && java.util.Objects.equals(macNormalizado, o.macNormalizado)
+                    && java.util.Objects.equals(motivo, o.motivo);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(ip, rotuloModelo, categoria, macNormalizado, motivo);
+        }
+
+        @Override
+        public String toString() {
+            return "EquipamentoSemAcesso[ip=" + ip + ", rotuloModelo=" + rotuloModelo + ", categoria=" + categoria + ", macNormalizado=" + macNormalizado + ", motivo=" + motivo + "]";
         }
 
         public String ipBase() {
@@ -78,54 +162,218 @@ public class TopologyEngine {
         }
 
         public String descricaoMotivo() {
-            return switch (motivo) {
-                case "FALHA_AUTENTICACAO" -> "Falha de autenticação";
-                case "SEM_SENHA" -> "Sem senha informada";
-                case "TIMEOUT" -> "Tempo esgotado / inacessível";
-                case "CONEXAO_RECUSADA" -> "Conexão CLI recusada";
-                case "ERRO_PROTOCOLO" -> "Erro de protocolo CLI";
-                default -> "Somente leitura passiva (sem CLI)";
-            };
+            switch (motivo) {
+                case "FALHA_AUTENTICACAO":
+                    return "Falha de autenticação";
+                case "SEM_SENHA":
+                    return "Sem senha informada";
+                case "TIMEOUT":
+                    return "Tempo esgotado / inacessível";
+                case "CONEXAO_RECUSADA":
+                    return "Conexão CLI recusada";
+                case "ERRO_PROTOCOLO":
+                    return "Erro de protocolo CLI";
+                default:
+                    return "Somente leitura passiva (sem CLI)";
+            }
         }
     }
 
-    public record PlanoGateway(
-            GatewayInfo gateway,
-            List<ConexaoGateway> conexoesDiretas,
-            List<ConexaoGateway> conexoesViaSegmento,
-            List<ConexaoLldpUpstream> conexoesViaLldpExterno,
-            List<EquipamentoSemAcesso> switchesIntermediariosSuspeitos
-    ) {
+    public static final class PlanoGateway {
+        private final GatewayInfo gateway;
+        private final List<ConexaoGateway> conexoesDiretas;
+        private final List<ConexaoGateway> conexoesViaSegmento;
+        private final List<ConexaoLldpUpstream> conexoesViaLldpExterno;
+        private final List<EquipamentoSemAcesso> switchesIntermediariosSuspeitos;
+
+        public PlanoGateway(GatewayInfo gateway, List<ConexaoGateway> conexoesDiretas, List<ConexaoGateway> conexoesViaSegmento, List<ConexaoLldpUpstream> conexoesViaLldpExterno, List<EquipamentoSemAcesso> switchesIntermediariosSuspeitos) {
+            this.gateway = gateway;
+            this.conexoesDiretas = conexoesDiretas;
+            this.conexoesViaSegmento = conexoesViaSegmento;
+            this.conexoesViaLldpExterno = conexoesViaLldpExterno;
+            this.switchesIntermediariosSuspeitos = switchesIntermediariosSuspeitos;
+        }
+
+        public GatewayInfo gateway() {
+            return gateway;
+        }
+
+        public List<ConexaoGateway> conexoesDiretas() {
+            return conexoesDiretas;
+        }
+
+        public List<ConexaoGateway> conexoesViaSegmento() {
+            return conexoesViaSegmento;
+        }
+
+        public List<ConexaoLldpUpstream> conexoesViaLldpExterno() {
+            return conexoesViaLldpExterno;
+        }
+
+        public List<EquipamentoSemAcesso> switchesIntermediariosSuspeitos() {
+            return switchesIntermediariosSuspeitos;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof PlanoGateway)) return false;
+            PlanoGateway o = (PlanoGateway) obj;
+            return java.util.Objects.equals(gateway, o.gateway)
+                    && java.util.Objects.equals(conexoesDiretas, o.conexoesDiretas)
+                    && java.util.Objects.equals(conexoesViaSegmento, o.conexoesViaSegmento)
+                    && java.util.Objects.equals(conexoesViaLldpExterno, o.conexoesViaLldpExterno)
+                    && java.util.Objects.equals(switchesIntermediariosSuspeitos, o.switchesIntermediariosSuspeitos);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(gateway, conexoesDiretas, conexoesViaSegmento, conexoesViaLldpExterno, switchesIntermediariosSuspeitos);
+        }
+
+        @Override
+        public String toString() {
+            return "PlanoGateway[gateway=" + gateway + ", conexoesDiretas=" + conexoesDiretas + ", conexoesViaSegmento=" + conexoesViaSegmento + ", conexoesViaLldpExterno=" + conexoesViaLldpExterno + ", switchesIntermediariosSuspeitos=" + switchesIntermediariosSuspeitos + "]";
+        }
+
         public boolean possuiSegmentoIncerto() {
             return !conexoesViaSegmento.isEmpty();
         }
     }
 
-    public record ConexaoLldpUpstream(
-            SwitchIdentity switchFilho,
-            String portaLocalFilho,
-            LldpNeighbor vizinhoExterno
-    ) {
-        public ConexaoLldpUpstream {
+    public static final class ConexaoLldpUpstream {
+        private final SwitchIdentity switchFilho;
+        private final String portaLocalFilho;
+        private final LldpNeighbor vizinhoExterno;
+
+        public ConexaoLldpUpstream(SwitchIdentity switchFilho, String portaLocalFilho, LldpNeighbor vizinhoExterno) {
             portaLocalFilho = portaLocalFilho != null ? portaLocalFilho.trim() : "";
+            this.switchFilho = switchFilho;
+            this.portaLocalFilho = portaLocalFilho;
+            this.vizinhoExterno = vizinhoExterno;
+        }
+
+        public SwitchIdentity switchFilho() {
+            return switchFilho;
+        }
+
+        public String portaLocalFilho() {
+            return portaLocalFilho;
+        }
+
+        public LldpNeighbor vizinhoExterno() {
+            return vizinhoExterno;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof ConexaoLldpUpstream)) return false;
+            ConexaoLldpUpstream o = (ConexaoLldpUpstream) obj;
+            return java.util.Objects.equals(switchFilho, o.switchFilho)
+                    && java.util.Objects.equals(portaLocalFilho, o.portaLocalFilho)
+                    && java.util.Objects.equals(vizinhoExterno, o.vizinhoExterno);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(switchFilho, portaLocalFilho, vizinhoExterno);
+        }
+
+        @Override
+        public String toString() {
+            return "ConexaoLldpUpstream[switchFilho=" + switchFilho + ", portaLocalFilho=" + portaLocalFilho + ", vizinhoExterno=" + vizinhoExterno + "]";
         }
     }
 
-    public record ConexaoPassiva(
-            SwitchIdentity switchPai,
-            String portaPai,
-            EquipamentoSemAcesso equipamento
-    ) {
-        public ConexaoPassiva {
+    public static final class ConexaoPassiva {
+        private final SwitchIdentity switchPai;
+        private final String portaPai;
+        private final EquipamentoSemAcesso equipamento;
+
+        public ConexaoPassiva(SwitchIdentity switchPai, String portaPai, EquipamentoSemAcesso equipamento) {
             portaPai = portaPai != null ? portaPai.trim() : "";
+            this.switchPai = switchPai;
+            this.portaPai = portaPai;
+            this.equipamento = equipamento;
+        }
+
+        public SwitchIdentity switchPai() {
+            return switchPai;
+        }
+
+        public String portaPai() {
+            return portaPai;
+        }
+
+        public EquipamentoSemAcesso equipamento() {
+            return equipamento;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof ConexaoPassiva)) return false;
+            ConexaoPassiva o = (ConexaoPassiva) obj;
+            return java.util.Objects.equals(switchPai, o.switchPai)
+                    && java.util.Objects.equals(portaPai, o.portaPai)
+                    && java.util.Objects.equals(equipamento, o.equipamento);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(switchPai, portaPai, equipamento);
+        }
+
+        @Override
+        public String toString() {
+            return "ConexaoPassiva[switchPai=" + switchPai + ", portaPai=" + portaPai + ", equipamento=" + equipamento + "]";
         }
     }
 
-    public record VizinhoLldpClassificado(
-            LldpNeighbor neighbor,
-            CategoriaInteresse categoria,
-            SwitchIdentity switchColetado
-    ) {}
+    public static final class VizinhoLldpClassificado {
+        private final LldpNeighbor neighbor;
+        private final CategoriaInteresse categoria;
+        private final SwitchIdentity switchColetado;
+
+        public VizinhoLldpClassificado(LldpNeighbor neighbor, CategoriaInteresse categoria, SwitchIdentity switchColetado) {
+            this.neighbor = neighbor;
+            this.categoria = categoria;
+            this.switchColetado = switchColetado;
+        }
+
+        public LldpNeighbor neighbor() {
+            return neighbor;
+        }
+
+        public CategoriaInteresse categoria() {
+            return categoria;
+        }
+
+        public SwitchIdentity switchColetado() {
+            return switchColetado;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof VizinhoLldpClassificado)) return false;
+            VizinhoLldpClassificado o = (VizinhoLldpClassificado) obj;
+            return java.util.Objects.equals(neighbor, o.neighbor)
+                    && java.util.Objects.equals(categoria, o.categoria)
+                    && java.util.Objects.equals(switchColetado, o.switchColetado);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(neighbor, categoria, switchColetado);
+        }
+
+        @Override
+        public String toString() {
+            return "VizinhoLldpClassificado[neighbor=" + neighbor + ", categoria=" + categoria + ", switchColetado=" + switchColetado + "]";
+        }
+    }
 
     public void registrarSwitch(SwitchIdentity identidade) {
         switchesPorId.put(identidade.macNormalizado(), identidade);
@@ -142,7 +390,7 @@ public class TopologyEngine {
     }
 
     public void registrarRotaPadrao(String switchId, String gatewayIp) {
-        if (gatewayIp != null && !gatewayIp.isBlank() && !"0.0.0.0".equals(gatewayIp.trim())) {
+        if (gatewayIp != null && !Compat.isBlank(gatewayIp) && !"0.0.0.0".equals(gatewayIp.trim())) {
             rotaPadraoPorSwitch.put(switchId, gatewayIp.trim());
             mapaVisibilidadeCache = null;
         }
@@ -181,19 +429,19 @@ public class TopologyEngine {
     }
 
     public List<MacEntry> entradasDe(String switchId) {
-        return Collections.unmodifiableList(entradasPorSwitch.getOrDefault(switchId, List.of()));
+        return Collections.unmodifiableList(entradasPorSwitch.getOrDefault(switchId, Compat.listOf()));
     }
 
     public List<ArpEntry> arpDe(String switchId) {
-        return Collections.unmodifiableList(arpPorSwitch.getOrDefault(switchId, List.of()));
+        return Collections.unmodifiableList(arpPorSwitch.getOrDefault(switchId, Compat.listOf()));
     }
 
     public List<LldpNeighbor> lldpDe(String switchId) {
-        return Collections.unmodifiableList(lldpPorSwitch.getOrDefault(switchId, List.of()));
+        return Collections.unmodifiableList(lldpPorSwitch.getOrDefault(switchId, Compat.listOf()));
     }
 
     public List<StpPortState> stpDe(String switchId) {
-        return Collections.unmodifiableList(stpPorSwitch.getOrDefault(switchId, List.of()));
+        return Collections.unmodifiableList(stpPorSwitch.getOrDefault(switchId, Compat.listOf()));
     }
 
     public Optional<String> rotaPadraoDe(String switchId) {
@@ -201,8 +449,8 @@ public class TopologyEngine {
     }
 
     public void definirGatewayManual(String ip, String mac) {
-        this.gatewayIpManual = (ip != null && !ip.isBlank()) ? ip.trim() : null;
-        this.gatewayMacManual = (mac != null && !mac.isBlank()) ? Serie3000Parser.formatarMacPadrao(mac.trim()) : null;
+        this.gatewayIpManual = (ip != null && !Compat.isBlank(ip)) ? ip.trim() : null;
+        this.gatewayMacManual = (mac != null && !Compat.isBlank(mac)) ? Serie3000Parser.formatarMacPadrao(mac.trim()) : null;
         mapaVisibilidadeCache = null;
     }
 
@@ -212,7 +460,7 @@ public class TopologyEngine {
     }
 
     public void registrarMacExternoParaIp(String ip, String mac) {
-        if (ip != null && !ip.isBlank() && mac != null && !mac.isBlank()) {
+        if (ip != null && !Compat.isBlank(ip) && mac != null && !Compat.isBlank(mac)) {
             String fmt = Serie3000Parser.formatarMacPadrao(mac.trim());
             if (LocalGatewayDetector.ehMacUnicastValido(MacUtils.normalizar(fmt))) {
                 macExternoPorIp.put(ip.trim(), fmt);
@@ -226,11 +474,11 @@ public class TopologyEngine {
      * (ex.: falha de autenticação, marcado como "sem senha" ou produto sem suporte CLI).
      */
     public void registrarEquipamentoSemAcesso(EquipamentoSemAcesso eq) {
-        if (eq == null || eq.ipBase().isBlank() || ehIpDeSwitchRegistrado(eq.ipBase())) {
+        if (eq == null || Compat.isBlank(eq.ipBase()) || ehIpDeSwitchRegistrado(eq.ipBase())) {
             return;
         }
         equipamentosSemAcessoPorIp.put(eq.ipBase(), eq);
-        if (!eq.macNormalizado().isBlank()) {
+        if (!Compat.isBlank(eq.macNormalizado())) {
             registrarMacExternoParaIp(eq.ipBase(), Serie3000Parser.formatarMacPadrao(eq.macNormalizado()));
         }
     }
@@ -263,11 +511,11 @@ public class TopologyEngine {
         if (eq == null) {
             return "";
         }
-        if (!eq.macNormalizado().isBlank()) {
+        if (!Compat.isBlank(eq.macNormalizado())) {
             return eq.macNormalizado();
         }
         String externo = macExternoPorIp.get(eq.ipBase());
-        if (externo != null && !externo.isBlank()) {
+        if (externo != null && !Compat.isBlank(externo)) {
             return MacUtils.normalizar(externo);
         }
         return buscarMacPorIpNoArpDosSwitches(eq.ipBase())
@@ -288,13 +536,13 @@ public class TopologyEngine {
      * MAC correspondente nas tabelas ARP dos próprios switches, permitindo resolução no ARP do PC local.
      */
     public Optional<String> ipGatewaySemMacResolvido() {
-        if (gatewayIpManual != null && (gatewayMacManual == null || gatewayMacManual.isBlank())) {
-            if (buscarMacPorIpNoArpDosSwitches(gatewayIpManual).isEmpty()) {
+        if (gatewayIpManual != null && (gatewayMacManual == null || Compat.isBlank(gatewayMacManual))) {
+            if (!buscarMacPorIpNoArpDosSwitches(gatewayIpManual).isPresent()) {
                 return Optional.of(gatewayIpManual);
             }
         }
         for (String gwIp : candidatosIpRotaPadraoOrdenados()) {
-            if (!ehIpDeSwitchRegistrado(gwIp) && buscarMacPorIpNoArpDosSwitches(gwIp).isEmpty()) {
+            if (!ehIpDeSwitchRegistrado(gwIp) && !buscarMacPorIpNoArpDosSwitches(gwIp).isPresent()) {
                 return Optional.of(gwIp);
             }
         }
@@ -306,7 +554,7 @@ public class TopologyEngine {
      */
     public Optional<GatewayInfo> gatewayIdentificado() {
         Optional<GatewayInfo> cand = resolverGatewayCandidato();
-        if (cand.isEmpty()) {
+        if (!cand.isPresent()) {
             return Optional.empty();
         }
         return identificarConexoesGateway().isEmpty() ? Optional.empty() : cand;
@@ -352,15 +600,15 @@ public class TopologyEngine {
      */
     public PlanoGateway analisarPlanoGateway() {
         Optional<GatewayInfo> gwOpt = gatewayIdentificado();
-        if (gwOpt.isEmpty()) {
-            return new PlanoGateway(null, List.of(), List.of(), List.of(), List.of());
+        if (!gwOpt.isPresent()) {
+            return new PlanoGateway(null, Compat.listOf(), Compat.listOf(), Compat.listOf(), Compat.listOf());
         }
 
         GatewayInfo gw = gwOpt.get();
         String gwNorm = gw.macNormalizado();
         List<ConexaoGateway> todas = identificarConexoesGateway();
         if (todas.isEmpty()) {
-            return new PlanoGateway(gw, List.of(), List.of(), List.of(), List.of());
+            return new PlanoGateway(gw, Compat.listOf(), Compat.listOf(), Compat.listOf(), Compat.listOf());
         }
 
         List<ConexaoPassiva> passivas = resolverConexoesPassivasSemAcesso();
@@ -425,7 +673,7 @@ public class TopologyEngine {
             int extrasIntelbras = 0;
             for (String macHost : pa.macsHostsDesconhecidos()) {
                 String norm = MacUtils.normalizar(macHost);
-                if (norm.isBlank() || MacUtils.pertenceAoSwitch(norm, gwNorm)) {
+                if (Compat.isBlank(norm) || MacUtils.pertenceAoSwitch(norm, gwNorm)) {
                     continue;
                 }
                 extras++;
@@ -433,7 +681,7 @@ public class TopologyEngine {
                     extrasIntelbras++;
                 }
                 for (EquipamentoSemAcesso eq : suspectsInfraUpstream) {
-                    if (!eq.macNormalizado().isBlank() && MacUtils.pertenceAoSwitch(norm, eq.macNormalizado())) {
+                    if (!Compat.isBlank(eq.macNormalizado()) && MacUtils.pertenceAoSwitch(norm, eq.macNormalizado())) {
                         algumCgVeMacDeSuspeito = true;
                     }
                 }
@@ -443,7 +691,7 @@ public class TopologyEngine {
         }
 
         boolean nenhumSuspeitoTemMac = suspectsInfraUpstream.stream()
-                .allMatch(eq -> eq.macNormalizado().isBlank());
+                .allMatch(eq -> Compat.isBlank(eq.macNormalizado()));
 
         boolean segmentoIncerto = false;
         if (!suspectsInfraUpstream.isEmpty()) {
@@ -465,11 +713,11 @@ public class TopologyEngine {
         }
 
         if (segmentoIncerto) {
-            return new PlanoGateway(gw, List.of(), List.copyOf(restantes), List.copyOf(viaLldpExterno),
-                    List.copyOf(suspectsInfraUpstream));
+            return new PlanoGateway(gw, Compat.listOf(), Compat.listCopyOf(restantes), Compat.listCopyOf(viaLldpExterno),
+                    Compat.listCopyOf(suspectsInfraUpstream));
         }
-        return new PlanoGateway(gw, List.copyOf(restantes), List.of(), List.copyOf(viaLldpExterno),
-                List.of());
+        return new PlanoGateway(gw, Compat.listCopyOf(restantes), Compat.listOf(), Compat.listCopyOf(viaLldpExterno),
+                Compat.listOf());
     }
 
     private Optional<LldpNeighbor> encontrarVizinhoLldpExternoNaPorta(String switchId, String porta) {
@@ -501,7 +749,7 @@ public class TopologyEngine {
     public List<ConexaoPassiva> resolverConexoesPassivasSemAcesso() {
         List<EquipamentoSemAcesso> todos = equipamentosSemAcesso();
         if (todos.isEmpty() || switchesPorId.isEmpty()) {
-            return List.of();
+            return Compat.listOf();
         }
 
         List<VizinhoLldpClassificado> todosLldp = new ArrayList<>();
@@ -520,7 +768,7 @@ public class TopologyEngine {
                 continue;
             }
             String macEq = eq.macNormalizado();
-            if (macEq.isBlank()) {
+            if (Compat.isBlank(macEq)) {
                 continue;
             }
 
@@ -528,7 +776,7 @@ public class TopologyEngine {
             List<ConexaoPassiva> candidatosPorOffset = new ArrayList<>();
             for (SwitchIdentity sw : switchesPorId.values()) {
                 String swId = sw.macNormalizado();
-                Map<String, PortaAnalise> portas = analisesPorSwitch.getOrDefault(swId, Map.of());
+                Map<String, PortaAnalise> portas = analisesPorSwitch.getOrDefault(swId, Compat.mapOf());
                 for (PortaAnalise pa : portas.values()) {
                     if (!pa.switchesVisiveis().isEmpty()) {
                         continue;
@@ -553,7 +801,7 @@ public class TopologyEngine {
                     boolean encontrouPorOffset = false;
                     for (String macHost : pa.macsHostsDesconhecidos()) {
                         String norm = MacUtils.normalizar(macHost);
-                        if (norm.isBlank()) {
+                        if (Compat.isBlank(norm)) {
                             continue;
                         }
                         if (norm.equalsIgnoreCase(macEq)) {
@@ -609,10 +857,10 @@ public class TopologyEngine {
         String ipEq = eq.ipBase();
         String macEq = eq.macNormalizado();
         for (VizinhoLldpClassificado v : todosLldp) {
-            if (!ipEq.isBlank() && ipEq.equals(ipBase(v.neighbor().managementIp()))) {
+            if (!Compat.isBlank(ipEq) && ipEq.equals(ipBase(v.neighbor().managementIp()))) {
                 return true;
             }
-            if (!macEq.isBlank() && v.neighbor().possuiChassisMacValido()) {
+            if (!Compat.isBlank(macEq) && v.neighbor().possuiChassisMacValido()) {
                 String chNorm = v.neighbor().chassisMacNormalizado();
                 if (LocalGatewayDetector.ehMacUnicastValido(chNorm) && MacUtils.pertenceAoSwitch(chNorm, macEq)) {
                     return true;
@@ -635,14 +883,14 @@ public class TopologyEngine {
      */
     public List<ConexaoGateway> identificarConexoesGateway() {
         Optional<GatewayInfo> gwOpt = resolverGatewayCandidato();
-        if (gwOpt.isEmpty()) {
-            return List.of();
+        if (!gwOpt.isPresent()) {
+            return Compat.listOf();
         }
 
         String gwMac = gwOpt.get().macNormalizado();
         Map<String, String> portaOndeVeGw = mapearPortaGatewayPorSwitch(gwMac);
         if (portaOndeVeGw.isEmpty()) {
-            return List.of();
+            return Compat.listOf();
         }
 
         Map<String, Map<String, Set<SwitchIdentity>>> visiveisGlobal = construirMapaVisibilidade();
@@ -662,8 +910,8 @@ public class TopologyEngine {
             }
 
             Set<SwitchIdentity> visiveisNaPorta = visiveisGlobal
-                    .getOrDefault(idS, Map.of())
-                    .getOrDefault(pS, Set.of());
+                    .getOrDefault(idS, Compat.mapOf())
+                    .getOrDefault(pS, Compat.setOf());
 
             if (visiveisNaPorta.isEmpty()) {
                 adicionarConexaoGatewayUnica(conexoes, chavesAdicionadas, swS, pS);
@@ -724,7 +972,7 @@ public class TopologyEngine {
             String pGwEmX = portaOndeVeGw.get(idX);
             if (pGwEmX == null) continue;
 
-            Map<String, Set<SwitchIdentity>> portasX = visiveisGlobal.getOrDefault(idX, Map.of());
+            Map<String, Set<SwitchIdentity>> portasX = visiveisGlobal.getOrDefault(idX, Compat.mapOf());
             for (Map.Entry<String, Set<SwitchIdentity>> entry : portasX.entrySet()) {
                 if (!entry.getKey().equalsIgnoreCase(pGwEmX) && entry.getValue().contains(swAlvo)) {
                     return true;
@@ -748,8 +996,8 @@ public class TopologyEngine {
 
     private int contarHostsDesconhecidosNaPorta(String switchId, String porta) {
         int count = 0;
-        for (MacEntry e : entradasPorSwitch.getOrDefault(switchId, List.of())) {
-            if (e.port().equalsIgnoreCase(porta) && identificarSwitchPorMac(e.macNormalizado()).isEmpty()) {
+        for (MacEntry e : entradasPorSwitch.getOrDefault(switchId, Compat.listOf())) {
+            if (e.port().equalsIgnoreCase(porta) && !identificarSwitchPorMac(e.macNormalizado()).isPresent()) {
                 count++;
             }
         }
@@ -760,17 +1008,17 @@ public class TopologyEngine {
         Map<String, String> resultado = new LinkedHashMap<>();
         for (String idS : switchesPorId.keySet()) {
             String portaEncontrada = null;
-            for (LldpNeighbor n : lldpPorSwitch.getOrDefault(idS, List.of())) {
+            for (LldpNeighbor n : lldpPorSwitch.getOrDefault(idS, Compat.listOf())) {
                 if (n.possuiChassisMacValido()
                         && (n.chassisMacNormalizado().equalsIgnoreCase(gwMacNormalizado)
                         || MacUtils.pertenceAoSwitch(n.chassisMacNormalizado(), gwMacNormalizado))
-                        && n.localPort() != null && !n.localPort().isBlank()) {
+                        && n.localPort() != null && !Compat.isBlank(n.localPort())) {
                     portaEncontrada = n.localPort();
                     break;
                 }
             }
             if (portaEncontrada == null) {
-                for (MacEntry e : entradasPorSwitch.getOrDefault(idS, List.of())) {
+                for (MacEntry e : entradasPorSwitch.getOrDefault(idS, Compat.listOf())) {
                     if (e.macNormalizado().equalsIgnoreCase(gwMacNormalizado)) {
                         portaEncontrada = e.port();
                         break;
@@ -778,9 +1026,9 @@ public class TopologyEngine {
                 }
             }
             if (portaEncontrada == null) {
-                for (ArpEntry a : arpPorSwitch.getOrDefault(idS, List.of())) {
+                for (ArpEntry a : arpPorSwitch.getOrDefault(idS, Compat.listOf())) {
                     if (a.macNormalizado().equalsIgnoreCase(gwMacNormalizado)
-                            && a.port() != null && !a.port().isBlank()) {
+                            && a.port() != null && !Compat.isBlank(a.port())) {
                         portaEncontrada = alinharNomePortaComTabelaMac(idS, a.port());
                         break;
                     }
@@ -795,7 +1043,7 @@ public class TopologyEngine {
 
     private String alinharNomePortaComTabelaMac(String switchId, String portaArp) {
         String prefixo = portaArp.trim().toUpperCase() + " (";
-        for (MacEntry e : entradasPorSwitch.getOrDefault(switchId, List.of())) {
+        for (MacEntry e : entradasPorSwitch.getOrDefault(switchId, Compat.listOf())) {
             if (e.port().equalsIgnoreCase(portaArp) || e.port().toUpperCase().startsWith(prefixo)) {
                 return e.port();
             }
@@ -805,16 +1053,16 @@ public class TopologyEngine {
 
     private Optional<GatewayInfo> resolverGatewayCandidato() {
         // 1) Prioridade máxima: diretiva manual (# gateway=...)
-        if ((gatewayIpManual != null && !gatewayIpManual.isBlank())
-                || (gatewayMacManual != null && !gatewayMacManual.isBlank())) {
+        if ((gatewayIpManual != null && !Compat.isBlank(gatewayIpManual))
+                || (gatewayMacManual != null && !Compat.isBlank(gatewayMacManual))) {
             String ip = gatewayIpManual;
             String mac = gatewayMacManual;
 
-            if ((mac == null || mac.isBlank()) && ip != null) {
+            if ((mac == null || Compat.isBlank(mac)) && ip != null) {
                 mac = buscarMacPorIpNoArpDosSwitches(ip).orElse(macExternoPorIp.get(ip));
             }
             if (mac != null && LocalGatewayDetector.ehMacUnicastValido(MacUtils.normalizar(mac))) {
-                if (ip == null || ip.isBlank()) {
+                if (ip == null || Compat.isBlank(ip)) {
                     ip = buscarIpPorMacNoArpDosSwitches(MacUtils.normalizar(mac)).orElse(null);
                 }
                 return Optional.of(new GatewayInfo(ip, Serie3000Parser.formatarMacPadrao(mac)));
@@ -829,7 +1077,7 @@ public class TopologyEngine {
             String mac = buscarMacPorIpNoArpDosSwitches(gwIp).orElse(macExternoPorIp.get(gwIp));
             if (mac != null) {
                 String norm = MacUtils.normalizar(mac);
-                if (LocalGatewayDetector.ehMacUnicastValido(norm) && identificarSwitchPorMac(norm).isEmpty()) {
+                if (LocalGatewayDetector.ehMacUnicastValido(norm) && !identificarSwitchPorMac(norm).isPresent()) {
                     return Optional.of(new GatewayInfo(gwIp, Serie3000Parser.formatarMacPadrao(mac)));
                 }
             }
@@ -840,7 +1088,7 @@ public class TopologyEngine {
             String norm = gatewayFallbackLocal.macNormalizado();
             if (LocalGatewayDetector.ehMacUnicastValido(norm)
                     && !ehIpDeSwitchRegistrado(gatewayFallbackLocal.ip())
-                    && identificarSwitchPorMac(norm).isEmpty()) {
+                    && !identificarSwitchPorMac(norm).isPresent()) {
                 return Optional.of(new GatewayInfo(
                         gatewayFallbackLocal.ip(),
                         Serie3000Parser.formatarMacPadrao(gatewayFallbackLocal.mac())
@@ -854,7 +1102,7 @@ public class TopologyEngine {
                 if (LldpInterestFilter.classificar(n, switchesPorId.values(), Optional.empty())
                         == CategoriaInteresse.ROTEADOR_UPLINK && n.possuiChassisMacValido()) {
                     String macFmt = Serie3000Parser.formatarMacPadrao(n.chassisMacNormalizado());
-                    String ipGw = (n.managementIp() != null && !n.managementIp().isBlank())
+                    String ipGw = (n.managementIp() != null && !Compat.isBlank(n.managementIp()))
                             ? n.managementIp()
                             : buscarIpPorMacNoArpDosSwitches(n.chassisMacNormalizado()).orElse(null);
                     return Optional.of(new GatewayInfo(ipGw, macFmt));
@@ -911,7 +1159,7 @@ public class TopologyEngine {
         if (macNormalizado == null) return Optional.empty();
         for (List<ArpEntry> lista : arpPorSwitch.values()) {
             for (ArpEntry a : lista) {
-                if (macNormalizado.equalsIgnoreCase(a.macNormalizado()) && a.ip() != null && !a.ip().isBlank()) {
+                if (macNormalizado.equalsIgnoreCase(a.macNormalizado()) && a.ip() != null && !Compat.isBlank(a.ip())) {
                     return Optional.of(a.ip());
                 }
             }
@@ -963,7 +1211,7 @@ public class TopologyEngine {
 
         for (String switchId : switchesPorId.keySet()) {
             Map<String, Set<SwitchIdentity>> porPorta = new LinkedHashMap<>();
-            for (MacEntry entry : entradasPorSwitch.getOrDefault(switchId, List.of())) {
+            for (MacEntry entry : entradasPorSwitch.getOrDefault(switchId, Compat.listOf())) {
                 Optional<SwitchIdentity> vizinho = identificarSwitchPorMac(entry.macNormalizado());
                 if (vizinho.isPresent() && vizinho.get().macNormalizado().equals(switchId)) {
                     continue;
@@ -972,8 +1220,8 @@ public class TopologyEngine {
                 vizinho.ifPresent(sw -> porPorta.get(entry.port()).add(sw));
             }
             // Reforça visibilidade direta nas portas onde o LLDP já confirmou outro switch coletado
-            for (LldpNeighbor lldp : lldpPorSwitch.getOrDefault(switchId, List.of())) {
-                if (lldp.localPort() == null || lldp.localPort().isBlank()) continue;
+            for (LldpNeighbor lldp : lldpPorSwitch.getOrDefault(switchId, Compat.listOf())) {
+                if (lldp.localPort() == null || Compat.isBlank(lldp.localPort())) continue;
                 Optional<SwitchIdentity> vizColetado = LldpInterestFilter.resolverSwitchColetado(lldp, switchesPorId.values());
                 if (vizColetado.isPresent() && !vizColetado.get().macNormalizado().equals(switchId)) {
                     porPorta.computeIfAbsent(lldp.localPort(), k -> new LinkedHashSet<>()).add(vizColetado.get());
@@ -997,7 +1245,7 @@ public class TopologyEngine {
             // Regra 1: Intermediário Y entre (X, Px) e Z
             for (SwitchIdentity swX : switchesPorId.values()) {
                 String idX = swX.macNormalizado();
-                Map<String, Set<SwitchIdentity>> portasX = visiveis.getOrDefault(idX, Map.of());
+                Map<String, Set<SwitchIdentity>> portasX = visiveis.getOrDefault(idX, Compat.mapOf());
 
                 for (Map.Entry<String, Set<SwitchIdentity>> entryPx : portasX.entrySet()) {
                     Set<SwitchIdentity> vistosEmPx = entryPx.getValue();
@@ -1008,11 +1256,11 @@ public class TopologyEngine {
                         if (idY.equals(idX) || vistosEmPx.contains(swY)) continue;
 
                         Optional<String> pyOpt = encontrarPortaUnicaOndeVe(visiveis, idY, swX);
-                        if (pyOpt.isEmpty()) continue;
+                        if (!pyOpt.isPresent()) continue;
                         String py = pyOpt.get();
 
-                        Set<SwitchIdentity> vistosEmPyDeY = visiveis.getOrDefault(idY, Map.of())
-                                .getOrDefault(py, Set.of());
+                        Set<SwitchIdentity> vistosEmPyDeY = visiveis.getOrDefault(idY, Compat.mapOf())
+                                .getOrDefault(py, Compat.setOf());
                         Set<SwitchIdentity> vistosAlemDePyEmY = coletarForaDaPorta(visiveis, idY, py);
 
                         boolean compartilhaDestinoAlemDeY = false;
@@ -1035,7 +1283,7 @@ public class TopologyEngine {
             // Regra 2: Propagação transitiva de Z (visto por Y além de Py) para (X, Px)
             for (SwitchIdentity swX : switchesPorId.values()) {
                 String idX = swX.macNormalizado();
-                Map<String, Set<SwitchIdentity>> portasX = visiveis.getOrDefault(idX, Map.of());
+                Map<String, Set<SwitchIdentity>> portasX = visiveis.getOrDefault(idX, Compat.mapOf());
 
                 for (Map.Entry<String, Set<SwitchIdentity>> entryPx : portasX.entrySet()) {
                     String px = entryPx.getKey();
@@ -1047,7 +1295,7 @@ public class TopologyEngine {
                     for (SwitchIdentity swY : new ArrayList<>(vistosEmPx)) {
                         String idY = swY.macNormalizado();
                         Optional<String> pyOpt = encontrarPortaUnicaOndeVe(visiveis, idY, swX);
-                        if (pyOpt.isEmpty()) continue;
+                        if (!pyOpt.isPresent()) continue;
                         String py = pyOpt.get();
 
                         Set<SwitchIdentity> vistosAlemDePyEmY = coletarForaDaPorta(visiveis, idY, py);
@@ -1069,7 +1317,7 @@ public class TopologyEngine {
 
     private void recuperarVisibilidadeUplinkViaArp(Map<String, Map<String, Set<SwitchIdentity>>> visiveis) {
         Optional<GatewayInfo> gwOpt = resolverGatewayCandidato();
-        if (gwOpt.isEmpty()) {
+        if (!gwOpt.isPresent()) {
             return;
         }
         Map<String, String> portaOndeVeGw = mapearPortaGatewayPorSwitch(gwOpt.get().macNormalizado());
@@ -1109,8 +1357,8 @@ public class TopologyEngine {
             for (Map.Entry<SwitchIdentity, String> cand : portaNoCandidatoPai.entrySet()) {
                 SwitchIdentity swX = cand.getKey();
                 Set<SwitchIdentity> vistosEmPx = visiveis
-                        .getOrDefault(swX.macNormalizado(), Map.of())
-                        .getOrDefault(cand.getValue(), Set.of());
+                        .getOrDefault(swX.macNormalizado(), Compat.mapOf())
+                        .getOrDefault(cand.getValue(), Compat.setOf());
 
                 boolean contemOutroIntermediario = false;
                 for (SwitchIdentity outro : portaNoCandidatoPai.keySet()) {
@@ -1138,7 +1386,7 @@ public class TopologyEngine {
             SwitchIdentity switchAlvo
     ) {
         String portaEncontrada = null;
-        Map<String, Set<SwitchIdentity>> portas = visiveis.getOrDefault(switchObservadorId, Map.of());
+        Map<String, Set<SwitchIdentity>> portas = visiveis.getOrDefault(switchObservadorId, Compat.mapOf());
         for (Map.Entry<String, Set<SwitchIdentity>> e : portas.entrySet()) {
             if (e.getValue().contains(switchAlvo)) {
                 if (portaEncontrada != null && !portaEncontrada.equalsIgnoreCase(e.getKey())) {
@@ -1156,7 +1404,7 @@ public class TopologyEngine {
             String portaIgnorada
     ) {
         Set<SwitchIdentity> resultado = new LinkedHashSet<>();
-        Map<String, Set<SwitchIdentity>> portas = visiveis.getOrDefault(switchId, Map.of());
+        Map<String, Set<SwitchIdentity>> portas = visiveis.getOrDefault(switchId, Compat.mapOf());
         for (Map.Entry<String, Set<SwitchIdentity>> e : portas.entrySet()) {
             if (portaIgnorada != null && e.getKey().equalsIgnoreCase(portaIgnorada)) {
                 continue;
@@ -1179,7 +1427,7 @@ public class TopologyEngine {
         Map<String, List<String>> hostsPorPorta = new LinkedHashMap<>();
         Map<String, Set<String>> todosMacsPorPorta = new LinkedHashMap<>();
 
-        for (MacEntry entry : entradasPorSwitch.getOrDefault(switchId, List.of())) {
+        for (MacEntry entry : entradasPorSwitch.getOrDefault(switchId, Compat.listOf())) {
             Optional<SwitchIdentity> vizinho = identificarSwitchPorMac(entry.macNormalizado());
             if (vizinho.isPresent() && vizinho.get().macNormalizado().equals(switchId)) {
                 continue; // o switch "vendo a si mesmo" (loop de porta própria) - ignora
@@ -1189,7 +1437,7 @@ public class TopologyEngine {
             hostsPorPorta.computeIfAbsent(entry.port(), k -> new ArrayList<>());
             todosMacsPorPorta.computeIfAbsent(entry.port(), k -> new LinkedHashSet<>()).add(entry.macNormalizado());
 
-            if (vizinho.isEmpty()) {
+            if (!vizinho.isPresent()) {
                 List<String> hosts = hostsPorPorta.get(entry.port());
                 if (!hosts.contains(entry.mac())) {
                     hosts.add(entry.mac());
@@ -1200,8 +1448,8 @@ public class TopologyEngine {
         // Caso o MAC do gateway tenha expirado na tabela MAC L2 mas conste ativo na tabela ARP com Switchport físico
         resolverGatewayCandidato().ifPresent(gw -> {
             String gwNorm = gw.macNormalizado();
-            for (ArpEntry a : arpPorSwitch.getOrDefault(switchId, List.of())) {
-                if (gwNorm.equalsIgnoreCase(a.macNormalizado()) && a.port() != null && !a.port().isBlank()) {
+            for (ArpEntry a : arpPorSwitch.getOrDefault(switchId, Compat.listOf())) {
+                if (gwNorm.equalsIgnoreCase(a.macNormalizado()) && a.port() != null && !Compat.isBlank(a.port())) {
                     String porta = alinharNomePortaComTabelaMac(switchId, a.port());
                     switchesPorPorta.computeIfAbsent(porta, k -> new LinkedHashSet<>());
                     List<String> hosts = hostsPorPorta.computeIfAbsent(porta, k -> new ArrayList<>());
@@ -1219,8 +1467,8 @@ public class TopologyEngine {
             resultado.put(porta, new PortaAnalise(
                     porta,
                     switchesPorPorta.get(porta),
-                    hostsPorPorta.getOrDefault(porta, List.of()),
-                    todosMacsPorPorta.getOrDefault(porta, Set.of()).size()
+                    hostsPorPorta.getOrDefault(porta, Compat.listOf()),
+                    todosMacsPorPorta.getOrDefault(porta, Compat.setOf()).size()
             ));
         }
         return resultado;
@@ -1231,7 +1479,7 @@ public class TopologyEngine {
      * (diretamente na tabela MAC ou inferido por transitividade da árvore).
      */
     public Optional<String> portaRemota(String switchOrigemMacNormalizado, String switchVizinhoMacNormalizado) {
-        for (MacEntry entry : entradasPorSwitch.getOrDefault(switchVizinhoMacNormalizado, List.of())) {
+        for (MacEntry entry : entradasPorSwitch.getOrDefault(switchVizinhoMacNormalizado, Compat.listOf())) {
             Optional<SwitchIdentity> id = identificarSwitchPorMac(entry.macNormalizado());
             if (id.isPresent() && id.get().macNormalizado().equals(switchOrigemMacNormalizado)) {
                 return Optional.of(entry.port());
@@ -1264,7 +1512,7 @@ public class TopologyEngine {
             String switchId
     ) {
         int count = 0;
-        for (Set<SwitchIdentity> sws : visiveisGlobal.getOrDefault(switchId, Map.of()).values()) {
+        for (Set<SwitchIdentity> sws : visiveisGlobal.getOrDefault(switchId, Compat.mapOf()).values()) {
             if (!sws.isEmpty()) {
                 count++;
             }
@@ -1283,16 +1531,60 @@ public class TopologyEngine {
      */
     public ResultadoInferencia inferirVizinhoDireto(String switchOrigemId, Set<SwitchIdentity> candidatos) {
         if (candidatos.isEmpty()) return ResultadoInferencia.semCandidatos();
-        if (candidatos.size() == 1) return ResultadoInferencia.direto(candidatos.iterator().next(), Set.of());
+        if (candidatos.size() == 1) return ResultadoInferencia.direto(candidatos.iterator().next(), Compat.setOf());
 
         Map<String, Map<String, Set<SwitchIdentity>>> visiveisGlobal = construirMapaVisibilidade();
 
-        record Pontuacao(
-                SwitchIdentity candidato,
-                double score,
-                boolean temPortaRetorno,
-                Set<SwitchIdentity> naoExplicados
-        ) {}
+        final class Pontuacao {
+            private final SwitchIdentity candidato;
+            private final double score;
+            private final boolean temPortaRetorno;
+            private final Set<SwitchIdentity> naoExplicados;
+
+            Pontuacao(SwitchIdentity candidato, double score, boolean temPortaRetorno, Set<SwitchIdentity> naoExplicados) {
+                this.candidato = candidato;
+                this.score = score;
+                this.temPortaRetorno = temPortaRetorno;
+                this.naoExplicados = naoExplicados;
+            }
+
+            public SwitchIdentity candidato() {
+                return candidato;
+            }
+
+            public double score() {
+                return score;
+            }
+
+            public boolean temPortaRetorno() {
+                return temPortaRetorno;
+            }
+
+            public Set<SwitchIdentity> naoExplicados() {
+                return naoExplicados;
+            }
+
+            @Override
+            public boolean equals(Object obj) {
+                if (this == obj) return true;
+                if (!(obj instanceof Pontuacao)) return false;
+                Pontuacao o = (Pontuacao) obj;
+                return java.util.Objects.equals(candidato, o.candidato)
+                        && Double.compare(score, o.score) == 0
+                        && temPortaRetorno == o.temPortaRetorno
+                        && java.util.Objects.equals(naoExplicados, o.naoExplicados);
+            }
+
+            @Override
+            public int hashCode() {
+                return java.util.Objects.hash(candidato, score, temPortaRetorno, naoExplicados);
+            }
+
+            @Override
+            public String toString() {
+                return "Pontuacao[candidato=" + candidato + ", score=" + score + ", temPortaRetorno=" + temPortaRetorno + ", naoExplicados=" + naoExplicados + "]";
+            }
+        }
 
         List<Pontuacao> pontuacoes = new ArrayList<>();
         for (SwitchIdentity candidato : candidatos) {
@@ -1307,7 +1599,7 @@ public class TopologyEngine {
                 } else if (contarPortasComSwitches(visiveisGlobal, candidato.macNormalizado()) <= 1) {
                     // Se o candidato é switch de ponta (só vê outros switches em uma única porta de uplink),
                     // ele não pode ser switch intermediário para os demais candidatos.
-                    alcancaveis = Set.of();
+                    alcancaveis = Compat.setOf();
                 } else {
                     alcancaveis = alcancaveisPor(visiveisGlobal, candidato.macNormalizado(), null);
                 }
@@ -1333,33 +1625,77 @@ public class TopologyEngine {
             return ResultadoInferencia.indeterminado(candidatos);
         }
 
-        List<Pontuacao> melhores = pontuacoes.stream().filter(p -> p.score() == melhorScore).toList();
+        List<Pontuacao> melhores = pontuacoes.stream().filter(p -> p.score() == melhorScore).collect(Collectors.toList());
 
         // Se houver empate entre quem tem porta de retorno confirmada e quem não tem, prioriza quem tem
         if (melhores.size() > 1) {
-            List<Pontuacao> comRetorno = melhores.stream().filter(Pontuacao::temPortaRetorno).toList();
+            List<Pontuacao> comRetorno = melhores.stream().filter(Pontuacao::temPortaRetorno).collect(Collectors.toList());
             if (!comRetorno.isEmpty()) {
                 melhores = comRetorno;
             }
         }
 
         if (melhores.size() > 1 && melhorScore == 1.0) {
-            List<SwitchIdentity> empatados = melhores.stream().map(Pontuacao::candidato).toList();
+            List<SwitchIdentity> empatados = melhores.stream().map(Pontuacao::candidato).collect(Collectors.toList());
             return ResultadoInferencia.ambiguo(empatados);
         }
 
         Pontuacao vencedor = melhores.get(0);
         return vencedor.score() == 1.0
-                ? ResultadoInferencia.direto(vencedor.candidato(), Set.of())
+                ? ResultadoInferencia.direto(vencedor.candidato(), Compat.setOf())
                 : ResultadoInferencia.diretoParcial(vencedor.candidato(), vencedor.naoExplicados());
     }
 
-    public record PortaAnalise(
-            String porta,
-            Set<SwitchIdentity> switchesVisiveis,
-            List<String> macsHostsDesconhecidos,
-            int totalMacs
-    ) {
+    public static final class PortaAnalise {
+        private final String porta;
+        private final Set<SwitchIdentity> switchesVisiveis;
+        private final List<String> macsHostsDesconhecidos;
+        private final int totalMacs;
+
+        public PortaAnalise(String porta, Set<SwitchIdentity> switchesVisiveis, List<String> macsHostsDesconhecidos, int totalMacs) {
+            this.porta = porta;
+            this.switchesVisiveis = switchesVisiveis;
+            this.macsHostsDesconhecidos = macsHostsDesconhecidos;
+            this.totalMacs = totalMacs;
+        }
+
+        public String porta() {
+            return porta;
+        }
+
+        public Set<SwitchIdentity> switchesVisiveis() {
+            return switchesVisiveis;
+        }
+
+        public List<String> macsHostsDesconhecidos() {
+            return macsHostsDesconhecidos;
+        }
+
+        public int totalMacs() {
+            return totalMacs;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof PortaAnalise)) return false;
+            PortaAnalise o = (PortaAnalise) obj;
+            return java.util.Objects.equals(porta, o.porta)
+                    && java.util.Objects.equals(switchesVisiveis, o.switchesVisiveis)
+                    && java.util.Objects.equals(macsHostsDesconhecidos, o.macsHostsDesconhecidos)
+                    && totalMacs == o.totalMacs;
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(porta, switchesVisiveis, macsHostsDesconhecidos, totalMacs);
+        }
+
+        @Override
+        public String toString() {
+            return "PortaAnalise[porta=" + porta + ", switchesVisiveis=" + switchesVisiveis + ", macsHostsDesconhecidos=" + macsHostsDesconhecidos + ", totalMacs=" + totalMacs + "]";
+        }
+
         public int hostsDesconhecidos() {
             return macsHostsDesconhecidos.size();
         }
@@ -1369,23 +1705,65 @@ public class TopologyEngine {
         }
     }
 
-    public record ResultadoInferencia(Tipo tipo, List<SwitchIdentity> candidatos, Set<SwitchIdentity> naoExplicados) {
+    public static final class ResultadoInferencia {
+        private final Tipo tipo;
+        private final List<SwitchIdentity> candidatos;
+        private final Set<SwitchIdentity> naoExplicados;
+
+        public ResultadoInferencia(Tipo tipo, List<SwitchIdentity> candidatos, Set<SwitchIdentity> naoExplicados) {
+            this.tipo = tipo;
+            this.candidatos = candidatos;
+            this.naoExplicados = naoExplicados;
+        }
+
+        public Tipo tipo() {
+            return tipo;
+        }
+
+        public List<SwitchIdentity> candidatos() {
+            return candidatos;
+        }
+
+        public Set<SwitchIdentity> naoExplicados() {
+            return naoExplicados;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof ResultadoInferencia)) return false;
+            ResultadoInferencia o = (ResultadoInferencia) obj;
+            return java.util.Objects.equals(tipo, o.tipo)
+                    && java.util.Objects.equals(candidatos, o.candidatos)
+                    && java.util.Objects.equals(naoExplicados, o.naoExplicados);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(tipo, candidatos, naoExplicados);
+        }
+
+        @Override
+        public String toString() {
+            return "ResultadoInferencia[tipo=" + tipo + ", candidatos=" + candidatos + ", naoExplicados=" + naoExplicados + "]";
+        }
+
         public enum Tipo { DIRETO, DIRETO_PARCIAL, AMBIGUO, INDETERMINADO, SEM_CANDIDATOS }
 
         static ResultadoInferencia direto(SwitchIdentity s, Set<SwitchIdentity> naoExplicados) {
-            return new ResultadoInferencia(Tipo.DIRETO, List.of(s), naoExplicados);
+            return new ResultadoInferencia(Tipo.DIRETO, Compat.listOf(s), naoExplicados);
         }
         static ResultadoInferencia diretoParcial(SwitchIdentity s, Set<SwitchIdentity> naoExplicados) {
-            return new ResultadoInferencia(Tipo.DIRETO_PARCIAL, List.of(s), naoExplicados);
+            return new ResultadoInferencia(Tipo.DIRETO_PARCIAL, Compat.listOf(s), naoExplicados);
         }
         static ResultadoInferencia ambiguo(List<SwitchIdentity> candidatos) {
-            return new ResultadoInferencia(Tipo.AMBIGUO, candidatos, Set.of());
+            return new ResultadoInferencia(Tipo.AMBIGUO, candidatos, Compat.setOf());
         }
         static ResultadoInferencia indeterminado(Set<SwitchIdentity> candidatos) {
-            return new ResultadoInferencia(Tipo.INDETERMINADO, List.copyOf(candidatos), Set.of());
+            return new ResultadoInferencia(Tipo.INDETERMINADO, Compat.listCopyOf(candidatos), Compat.setOf());
         }
         static ResultadoInferencia semCandidatos() {
-            return new ResultadoInferencia(Tipo.SEM_CANDIDATOS, List.of(), Set.of());
+            return new ResultadoInferencia(Tipo.SEM_CANDIDATOS, Compat.listOf(), Compat.setOf());
         }
     }
 
@@ -1395,9 +1773,9 @@ public class TopologyEngine {
      * (descartando estações finais, telefones IP e equipamentos irrelevantes).
      */
     public List<VizinhoLldpClassificado> vizinhosLldpDeInteresse(String switchId) {
-        List<LldpNeighbor> brutos = lldpPorSwitch.getOrDefault(switchId, List.of());
+        List<LldpNeighbor> brutos = lldpPorSwitch.getOrDefault(switchId, Compat.listOf());
         if (brutos.isEmpty()) {
-            return List.of();
+            return Compat.listOf();
         }
         Optional<GatewayInfo> gwOpt = gatewayIdentificado();
         Collection<SwitchIdentity> todos = switchesPorId.values();
@@ -1442,9 +1820,9 @@ public class TopologyEngine {
      * Verifica se a porta informada está em estado de bloqueio STP (Alternate/Backup/Discarding).
      */
     public boolean portaBloqueadaPorStp(String switchId, String porta) {
-        if (switchId == null || porta == null || porta.isBlank()) return false;
+        if (switchId == null || porta == null || Compat.isBlank(porta)) return false;
         String portaSemBagg = porta.contains("(") ? porta.substring(0, porta.indexOf('(')).trim() : porta.trim();
-        for (StpPortState s : stpPorSwitch.getOrDefault(switchId, List.of())) {
+        for (StpPortState s : stpPorSwitch.getOrDefault(switchId, Compat.listOf())) {
             if ((s.port().equalsIgnoreCase(porta.trim()) || s.port().equalsIgnoreCase(portaSemBagg))
                     && s.estaBloqueada()) {
                 return true;
@@ -1454,7 +1832,7 @@ public class TopologyEngine {
     }
 
     public Map<String, List<String>> baggsDe(String switchId) {
-        return Collections.unmodifiableMap(baggsPorSwitch.getOrDefault(switchId, Map.of()));
+        return Collections.unmodifiableMap(baggsPorSwitch.getOrDefault(switchId, Compat.mapOf()));
     }
 
     /**

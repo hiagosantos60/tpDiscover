@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import tpDiscover.intelbras.util.Compat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -43,20 +44,20 @@ class DiscoveryGuiBackendTest {
 
     @Test
     void deveSalvarAlvosComESemSenha(@TempDir Path tempDir) throws Exception {
-        List<SwitchTarget> alvos = List.of(
+        List<SwitchTarget> alvos = Compat.listOf(
                 new SwitchTarget("10.1.40.203", "admin", "Admin@1234"),
                 new SwitchTarget("10.1.31.19", "ops", "Segredo", 65019)
         );
 
         Path comSenha = tempDir.resolve("com_senha.txt");
         AlvosLoader.salvarAlvos(comSenha, alvos, true);
-        String conteudoCom = Files.readString(comSenha);
+        String conteudoCom = Compat.readString(comSenha);
         assertTrue(conteudoCom.contains("10.1.40.203;admin;Admin@1234"));
         assertTrue(conteudoCom.contains("10.1.31.19:65019;ops;Segredo"));
 
         Path semSenha = tempDir.resolve("sem_senha.txt");
         AlvosLoader.salvarAlvos(semSenha, alvos, false);
-        String conteudoSem = Files.readString(semSenha);
+        String conteudoSem = Compat.readString(semSenha);
         assertTrue(conteudoSem.contains("10.1.40.203;admin"));
         assertTrue(conteudoSem.contains("10.1.31.19:65019;ops"));
         assertFalse(conteudoSem.contains("Admin@1234"));
@@ -68,14 +69,14 @@ class DiscoveryGuiBackendTest {
         DiscoverySessionService service = new DiscoverySessionService();
 
         DiscoveryRequest reqInvalido = new DiscoveryRequest(
-                List.of("10.1.0.0/8"), List.of(), "admin", "Admin@1234",
+                Compat.listOf("10.1.0.0/8"), Compat.listOf(), "admin", "Admin@1234",
                 true, true, false, 4, null, null, tempDir, null
         );
         DiscoverySessionResult resInvalido = service.executar(reqInvalido, null, new AtomicBoolean(false));
         assertTrue(resInvalido.possuiErroFatal());
 
         DiscoveryRequest reqCancelado = new DiscoveryRequest(
-                List.of("127.0.0.1"), List.of(), "admin", "Admin@1234",
+                Compat.listOf("127.0.0.1"), Compat.listOf(), "admin", "Admin@1234",
                 true, true, false, 4, null, null, tempDir, null
         );
         DiscoverySessionResult resCancelado = service.executar(reqCancelado, null, new AtomicBoolean(true));
@@ -90,14 +91,14 @@ class DiscoveryGuiBackendTest {
         SwitchIdentity sw2 = new SwitchIdentity("SW-ACC", "SER2", "0011-2233-5500", "S3028G-B", "10.1.40.11");
         engine.registrarSwitch(sw1);
         engine.registrarSwitch(sw2);
-        engine.registrarEntradas(sw1.macNormalizado(), List.of(
+        engine.registrarEntradas(sw1.macNormalizado(), Compat.listOf(
                 new MacEntry(sw1.macNormalizado(), "0011-2233-5500", 1, "Learned", "GE1/0/1")
         ));
-        engine.registrarEntradas(sw2.macNormalizado(), List.of(
+        engine.registrarEntradas(sw2.macNormalizado(), Compat.listOf(
                 new MacEntry(sw2.macNormalizado(), "0011-2233-4400", 1, "Learned", "GE0/24"),
                 new MacEntry(sw2.macNormalizado(), "0011-2233-5500", 1, "Learned", "GE0/5")
         ));
-        engine.registrarStp(sw2.macNormalizado(), List.of(
+        engine.registrarStp(sw2.macNormalizado(), Compat.listOf(
                 new StpPortState(sw2.macNormalizado(), "GE0/23", "ALTERNATE", "DISCARDING", true, "0011-2233-4400")
         ));
 

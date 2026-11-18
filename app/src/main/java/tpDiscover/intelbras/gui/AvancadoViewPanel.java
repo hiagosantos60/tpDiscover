@@ -24,6 +24,7 @@ import java.awt.Insets;
 import java.util.ArrayList;
 import java.util.List;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Aba "Avançado": ajustes opcionais, agrupados por assunto e com uma explicação curta em cada item.
  * Nada aqui é necessário para uma coleta normal.
@@ -182,7 +183,7 @@ public class AvancadoViewPanel extends JPanel {
     }
 
     public List<CredencialAcesso> getCredenciaisAlternativas() {
-        return List.copyOf(credenciaisAlternativas);
+        return Compat.listCopyOf(credenciaisAlternativas);
     }
 
     public int getConcorrencia() {

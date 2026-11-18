@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
+import tpDiscover.intelbras.util.Compat;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ProductFingerprinterTest {
@@ -16,7 +17,7 @@ class ProductFingerprinterTest {
     void deveExtrairModeloApcESgMrL2PlusEIgnorarSysNameGenerico() {
         DiscoveredProduct radioApc = ProductFingerprinter.classificarSinais(
                 "10.1.40.78",
-                List.of(80, 443),
+                Compat.listOf(80, 443),
                 "",
                 "HTTP/1.1 200 OK\r\n<title>APC 5M-18</title>",
                 "",
@@ -29,7 +30,7 @@ class ProductFingerprinterTest {
 
         DiscoveredProduct sgMrL2Plus = ProductFingerprinter.classificarSinais(
                 "10.1.40.179",
-                List.of(22, 23, 80),
+                Compat.listOf(22, 23, 80),
                 "",
                 "HTTP/1.1 200 OK\r\nServer: GoAhead-Webs\r\n<title>SG 5204 MR L2+</title>",
                 "",
@@ -45,7 +46,7 @@ class ProductFingerprinterTest {
 
         DiscoveredProduct sgMrSemModeloNoSysDescr = ProductFingerprinter.classificarSinais(
                 "10.1.40.120",
-                List.of(22, 23, 80),
+                Compat.listOf(22, 23, 80),
                 "SSH-1.99-IPSSH-6.6.0",
                 "HTTP/1.1 200 OK\r\n<title>Web Switch</title>",
                 "",
@@ -59,7 +60,7 @@ class ProductFingerprinterTest {
 
         DiscoveredProduct servidorUbuntu = ProductFingerprinter.classificarSinais(
                 "10.1.40.243",
-                List.of(22, 80),
+                Compat.listOf(22, 80),
                 "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.10",
                 "HTTP/1.1 200 OK\r\nServer: nginx",
                 "",
@@ -80,7 +81,7 @@ class ProductFingerprinterTest {
         );
         DiscoveredProduct prod = ProductFingerprinter.classificarSinais(
                 "10.1.40.92",
-                List.of(22, 23, 80),
+                Compat.listOf(22, 23, 80),
                 "",
                 httpAcumulado,
                 "",
@@ -133,7 +134,7 @@ class ProductFingerprinterTest {
         // 1) G16 / G08 / 4840E: SSH-2.0-PRIVATE + Telnet Username(1-64 chars):
         DiscoveredProduct g16 = ProductFingerprinter.classificarSinais(
                 "10.1.40.134",
-                List.of(22, 23),
+                Compat.listOf(22, 23),
                 "SSH-2.0-PRIVATE",
                 "",
                 "Username(1-64 chars):",
@@ -148,7 +149,7 @@ class ProductFingerprinterTest {
         // 2) AN6000-2: apenas Telnet com banner ASCII 'z' + Login e OUI Intelbras
         DiscoveredProduct an6000 = ProductFingerprinter.classificarSinais(
                 "10.1.40.140",
-                List.of(23),
+                Compat.listOf(23),
                 "",
                 "",
                 "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz Master Login:",
@@ -164,7 +165,7 @@ class ProductFingerprinterTest {
         // 3) AN6001-G16: Telnet + HTTP 80 vazio
         DiscoveredProduct an6001 = ProductFingerprinter.classificarSinais(
                 "10.1.40.142",
-                List.of(23, 80),
+                Compat.listOf(23, 80),
                 "",
                 "",
                 "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz Login:",
@@ -178,7 +179,7 @@ class ProductFingerprinterTest {
         // 4) 8820I com OpenSSH_7.3 + SNMP olt8820i: deve preferir TELNET
         DiscoveredProduct olt8820i = ProductFingerprinter.classificarSinais(
                 "10.1.40.133",
-                List.of(22, 23),
+                Compat.listOf(22, 23),
                 "SSH-2.0-OpenSSH_7.3",
                 "",
                 "",
@@ -203,14 +204,14 @@ class ProductFingerprinterTest {
         ByteArrayOutputStream out = new ByteArrayOutputStream(content.length + 3);
         out.write(tag);
         out.write(content.length);
-        out.writeBytes(content);
+        out.write(content, 0, content.length);
         return out.toByteArray();
     }
 
     private static byte[] concat(byte[]... parts) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         for (byte[] part : parts) {
-            out.writeBytes(part);
+            out.write(part, 0, part.length);
         }
         return out.toByteArray();
     }

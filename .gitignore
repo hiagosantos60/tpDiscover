@@ -12,3 +12,6 @@ topologia_*.pdf
 topologia_*.html
 topologia_*.json
 topologia_*.txt
+
+# Nunca versionar a senha de acesso em texto puro
+senha.txt

@@ -18,6 +18,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Parser para a CLI dos switches Intelbras Série 3000, Série 2000 (S2050G-A),
  * S30-Lite (S3028G-PB/B Lite) e linha SG MR L2+ (SG 1002/5204 MR L2+).
@@ -136,7 +137,7 @@ public class Serie3000Parser {
 
         String limpo = limparControleTerminal(rawOutput);
         for (String line : limpo.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
 
             int vlan;
@@ -199,13 +200,13 @@ public class Serie3000Parser {
     }
 
     public Optional<String> parseDefaultGatewayIp(String rawOutput) {
-        if (rawOutput == null || rawOutput.isBlank()) {
+        if (rawOutput == null || Compat.isBlank(rawOutput)) {
             return Optional.empty();
         }
         String[] linhas = rawOutput.split("\\R");
         Pattern ipv4 = Pattern.compile("\\b" + IPV4_REGEX + "\\b");
         for (String line : linhas) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
             if (DEFAULT_ROUTE_LINE.matcher(trimmed).find()) {
                 Matcher mIp = ipv4.matcher(trimmed);
@@ -231,13 +232,13 @@ public class Serie3000Parser {
 
     public List<ArpEntry> parseArpTable(String rawOutput) {
         List<ArpEntry> entries = new ArrayList<>();
-        if (rawOutput == null || rawOutput.isBlank()) {
+        if (rawOutput == null || Compat.isBlank(rawOutput)) {
             return entries;
         }
 
         String limpo = limparControleTerminal(rawOutput);
         for (String line : limpo.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
 
             Matcher m = ARP_LINE.matcher(trimmed);
@@ -248,7 +249,7 @@ public class Serie3000Parser {
             String resto = m.group(3);
 
             String portaFisica = null;
-            if (resto != null && !resto.isBlank()) {
+            if (resto != null && !Compat.isBlank(resto)) {
                 String[] tokens = resto.trim().split("\\s+");
                 for (int i = tokens.length - 1; i >= 0; i--) {
                     portaFisica = extrairPortaFisicaArp(tokens[i]);
@@ -282,7 +283,7 @@ public class Serie3000Parser {
     }
 
     private static String extrairPortaFisicaArp(String token) {
-        if (token == null || token.isBlank()) return null;
+        if (token == null || Compat.isBlank(token)) return null;
         String t = token.trim();
 
         Matcher mWrapped = WRAPPED_VLAN_PORT.matcher(t);
@@ -303,7 +304,7 @@ public class Serie3000Parser {
     }
 
     private static boolean ehTokenDePortaOuInterna(String token) {
-        if (token == null || token.isBlank()) return false;
+        if (token == null || Compat.isBlank(token)) return false;
         return ehPortaInterna(token) || PORTA_FISICA_OU_LAG_TOKEN.matcher(token.trim()).matches();
     }
 
@@ -346,7 +347,7 @@ public class Serie3000Parser {
     }
 
     public static String extrairMacLocalVlan(String rawOutput) {
-        if (rawOutput == null || rawOutput.isBlank()) return null;
+        if (rawOutput == null || Compat.isBlank(rawOutput)) return null;
         Matcher m = MAC_LOCAL_VLAN_PATTERN.matcher(limparControleTerminal(rawOutput));
         if (m.find()) {
             String fmt = formatarMacPadrao(m.group(1)).toUpperCase();
@@ -358,7 +359,7 @@ public class Serie3000Parser {
     }
 
     private static String extrairMelhorMac(String rawOutput) {
-        if (rawOutput == null || rawOutput.isBlank()) return null;
+        if (rawOutput == null || Compat.isBlank(rawOutput)) return null;
         Matcher m1 = MAC_PRIORITARIO_PATTERN.matcher(rawOutput);
         while (m1.find()) {
             String formatado = formatarMacPadrao(m1.group(1)).toUpperCase();
@@ -378,8 +379,8 @@ public class Serie3000Parser {
 
     public Map<String, List<String>> parseLinkAggregation(String rawOutput) {
         Map<String, Set<String>> membrosPorBagg = new LinkedHashMap<>();
-        if (rawOutput == null || rawOutput.isBlank()) {
-            return Map.of();
+        if (rawOutput == null || Compat.isBlank(rawOutput)) {
+            return Compat.mapOf();
         }
 
         Pattern aggHeader = Pattern.compile(
@@ -393,7 +394,7 @@ public class Serie3000Parser {
         boolean tabelaGroupMembers = false;
         String baggAtual = null;
         for (String line : rawOutput.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
             String lowerLine = trimmed.toLowerCase();
             if ((lowerLine.contains("group") && lowerLine.contains("members"))
@@ -429,7 +430,7 @@ public class Serie3000Parser {
         Map<String, List<String>> resultado = new LinkedHashMap<>();
         membrosPorBagg.forEach((bagg, portas) -> {
             if (!portas.isEmpty()) {
-                resultado.put(bagg, List.copyOf(portas));
+                resultado.put(bagg, Compat.listCopyOf(portas));
             }
         });
         return resultado;
@@ -484,7 +485,7 @@ public class Serie3000Parser {
      */
     public List<LldpNeighbor> parseLldpS2050Lite(String switchId, String rawOutput) {
         List<LldpNeighbor> vizinhos = new ArrayList<>();
-        if (rawOutput == null || rawOutput.isBlank()) {
+        if (rawOutput == null || Compat.isBlank(rawOutput)) {
             return vizinhos;
         }
         String lower = rawOutput.toLowerCase();
@@ -503,7 +504,7 @@ public class Serie3000Parser {
         Set<String> caps = new LinkedHashSet<>();
 
         for (String line : limparControleTerminal(rawOutput).split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty() || trimmed.equals("---\\") || trimmed.equals("---/")) {
                 continue;
             }
@@ -582,8 +583,8 @@ public class Serie3000Parser {
      * Faz o parse da saída de "show lldp neighbors detail" ou "show lldp neighbors" (S30 / SG MR L2+).
      */
     public List<LldpNeighbor> parseLldpSerie3000(String switchId, String rawOutput) {
-        if (rawOutput == null || rawOutput.isBlank()) {
-            return List.of();
+        if (rawOutput == null || Compat.isBlank(rawOutput)) {
+            return Compat.listOf();
         }
         String limpo = limparControleTerminal(rawOutput);
         String lower = limpo.toLowerCase();
@@ -592,7 +593,7 @@ public class Serie3000Parser {
                 || lower.contains("lldp is not enabled")
                 || Pattern.compile("\\b0\\s+neighbor\\s+entries\\b").matcher(lower).find()
                 || lower.contains("total entries displayed: 0")) {
-            return List.of();
+            return Compat.listOf();
         }
 
         if (lower.contains(">>> interface")) {
@@ -611,7 +612,7 @@ public class Serie3000Parser {
         Set<String> caps = new LinkedHashSet<>();
 
         for (String line : limpo.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
 
             Matcher mTable = S30_LLDP_TABLE_LINE.matcher(trimmed);
@@ -646,7 +647,7 @@ public class Serie3000Parser {
                 else if ((k.equals("management address") || k.equals("ip address")) && mgmtIp == null && v.matches("^" + IPV4_REGEX + "$")) mgmtIp = v;
                 else if (k.contains("capabilities")) {
                     for (String c : v.split("[,\\s]+")) {
-                        if (!c.isBlank()) caps.add(c.trim());
+                        if (!Compat.isBlank(c)) caps.add(c.trim());
                     }
                 }
             }
@@ -685,7 +686,7 @@ public class Serie3000Parser {
     ) {
         String macNorm = ComwareParser.extrairMacNormalizadoDeChassis(chassisId);
         String remotePort = ComwareParser.resolverMelhorPortaRemota(portId, portDesc);
-        return new LldpNeighbor(switchId, localPort, chassisId, macNorm, remotePort, portDesc, sysName, sysDesc, mgmtIp, Set.copyOf(caps));
+        return new LldpNeighbor(switchId, localPort, chassisId, macNorm, remotePort, portDesc, sysName, sysDesc, mgmtIp, Compat.setCopyOf(caps));
     }
 
     /**
@@ -693,7 +694,7 @@ public class Serie3000Parser {
      */
     public List<StpPortState> parseSpanningTree(String switchId, String rawOutput) {
         List<StpPortState> estados = new ArrayList<>();
-        if (rawOutput == null || rawOutput.isBlank()) {
+        if (rawOutput == null || Compat.isBlank(rawOutput)) {
             return estados;
         }
         String limpo = limparControleTerminal(rawOutput);
@@ -713,7 +714,7 @@ public class Serie3000Parser {
         }
 
         for (String line : limpo.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
 
             Matcher mTable = STP_PORT_TABLE_LINE.matcher(trimmed);
@@ -769,7 +770,7 @@ public class Serie3000Parser {
      */
     public List<LoopDiagnostic> parseLoopbackDetection(String switchId, String rawOutput) {
         List<LoopDiagnostic> achados = new ArrayList<>();
-        if (rawOutput == null || rawOutput.isBlank()) return achados;
+        if (rawOutput == null || Compat.isBlank(rawOutput)) return achados;
         String limpo = limparControleTerminal(rawOutput);
         String lower = limpo.toLowerCase();
         if (lower.contains("loopback-detection is disable")
@@ -778,7 +779,7 @@ public class Serie3000Parser {
         }
 
         for (String line : limpo.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
             Matcher m = LOOPBACK_LINE_PORT.matcher(trimmed);
             if (!m.find()) continue;
@@ -801,7 +802,7 @@ public class Serie3000Parser {
     }
 
     private static boolean linhaIndicaLoopAtivo(String restoLinha) {
-        if (restoLinha == null || restoLinha.isBlank()) return false;
+        if (restoLinha == null || Compat.isBlank(restoLinha)) return false;
         String[] cols = restoLinha.trim().split("\\s+");
         if (cols.length == 0) return false;
 
@@ -914,17 +915,17 @@ public class Serie3000Parser {
             }
         }
 
-        if (productId == null || productId.isBlank() || productId.equalsIgnoreCase("Intelbras")) {
+        if (productId == null || Compat.isBlank(productId) || productId.equalsIgnoreCase("Intelbras")) {
             productId = "Série 3000";
         }
 
-        if (deviceName == null || deviceName.isBlank()
+        if (deviceName == null || Compat.isBlank(deviceName)
                 || deviceName.equalsIgnoreCase("INTELBRAS")
                 || deviceName.equalsIgnoreCase("Switch")) {
             deviceName = !"Série 3000".equals(productId) ? productId : ("S30-" + ip);
         }
 
-        if (mac != null && mac.isBlank()) {
+        if (mac != null && Compat.isBlank(mac)) {
             mac = null;
         }
 

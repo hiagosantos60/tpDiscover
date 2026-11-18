@@ -19,6 +19,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Fallback local para descoberta do Roteador/Gateway a partir da máquina onde o tpDiscover
  * está sendo executado, útil quando os switches do cliente operam em L2 puro sem rota padrão
@@ -48,7 +49,42 @@ public final class LocalGatewayDetector {
             "(?:^|\\()(\\d+\\.\\d+\\.\\d+\\.\\d+)(?:\\)|\\s+)[^0-9a-fA-F]*([0-9a-fA-F]{2}(?:[:\\-][0-9a-fA-F]{2}){5})\\b"
     );
 
-    private record RotaLocal(String gatewayIp, String interfaceIp) {}
+    private static final class RotaLocal {
+        private final String gatewayIp;
+        private final String interfaceIp;
+
+        private RotaLocal(String gatewayIp, String interfaceIp) {
+            this.gatewayIp = gatewayIp;
+            this.interfaceIp = interfaceIp;
+        }
+
+        public String gatewayIp() {
+            return gatewayIp;
+        }
+
+        public String interfaceIp() {
+            return interfaceIp;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof RotaLocal)) return false;
+            RotaLocal o = (RotaLocal) obj;
+            return java.util.Objects.equals(gatewayIp, o.gatewayIp)
+                    && java.util.Objects.equals(interfaceIp, o.interfaceIp);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(gatewayIp, interfaceIp);
+        }
+
+        @Override
+        public String toString() {
+            return "RotaLocal[gatewayIp=" + gatewayIp + ", interfaceIp=" + interfaceIp + "]";
+        }
+    }
 
     private LocalGatewayDetector() {
     }
@@ -78,7 +114,7 @@ public final class LocalGatewayDetector {
      * Consulta o endereço MAC correspondente a um IP na tabela ARP do sistema operacional local.
      */
     public static Optional<String> resolverMacNoArpLocal(String ipAlvo) {
-        if (ipAlvo == null || ipAlvo.isBlank()) {
+        if (ipAlvo == null || Compat.isBlank(ipAlvo)) {
             return Optional.empty();
         }
 
@@ -93,7 +129,7 @@ public final class LocalGatewayDetector {
     }
 
     public static Optional<String> extrairMacDeSaidaArp(String ipAlvo, String saidaArp) {
-        if (ipAlvo == null || saidaArp == null || saidaArp.isBlank()) {
+        if (ipAlvo == null || saidaArp == null || Compat.isBlank(saidaArp)) {
             return Optional.empty();
         }
 
@@ -144,7 +180,7 @@ public final class LocalGatewayDetector {
             Collection<String> ipsSwitches
     ) {
         int prefixo = descobrirPrefixoInterfaceLocal(interfaceIp);
-        String ipReferencia = (interfaceIp != null && !interfaceIp.isBlank()) ? interfaceIp : gatewayIp;
+        String ipReferencia = (interfaceIp != null && !Compat.isBlank(interfaceIp)) ? interfaceIp : gatewayIp;
 
         Integer refInt = ipv4ParaInt(ipReferencia);
         Integer gwInt = ipv4ParaInt(gatewayIp);
@@ -163,7 +199,7 @@ public final class LocalGatewayDetector {
     }
 
     private static int descobrirPrefixoInterfaceLocal(String interfaceIp) {
-        if (interfaceIp != null && !interfaceIp.isBlank()) {
+        if (interfaceIp != null && !Compat.isBlank(interfaceIp)) {
             try {
                 InetAddress addr = InetAddress.getByName(interfaceIp.trim());
                 NetworkInterface nif = NetworkInterface.getByInetAddress(addr);

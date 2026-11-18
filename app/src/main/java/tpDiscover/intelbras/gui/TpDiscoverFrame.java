@@ -36,6 +36,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import java.nio.file.Paths;
+import tpDiscover.intelbras.util.Compat;
 /**
  * Janela principal do tpDiscover em tema escuro minimalista (FlatLaf Dark),
  * com barra superior de navegação separando Coleta, Equipamentos, Topologia & Loops e Avançado.
@@ -76,7 +78,7 @@ public class TpDiscoverFrame extends JFrame {
 
     public TpDiscoverFrame() {
         super("tpDiscover Intelbras");
-        Path pastaInicial = Path.of("").toAbsolutePath().normalize();
+        Path pastaInicial = Paths.get("").toAbsolutePath().normalize();
 
         this.topologiaPanel = new TopologiaViewPanel(pastaInicial, this::irParaEquipamentosCorrigirFalhos);
         this.coletaPanel = new ColetaViewPanel(
@@ -93,8 +95,14 @@ public class TpDiscoverFrame extends JFrame {
 
     public static void exibir() {
         SwingThemeHelper.aplicarTemaMultiplataforma();
+        if (!TelaAcessoDialog.solicitarAcesso()) {
+            System.exit(0);
+            return;
+        }
         TpDiscoverFrame frame = new TpDiscoverFrame();
+        frame.setIconImage(TelaAcessoDialog.iconeJanela());
         frame.setVisible(true);
+        frame.toFront();
         frame.coletaPanel.getTxtSenha().requestFocusInWindow();
     }
 
@@ -300,11 +308,20 @@ public class TpDiscoverFrame extends JFrame {
     private void selecionarAba(String nomeCard) {
         cardLayout.show(containerCards, nomeCard);
         switch (nomeCard) {
-            case CARD_COLETA -> navColeta.setSelected(true);
-            case CARD_EQUIPAMENTOS -> navEquipamentos.setSelected(true);
-            case CARD_TOPOLOGIA -> navTopologia.setSelected(true);
-            case CARD_AVANCADO -> navAvancado.setSelected(true);
-            default -> {
+            case CARD_COLETA:
+                navColeta.setSelected(true);
+                break;
+            case CARD_EQUIPAMENTOS:
+                navEquipamentos.setSelected(true);
+                break;
+            case CARD_TOPOLOGIA:
+                navTopologia.setSelected(true);
+                break;
+            case CARD_AVANCADO:
+                navAvancado.setSelected(true);
+                break;
+            default: {
+                break;
             }
         }
     }
@@ -362,13 +379,7 @@ public class TpDiscoverFrame extends JFrame {
                     return;
                 }
             } else {
-                if (!apenasScan && senhaPadrao.isEmpty()) {
-                    selecionarAba(CARD_COLETA);
-                    SwingThemeHelper.marcarCampoComErro(coletaPanel.getTxtSenha());
-                    exibirAviso("Informe a senha para acessar os equipamentos.\n"
-                            + "(Para só ver quais equipamentos existem, use 'Só procurar equipamentos'.)");
-                    return;
-                }
+                // Senha em branco é permitida: equipamentos que pedem só o usuário (ou aceitam senha vazia)
                 alvosManuais = tableModel.extrairOverridesManuais(usuarioPadrao, senhaPadrao);
             }
         } catch (IllegalArgumentException ex) {
@@ -376,7 +387,7 @@ public class TpDiscoverFrame extends JFrame {
             return;
         }
 
-        if (!apenasScan && usuarioPadrao.isBlank() && alvosManuais.isEmpty() && sessaoSnapshotsPorIp.isEmpty()) {
+        if (!apenasScan && Compat.isBlank(usuarioPadrao) && alvosManuais.isEmpty() && sessaoSnapshotsPorIp.isEmpty()) {
             SwingThemeHelper.marcarCampoComErro(coletaPanel.getTxtUsuario());
             exibirAviso("Informe o usuário de acesso (ex.: admin).");
             return;
@@ -389,15 +400,15 @@ public class TpDiscoverFrame extends JFrame {
         }
 
         List<ColetorEmLote.ColetaDispositivoSnapshot> snapshotsPreservados = somenteTabela
-                ? List.copyOf(sessaoSnapshotsPorIp.values())
-                : List.of();
-        List<DiscoveredProduct> produtosConhecidos = List.copyOf(sessaoProdutosPorIp.values());
+                ? Compat.listCopyOf(sessaoSnapshotsPorIp.values())
+                : Compat.listOf();
+        List<DiscoveredProduct> produtosConhecidos = Compat.listCopyOf(sessaoProdutosPorIp.values());
         List<TopologyEngine.EquipamentoSemAcesso> semAcessoInformados = tableModel.extrairEquipamentosSemAcesso();
 
         DiscoveryRequest req = new DiscoveryRequest(
                 scanSpecs,
                 alvosManuais,
-                usuarioPadrao.isBlank() ? "admin" : usuarioPadrao,
+                Compat.isBlank(usuarioPadrao) ? "admin" : usuarioPadrao,
                 senhaPadrao,
                 apenasScan,
                 avancadoPanel.isLldpAtivo(),
@@ -434,9 +445,9 @@ public class TpDiscoverFrame extends JFrame {
         topologiaPanel.limparParaNovaExecucao();
 
         DiscoveryRequest req = new DiscoveryRequest(
-                List.of(),
-                List.of(),
-                coletaPanel.getUsuarioPadrao().isBlank() ? "admin" : coletaPanel.getUsuarioPadrao(),
+                Compat.listOf(),
+                Compat.listOf(),
+                Compat.isBlank(coletaPanel.getUsuarioPadrao()) ? "admin" : coletaPanel.getUsuarioPadrao(),
                 coletaPanel.getSenhaPadrao(),
                 false,
                 false,
@@ -447,8 +458,8 @@ public class TpDiscoverFrame extends JFrame {
                 pastaPdf,
                 null,
                 avancadoPanel.getCredenciaisAlternativas(),
-                List.copyOf(sessaoProdutosPorIp.values()),
-                List.copyOf(sessaoSnapshotsPorIp.values()),
+                Compat.listCopyOf(sessaoProdutosPorIp.values()),
+                Compat.listCopyOf(sessaoSnapshotsPorIp.values()),
                 tableModel.extrairEquipamentosSemAcesso(true),
                 true
         );
@@ -552,7 +563,7 @@ public class TpDiscoverFrame extends JFrame {
     }
 
     private void importarArquivoAlvos() {
-        JFileChooser chooser = new JFileChooser(Path.of("").toAbsolutePath().toFile());
+        JFileChooser chooser = new JFileChooser(Paths.get("").toAbsolutePath().toFile());
         chooser.setDialogTitle("Importar arquivo switches.txt");
         chooser.setFileFilter(new FileNameExtensionFilter("Arquivos texto (*.txt)", "txt"));
         if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
@@ -574,10 +585,10 @@ public class TpDiscoverFrame extends JFrame {
             } else if (!cfg.alvos().isEmpty()) {
                 coletaPanel.selecionarModoOrigem(ModoOrigem.SOMENTE_LISTA, null);
             }
-            if (cfg.usuarioPadrao() != null && !cfg.usuarioPadrao().isBlank()) {
+            if (cfg.usuarioPadrao() != null && !Compat.isBlank(cfg.usuarioPadrao())) {
                 coletaPanel.setUsuarioPadrao(cfg.usuarioPadrao());
             }
-            if (cfg.senhaPadrao() != null && !cfg.senhaPadrao().isBlank()) {
+            if (cfg.senhaPadrao() != null && !Compat.isBlank(cfg.senhaPadrao())) {
                 coletaPanel.setSenhaPadrao(cfg.senhaPadrao());
             }
             avancadoPanel.setGatewayIp(cfg.gatewayIpManual());

@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Lê a lista de switches a coletar de um arquivo texto simples, formato:
  *
@@ -41,26 +42,79 @@ public class AlvosLoader {
             "\\b([0-9a-fA-F]{4}[.\\-:][0-9a-fA-F]{4}[.\\-:][0-9a-fA-F]{4}|[0-9a-fA-F]{2}(?:[:\\-][0-9a-fA-F]{2}){5}|[0-9a-fA-F]{12})\\b"
     );
 
-    public record ConfiguracaoAlvos(
-            List<SwitchTarget> alvos,
-            String gatewayIpManual,
-            String gatewayMacManual,
-            List<String> scanSpecs,
-            String usuarioPadrao,
-            String senhaPadrao
-    ) {
-        public ConfiguracaoAlvos {
-            alvos = alvos != null ? List.copyOf(alvos) : List.of();
-            scanSpecs = scanSpecs != null ? List.copyOf(scanSpecs) : List.of();
+    public static final class ConfiguracaoAlvos {
+        private final List<SwitchTarget> alvos;
+        private final String gatewayIpManual;
+        private final String gatewayMacManual;
+        private final List<String> scanSpecs;
+        private final String usuarioPadrao;
+        private final String senhaPadrao;
+
+        public ConfiguracaoAlvos(List<SwitchTarget> alvos, String gatewayIpManual, String gatewayMacManual, List<String> scanSpecs, String usuarioPadrao, String senhaPadrao) {
+            alvos = alvos != null ? Compat.listCopyOf(alvos) : Compat.listOf();
+            scanSpecs = scanSpecs != null ? Compat.listCopyOf(scanSpecs) : Compat.listOf();
+            this.alvos = alvos;
+            this.gatewayIpManual = gatewayIpManual;
+            this.gatewayMacManual = gatewayMacManual;
+            this.scanSpecs = scanSpecs;
+            this.usuarioPadrao = usuarioPadrao;
+            this.senhaPadrao = senhaPadrao;
+        }
+
+        public List<SwitchTarget> alvos() {
+            return alvos;
+        }
+
+        public String gatewayIpManual() {
+            return gatewayIpManual;
+        }
+
+        public String gatewayMacManual() {
+            return gatewayMacManual;
+        }
+
+        public List<String> scanSpecs() {
+            return scanSpecs;
+        }
+
+        public String usuarioPadrao() {
+            return usuarioPadrao;
+        }
+
+        public String senhaPadrao() {
+            return senhaPadrao;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof ConfiguracaoAlvos)) return false;
+            ConfiguracaoAlvos o = (ConfiguracaoAlvos) obj;
+            return java.util.Objects.equals(alvos, o.alvos)
+                    && java.util.Objects.equals(gatewayIpManual, o.gatewayIpManual)
+                    && java.util.Objects.equals(gatewayMacManual, o.gatewayMacManual)
+                    && java.util.Objects.equals(scanSpecs, o.scanSpecs)
+                    && java.util.Objects.equals(usuarioPadrao, o.usuarioPadrao)
+                    && java.util.Objects.equals(senhaPadrao, o.senhaPadrao);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(alvos, gatewayIpManual, gatewayMacManual, scanSpecs, usuarioPadrao, senhaPadrao);
+        }
+
+        @Override
+        public String toString() {
+            return "ConfiguracaoAlvos[alvos=" + alvos + ", gatewayIpManual=" + gatewayIpManual + ", gatewayMacManual=" + gatewayMacManual + ", scanSpecs=" + scanSpecs + ", usuarioPadrao=" + usuarioPadrao + ", senhaPadrao=" + senhaPadrao + "]";
         }
 
         public ConfiguracaoAlvos(List<SwitchTarget> alvos, String gatewayIpManual, String gatewayMacManual) {
-            this(alvos, gatewayIpManual, gatewayMacManual, List.of(), null, null);
+            this(alvos, gatewayIpManual, gatewayMacManual, Compat.listOf(), null, null);
         }
 
         public boolean possuiGatewayManual() {
-            return (gatewayIpManual != null && !gatewayIpManual.isBlank())
-                    || (gatewayMacManual != null && !gatewayMacManual.isBlank());
+            return (gatewayIpManual != null && !Compat.isBlank(gatewayIpManual))
+                    || (gatewayMacManual != null && !Compat.isBlank(gatewayMacManual));
         }
 
         public boolean possuiScan() {
@@ -87,12 +141,12 @@ public class AlvosLoader {
         List<String> linhas = Files.readAllLines(caminho);
 
         for (int i = 0; i < linhas.size(); i++) {
-            String linha = linhas.get(i).strip();
+            String linha = Compat.strip(linhas.get(i));
             if (linha.isEmpty()) continue;
 
             Matcher mGw = DIRETIVA_GATEWAY.matcher(linha);
             if (mGw.matches()) {
-                String valor = mGw.group(1).strip();
+                String valor = Compat.strip(mGw.group(1));
                 Matcher mIp = IPV4_PATTERN.matcher(valor);
                 if (mIp.find()) {
                     gatewayIp = mIp.group(1);
@@ -117,10 +171,10 @@ public class AlvosLoader {
 
             Matcher mCred = DIRETIVA_CREDENCIAL.matcher(linha);
             if (mCred.matches()) {
-                String[] cred = mCred.group(1).strip().split(";", 2);
-                if (cred.length >= 1 && !cred[0].isBlank()) {
-                    usuarioPadrao = cred[0].strip();
-                    senhaPadrao = cred.length == 2 ? cred[1].strip() : null;
+                String[] cred = Compat.strip(mCred.group(1)).split(";", 2);
+                if (cred.length >= 1 && !Compat.isBlank(cred[0])) {
+                    usuarioPadrao = Compat.strip(cred[0]);
+                    senhaPadrao = cred.length == 2 ? Compat.strip(cred[1]) : null;
                 }
                 continue;
             }
@@ -133,8 +187,8 @@ public class AlvosLoader {
                 continue;
             }
 
-            String hostPorta = partes[0].strip();
-            String usuario = partes[1].strip();
+            String hostPorta = Compat.strip(partes[0]);
+            String usuario = Compat.strip(partes[1]);
             if (hostPorta.isEmpty() || usuario.isEmpty()) {
                 System.err.println("[AVISO] Linha " + (i + 1) + " ignorada (IP ou usuário em branco).");
                 continue;
@@ -144,8 +198,8 @@ public class AlvosLoader {
             Integer portaCustomizada = null;
             int idxPorta = hostPorta.lastIndexOf(':');
             if (idxPorta > 0 && hostPorta.indexOf(':') == idxPorta) {
-                ip = hostPorta.substring(0, idxPorta).strip();
-                String portaStr = hostPorta.substring(idxPorta + 1).strip();
+                ip = Compat.strip(hostPorta.substring(0, idxPorta));
+                String portaStr = Compat.strip(hostPorta.substring(idxPorta + 1));
                 try {
                     int p = Integer.parseInt(portaStr);
                     if (p < 1 || p > 65535 || ip.isEmpty()) {
@@ -159,7 +213,7 @@ public class AlvosLoader {
                 }
             }
 
-            String senha = partes.length == 3 ? partes[2].strip() : null;
+            String senha = partes.length == 3 ? Compat.strip(partes[2]) : null;
             alvos.add(new SwitchTarget(ip, usuario, senha, portaCustomizada));
         }
 
@@ -175,7 +229,7 @@ public class AlvosLoader {
         if (alvos != null) {
             for (SwitchTarget t : alvos) {
                 String base = t.enderecoExibicao();
-                String user = t.usuario() != null && !t.usuario().isBlank() ? t.usuario() : "admin";
+                String user = t.usuario() != null && !Compat.isBlank(t.usuario()) ? t.usuario() : "admin";
                 if (incluirSenhas && t.possuiSenha()) {
                     linhas.add(base + ";" + user + ";" + t.senha());
                 } else {

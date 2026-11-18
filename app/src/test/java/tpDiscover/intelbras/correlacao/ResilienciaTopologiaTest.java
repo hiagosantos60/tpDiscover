@@ -10,6 +10,8 @@ import tpDiscover.intelbras.parser.LldpInterestFilter;
 import java.util.List;
 import java.util.Set;
 
+import java.util.stream.Collectors;
+import tpDiscover.intelbras.util.Compat;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResilienciaTopologiaTest {
@@ -26,11 +28,11 @@ class ResilienciaTopologiaTest {
         SwitchIdentity oltAn6000 = new SwitchIdentity("OLT-AN6000-2", "SN5", "30E1-F110-1005", "AN6000-2", "10.1.40.140");
         SwitchIdentity oltAn6001 = new SwitchIdentity("OLT-AN6001-G16", "SN6", "30E1-F110-1006", "AN6001-G16", "10.1.40.142");
 
-        for (SwitchIdentity sw : List.of(swSg, swS30, olt8820i, oltG16, oltAn6000, oltAn6001)) {
+        for (SwitchIdentity sw : Compat.listOf(swSg, swS30, olt8820i, oltG16, oltAn6000, oltAn6001)) {
             engine.registrarSwitch(sw);
             engine.registrarRotaPadrao(sw.macNormalizado(), "10.1.40.1");
         }
-        engine.registrarEntradasArp(swSg.macNormalizado(), List.of(
+        engine.registrarEntradasArp(swSg.macNormalizado(), Compat.listOf(
                 new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE1")
         ));
 
@@ -43,13 +45,13 @@ class ResilienciaTopologiaTest {
                 "10.1.40.204", "S2328G-A", "SWITCH", "7844-7601-0204", "FALHA_AUTENTICACAO"));
 
         // Cada folha enxerga o MAC do Gateway + irmãos + cores na sua porta de uplink
-        registrarUplinkComum(engine, swSg, "GE1", List.of("0009-0f09-1e0a", "d836-5f10-2001", "180d-2c08-d510", "7844-7601-0203"));
-        registrarUplinkComum(engine, swS30, "GE0/2", List.of("0009-0f09-1e0a", "001a-3fc1-1f7c", "180d-2c08-d510", "7844-7601-0203"));
+        registrarUplinkComum(engine, swSg, "GE1", Compat.listOf("0009-0f09-1e0a", "d836-5f10-2001", "180d-2c08-d510", "7844-7601-0203"));
+        registrarUplinkComum(engine, swS30, "GE0/2", Compat.listOf("0009-0f09-1e0a", "001a-3fc1-1f7c", "180d-2c08-d510", "7844-7601-0203"));
         // OLT-8820I aprende o MAC da OLT-AN6001-G16 no ETH1, mas OLT-AN6001-G16 não tem tabela de volta para OLT-8820I
-        registrarUplinkComum(engine, olt8820i, "ETH1", List.of("0009-0f09-1e0a", "30e1-f110-1006"));
-        registrarUplinkComum(engine, oltG16, "E1/1", List.of("0009-0f09-1e0a", "001a-3fc1-1f7c", "30e1-f110-1005"));
-        registrarUplinkComum(engine, oltAn6000, "4/5", List.of("0009-0f09-1e0a", "001a-3fc1-1f7c", "30e1-f110-1004"));
-        registrarUplinkComum(engine, oltAn6001, "19/5", List.of("0009-0f09-1e0a", "001a-3fc1-1f7c", "7844-7601-0204"));
+        registrarUplinkComum(engine, olt8820i, "ETH1", Compat.listOf("0009-0f09-1e0a", "30e1-f110-1006"));
+        registrarUplinkComum(engine, oltG16, "E1/1", Compat.listOf("0009-0f09-1e0a", "001a-3fc1-1f7c", "30e1-f110-1005"));
+        registrarUplinkComum(engine, oltAn6000, "4/5", Compat.listOf("0009-0f09-1e0a", "001a-3fc1-1f7c", "30e1-f110-1004"));
+        registrarUplinkComum(engine, oltAn6001, "19/5", Compat.listOf("0009-0f09-1e0a", "001a-3fc1-1f7c", "7844-7601-0204"));
 
         TopologyEngine.PlanoGateway plano = engine.analisarPlanoGateway();
         assertTrue(plano.possuiSegmentoIncerto(), "Deve acusar segmento L2 incerto");
@@ -87,27 +89,27 @@ class ResilienciaTopologiaTest {
         engine.registrarSwitch(sw1);
         engine.registrarSwitch(sw2);
         engine.registrarRotaPadrao(sw1.macNormalizado(), "10.1.40.1");
-        engine.registrarEntradasArp(sw1.macNormalizado(), List.of(
+        engine.registrarEntradasArp(sw1.macNormalizado(), Compat.listOf(
                 new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE1")
         ));
 
-        registrarUplinkComum(engine, sw1, "GE1", List.of("0009-0f09-1e0a", "d836-5f10-2001", "7844-7601-0203"));
-        registrarUplinkComum(engine, sw2, "GE0/2", List.of("0009-0f09-1e0a", "001a-3fc1-1f7c", "7844-7601-0203"));
+        registrarUplinkComum(engine, sw1, "GE1", Compat.listOf("0009-0f09-1e0a", "d836-5f10-2001", "7844-7601-0203"));
+        registrarUplinkComum(engine, sw2, "GE0/2", Compat.listOf("0009-0f09-1e0a", "001a-3fc1-1f7c", "7844-7601-0203"));
 
         LldpNeighbor coreNaoColetado1 = new LldpNeighbor(
                 sw1.macNormalizado(), "GE1", "7844-7601-0203", "784476010203",
                 "GE1/0/10", "GigabitEthernet1/0/10", "S2328G-B", "Intelbras S2328G-B Comware",
-                "10.1.40.203", Set.of("Bridge"));
+                "10.1.40.203", Compat.setOf("Bridge"));
         LldpNeighbor coreNaoColetado2 = new LldpNeighbor(
                 sw2.macNormalizado(), "GE0/2", "7844-7601-0203", "784476010203",
                 "GE1/0/22", "GigabitEthernet1/0/22", "S2328G-B", "Intelbras S2328G-B Comware",
-                "10.1.40.203", Set.of("Bridge"));
+                "10.1.40.203", Compat.setOf("Bridge"));
 
         assertEquals(LldpNeighbor.CategoriaInteresse.SWITCH_OU_OLT_EXTERNO,
                 LldpInterestFilter.classificar(coreNaoColetado1, engine.switchesRegistrados(), engine.gatewayIdentificado()));
 
-        engine.registrarLldp(sw1.macNormalizado(), List.of(coreNaoColetado1));
-        engine.registrarLldp(sw2.macNormalizado(), List.of(coreNaoColetado2));
+        engine.registrarLldp(sw1.macNormalizado(), Compat.listOf(coreNaoColetado1));
+        engine.registrarLldp(sw2.macNormalizado(), Compat.listOf(coreNaoColetado2));
 
         TopologyEngine.PlanoGateway plano = engine.analisarPlanoGateway();
         assertEquals(2, plano.conexoesViaLldpExterno().size());
@@ -131,13 +133,13 @@ class ResilienciaTopologiaTest {
         SwitchIdentity core = new SwitchIdentity("S2328G-B", "SNC", "7844-7601-0203", "LS-2328G-B", "10.1.40.203");
         engine.registrarSwitch(core);
         engine.registrarRotaPadrao(core.macNormalizado(), "10.1.40.1");
-        engine.registrarEntradas(core.macNormalizado(), List.of(
+        engine.registrarEntradas(core.macNormalizado(), Compat.listOf(
                 new MacEntry(core.macNormalizado(), "0009-0f09-1e0a", 1, "Learned", "GE1/0/1"),
                 new MacEntry(core.macNormalizado(), "aabb-ccdd-0011", 1, "Learned", "GE1/0/5"),
                 new MacEntry(core.macNormalizado(), "aabb-ccdd-0022", 1, "Learned", "GE1/0/8"),
                 new MacEntry(core.macNormalizado(), "aabb-ccdd-9999", 1, "Learned", "GE1/0/8")
         ));
-        engine.registrarEntradasArp(core.macNormalizado(), List.of(
+        engine.registrarEntradasArp(core.macNormalizado(), Compat.listOf(
                 new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE1/0/1"),
                 // MAC do switch com falha de senha descoberto apenas via tabela ARP
                 new ArpEntry("10.1.40.99", "aabb-ccdd-0022", "GE1/0/8")
@@ -171,16 +173,16 @@ class ResilienciaTopologiaTest {
         SwitchIdentity swA = new SwitchIdentity("S3028G-A", "SNA", "001A-3FC1-0001", "S3028G", "10.1.40.11");
         SwitchIdentity swB = new SwitchIdentity("S3028G-B", "SNB", "001A-3FC1-0002", "S3028G", "10.1.40.12");
         SwitchIdentity swC = new SwitchIdentity("S3028G-C", "SNC", "001A-3FC1-0003", "S3028G", "10.1.40.13");
-        for (SwitchIdentity sw : List.of(swA, swB, swC)) {
+        for (SwitchIdentity sw : Compat.listOf(swA, swB, swC)) {
             engine.registrarSwitch(sw);
             engine.registrarRotaPadrao(sw.macNormalizado(), "10.1.40.1");
         }
-        engine.registrarEntradasArp(swA.macNormalizado(), List.of(
+        engine.registrarEntradasArp(swA.macNormalizado(), Compat.listOf(
                 new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE1/0/24")));
 
-        registrarUplinkComum(engine, swA, "GE1/0/24", List.of("0009-0f09-1e0a", "001a-3fc1-0002", "001a-3fc1-0003"));
-        registrarUplinkComum(engine, swB, "GE1/0/24", List.of("0009-0f09-1e0a", "001a-3fc1-0001", "001a-3fc1-0003"));
-        registrarUplinkComum(engine, swC, "GE1/0/24", List.of("0009-0f09-1e0a", "001a-3fc1-0001", "001a-3fc1-0002"));
+        registrarUplinkComum(engine, swA, "GE1/0/24", Compat.listOf("0009-0f09-1e0a", "001a-3fc1-0002", "001a-3fc1-0003"));
+        registrarUplinkComum(engine, swB, "GE1/0/24", Compat.listOf("0009-0f09-1e0a", "001a-3fc1-0001", "001a-3fc1-0003"));
+        registrarUplinkComum(engine, swC, "GE1/0/24", Compat.listOf("0009-0f09-1e0a", "001a-3fc1-0001", "001a-3fc1-0002"));
 
         TopologyEngine.PlanoGateway plano = engine.analisarPlanoGateway();
         assertTrue(plano.possuiSegmentoIncerto());
@@ -194,11 +196,11 @@ class ResilienciaTopologiaTest {
         SwitchIdentity core = new SwitchIdentity("S2328G-B", "SNCORE", "001A-3FC1-0100", "S2328G", "10.1.40.203");
         engine.registrarSwitch(core);
         engine.registrarRotaPadrao(core.macNormalizado(), "10.1.40.1");
-        engine.registrarEntradasArp(core.macNormalizado(), List.of(
+        engine.registrarEntradasArp(core.macNormalizado(), Compat.listOf(
                 new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE1/0/1")));
 
         // Simula LLDP conciso/parcial (Comware brief list ou AP legado) sem managementIp/portDesc/sysDesc
-        engine.registrarLldp(core.macNormalizado(), List.of(
+        engine.registrarLldp(core.macNormalizado(), Compat.listOf(
                 new LldpNeighbor(
                         core.macNormalizado(),
                         "GE1/0/5",
@@ -221,7 +223,7 @@ class ResilienciaTopologiaTest {
                         "S3028G-EXT",
                         null,
                         null,
-                        Set.of("Bridge")
+                        Compat.setOf("Bridge")
                 )
         ));
 
@@ -238,6 +240,6 @@ class ResilienciaTopologiaTest {
     private static void registrarUplinkComum(TopologyEngine engine, SwitchIdentity sw, String porta, List<String> macs) {
         engine.registrarEntradas(sw.macNormalizado(), macs.stream()
                 .map(m -> new MacEntry(sw.macNormalizado(), m, 1, "Learned", porta))
-                .toList());
+                .collect(Collectors.toList()));
     }
 }

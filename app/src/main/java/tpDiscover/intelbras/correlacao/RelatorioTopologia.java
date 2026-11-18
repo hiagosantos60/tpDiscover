@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Formata e apresenta a saída da topologia descoberta:
  *  - Bloco de Enlaces Diretos Par a Par (Opção B)
@@ -35,23 +36,278 @@ public class RelatorioTopologia {
     private static final String CONTINUACAO_VAZIA = "   ";
     static final String TRACO_HORIZONTAL  = "\u2500";        // ─
 
-    record Enlace(String portaLocal, String portaRemota, SwitchIdentity vizinho) {}
+    static final class Enlace {
+        private final String portaLocal;
+        private final String portaRemota;
+        private final SwitchIdentity vizinho;
 
-    record ParEnlace(SwitchIdentity swA, String portaA, String portaB, SwitchIdentity swB) {}
+        Enlace(String portaLocal, String portaRemota, SwitchIdentity vizinho) {
+            this.portaLocal = portaLocal;
+            this.portaRemota = portaRemota;
+            this.vizinho = vizinho;
+        }
 
-    private record LinhaParAPar(String colunaEsquerda, String portaDireita, String equipamentoDireito) {}
+        public String portaLocal() {
+            return portaLocal;
+        }
 
-    public record EnlaceResumo(String origem, String portaOrigem, String portaDestino, String destino) {}
+        public String portaRemota() {
+            return portaRemota;
+        }
 
-    public record ResultadoRelatorio(
-            String textoCompleto,
-            List<EnlaceResumo> enlaces,
-            List<LoopDiagnostic> loops,
-            Path arquivoGerado,
-            List<SwitchIdentity> switches,
-            boolean topologiaParcial,
-            List<TopologyEngine.EquipamentoSemAcesso> pendenciasAcesso
-    ) {
+        public SwitchIdentity vizinho() {
+            return vizinho;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof Enlace)) return false;
+            Enlace o = (Enlace) obj;
+            return java.util.Objects.equals(portaLocal, o.portaLocal)
+                    && java.util.Objects.equals(portaRemota, o.portaRemota)
+                    && java.util.Objects.equals(vizinho, o.vizinho);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(portaLocal, portaRemota, vizinho);
+        }
+
+        @Override
+        public String toString() {
+            return "Enlace[portaLocal=" + portaLocal + ", portaRemota=" + portaRemota + ", vizinho=" + vizinho + "]";
+        }
+    }
+
+    static final class ParEnlace {
+        private final SwitchIdentity swA;
+        private final String portaA;
+        private final String portaB;
+        private final SwitchIdentity swB;
+
+        ParEnlace(SwitchIdentity swA, String portaA, String portaB, SwitchIdentity swB) {
+            this.swA = swA;
+            this.portaA = portaA;
+            this.portaB = portaB;
+            this.swB = swB;
+        }
+
+        public SwitchIdentity swA() {
+            return swA;
+        }
+
+        public String portaA() {
+            return portaA;
+        }
+
+        public String portaB() {
+            return portaB;
+        }
+
+        public SwitchIdentity swB() {
+            return swB;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof ParEnlace)) return false;
+            ParEnlace o = (ParEnlace) obj;
+            return java.util.Objects.equals(swA, o.swA)
+                    && java.util.Objects.equals(portaA, o.portaA)
+                    && java.util.Objects.equals(portaB, o.portaB)
+                    && java.util.Objects.equals(swB, o.swB);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(swA, portaA, portaB, swB);
+        }
+
+        @Override
+        public String toString() {
+            return "ParEnlace[swA=" + swA + ", portaA=" + portaA + ", portaB=" + portaB + ", swB=" + swB + "]";
+        }
+    }
+
+    private static final class LinhaParAPar {
+        private final String colunaEsquerda;
+        private final String portaDireita;
+        private final String equipamentoDireito;
+
+        private LinhaParAPar(String colunaEsquerda, String portaDireita, String equipamentoDireito) {
+            this.colunaEsquerda = colunaEsquerda;
+            this.portaDireita = portaDireita;
+            this.equipamentoDireito = equipamentoDireito;
+        }
+
+        public String colunaEsquerda() {
+            return colunaEsquerda;
+        }
+
+        public String portaDireita() {
+            return portaDireita;
+        }
+
+        public String equipamentoDireito() {
+            return equipamentoDireito;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof LinhaParAPar)) return false;
+            LinhaParAPar o = (LinhaParAPar) obj;
+            return java.util.Objects.equals(colunaEsquerda, o.colunaEsquerda)
+                    && java.util.Objects.equals(portaDireita, o.portaDireita)
+                    && java.util.Objects.equals(equipamentoDireito, o.equipamentoDireito);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(colunaEsquerda, portaDireita, equipamentoDireito);
+        }
+
+        @Override
+        public String toString() {
+            return "LinhaParAPar[colunaEsquerda=" + colunaEsquerda + ", portaDireita=" + portaDireita + ", equipamentoDireito=" + equipamentoDireito + "]";
+        }
+    }
+
+    public static final class EnlaceResumo {
+        private final String origem;
+        private final String portaOrigem;
+        private final String portaDestino;
+        private final String destino;
+
+        public EnlaceResumo(String origem, String portaOrigem, String portaDestino, String destino) {
+            this.origem = origem;
+            this.portaOrigem = portaOrigem;
+            this.portaDestino = portaDestino;
+            this.destino = destino;
+        }
+
+        public String origem() {
+            return origem;
+        }
+
+        public String portaOrigem() {
+            return portaOrigem;
+        }
+
+        public String portaDestino() {
+            return portaDestino;
+        }
+
+        public String destino() {
+            return destino;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof EnlaceResumo)) return false;
+            EnlaceResumo o = (EnlaceResumo) obj;
+            return java.util.Objects.equals(origem, o.origem)
+                    && java.util.Objects.equals(portaOrigem, o.portaOrigem)
+                    && java.util.Objects.equals(portaDestino, o.portaDestino)
+                    && java.util.Objects.equals(destino, o.destino);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(origem, portaOrigem, portaDestino, destino);
+        }
+
+        @Override
+        public String toString() {
+            return "EnlaceResumo[origem=" + origem + ", portaOrigem=" + portaOrigem + ", portaDestino=" + portaDestino + ", destino=" + destino + "]";
+        }
+    }
+
+    public static final class ResultadoRelatorio {
+        private final String textoCompleto;
+        private final List<EnlaceResumo> enlaces;
+        private final List<LoopDiagnostic> loops;
+        private final Path arquivoGerado;
+        private final List<SwitchIdentity> switches;
+        private final boolean topologiaParcial;
+        private final List<TopologyEngine.EquipamentoSemAcesso> pendenciasAcesso;
+        private final MapaTopologia mapa;
+
+        public ResultadoRelatorio(String textoCompleto, List<EnlaceResumo> enlaces, List<LoopDiagnostic> loops, Path arquivoGerado, List<SwitchIdentity> switches, boolean topologiaParcial, List<TopologyEngine.EquipamentoSemAcesso> pendenciasAcesso) {
+            this(textoCompleto, enlaces, loops, arquivoGerado, switches, topologiaParcial, pendenciasAcesso, MapaTopologia.vazio());
+        }
+
+        public ResultadoRelatorio(String textoCompleto, List<EnlaceResumo> enlaces, List<LoopDiagnostic> loops, Path arquivoGerado, List<SwitchIdentity> switches, boolean topologiaParcial, List<TopologyEngine.EquipamentoSemAcesso> pendenciasAcesso, MapaTopologia mapa) {
+            this.mapa = mapa != null ? mapa : MapaTopologia.vazio();
+            this.textoCompleto = textoCompleto;
+            this.enlaces = enlaces;
+            this.loops = loops;
+            this.arquivoGerado = arquivoGerado;
+            this.switches = switches;
+            this.topologiaParcial = topologiaParcial;
+            this.pendenciasAcesso = pendenciasAcesso;
+        }
+
+        public String textoCompleto() {
+            return textoCompleto;
+        }
+
+        public List<EnlaceResumo> enlaces() {
+            return enlaces;
+        }
+
+        public List<LoopDiagnostic> loops() {
+            return loops;
+        }
+
+        public Path arquivoGerado() {
+            return arquivoGerado;
+        }
+
+        public List<SwitchIdentity> switches() {
+            return switches;
+        }
+
+        public boolean topologiaParcial() {
+            return topologiaParcial;
+        }
+
+        public List<TopologyEngine.EquipamentoSemAcesso> pendenciasAcesso() {
+            return pendenciasAcesso;
+        }
+
+        /** Mapa visual da topologia (vazio quando não há equipamentos coletados). */
+        public MapaTopologia mapa() {
+            return mapa;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof ResultadoRelatorio)) return false;
+            ResultadoRelatorio o = (ResultadoRelatorio) obj;
+            return java.util.Objects.equals(textoCompleto, o.textoCompleto)
+                    && java.util.Objects.equals(enlaces, o.enlaces)
+                    && java.util.Objects.equals(loops, o.loops)
+                    && java.util.Objects.equals(arquivoGerado, o.arquivoGerado)
+                    && java.util.Objects.equals(switches, o.switches)
+                    && topologiaParcial == o.topologiaParcial
+                    && java.util.Objects.equals(pendenciasAcesso, o.pendenciasAcesso);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(textoCompleto, enlaces, loops, arquivoGerado, switches, topologiaParcial, pendenciasAcesso);
+        }
+
+        @Override
+        public String toString() {
+            return "ResultadoRelatorio[textoCompleto=" + textoCompleto + ", enlaces=" + enlaces + ", loops=" + loops + ", arquivoGerado=" + arquivoGerado + ", switches=" + switches + ", topologiaParcial=" + topologiaParcial + ", pendenciasAcesso=" + pendenciasAcesso + "]";
+        }
+
         public ResultadoRelatorio(
                 String textoCompleto,
                 List<EnlaceResumo> enlaces,
@@ -59,7 +315,7 @@ public class RelatorioTopologia {
                 Path arquivoGerado,
                 List<SwitchIdentity> switches
         ) {
-            this(textoCompleto, enlaces, loops, arquivoGerado, switches, false, List.of());
+            this(textoCompleto, enlaces, loops, arquivoGerado, switches, false, Compat.listOf());
         }
     }
 
@@ -77,24 +333,24 @@ public class RelatorioTopologia {
 
     public static ResultadoRelatorio gerarResultado(TopologyEngine engine, Path pastaDestino, boolean exportarArquivo) {
         if (engine == null) {
-            return new ResultadoRelatorio("", List.of(), List.of(), null, List.of());
+            return new ResultadoRelatorio("", Compat.listOf(), Compat.listOf(), null, Compat.listOf());
         }
         List<SwitchIdentity> switches = new ArrayList<>(engine.switchesRegistrados());
         StringBuilder sb = new StringBuilder();
         List<EnlaceResumo> enlacesResumo = new ArrayList<>();
-        List<LoopDiagnostic> loops = List.of();
+        List<LoopDiagnostic> loops = Compat.listOf();
 
         if (switches.isEmpty()) {
             formatarMapaTopologia(engine, sb);
             List<TopologyEngine.EquipamentoSemAcesso> pendenciasVazias = engine.equipamentosSemAcesso();
             return new ResultadoRelatorio(
                     sb.toString(),
-                    List.of(),
-                    List.of(),
+                    Compat.listOf(),
+                    Compat.listOf(),
                     null,
-                    List.of(),
+                    Compat.listOf(),
                     !pendenciasVazias.isEmpty(),
-                    List.copyOf(pendenciasVazias));
+                    Compat.listCopyOf(pendenciasVazias));
         }
 
         TopologyEngine.PlanoGateway plano = engine.analisarPlanoGateway();
@@ -145,14 +401,22 @@ public class RelatorioTopologia {
                 System.err.println("[AVISO] Não foi possível gerar o PDF da topologia: " + e.getMessage());
             }
         }
+        MapaTopologia mapa;
+        try {
+            mapa = ExportadorPlanejadorRede.montarMapa(engine);
+        } catch (RuntimeException e) {
+            System.err.println("[AVISO] Não foi possível montar o mapa da topologia: " + e.getMessage());
+            mapa = MapaTopologia.vazio();
+        }
         return new ResultadoRelatorio(
                 sb.toString(),
-                List.copyOf(enlacesResumo),
-                List.copyOf(loops),
+                Compat.listCopyOf(enlacesResumo),
+                Compat.listCopyOf(loops),
                 arquivoGerado,
-                List.copyOf(switches),
+                Compat.listCopyOf(switches),
                 topologiaParcial,
-                List.copyOf(pendencias)
+                Compat.listCopyOf(pendencias),
+                mapa
         );
     }
 
@@ -304,7 +568,7 @@ public class RelatorioTopologia {
 
         for (SwitchIdentity sw : switches) {
             String idA = sw.macNormalizado();
-            for (Enlace e : adjacencia.getOrDefault(idA, List.of())) {
+            for (Enlace e : adjacencia.getOrDefault(idA, Compat.listOf())) {
                 String idB = e.vizinho().macNormalizado();
                 String chave = criarChaveAresta(idA, e.portaLocal(), idB, e.portaRemota());
                 if (chavesVistas.add(chave)) {
@@ -520,7 +784,7 @@ public class RelatorioTopologia {
             Map<String, List<Enlace>> adjacencia
     ) {
         for (SwitchIdentity sw : componente) {
-            int grau = adjacencia.getOrDefault(sw.macNormalizado(), List.of()).size();
+            int grau = adjacencia.getOrDefault(sw.macNormalizado(), Compat.listOf()).size();
             if (grau <= 1) {
                 return sw;
             }
@@ -537,7 +801,7 @@ public class RelatorioTopologia {
             StringBuilder sb
     ) {
         String idAtual = atual.macNormalizado();
-        List<Enlace> enlaces = adjacencia.getOrDefault(idAtual, List.of());
+        List<Enlace> enlaces = adjacencia.getOrDefault(idAtual, Compat.listOf());
 
         List<Enlace> filhos = new ArrayList<>();
         List<Enlace> loops = new ArrayList<>();
@@ -635,7 +899,7 @@ public class RelatorioTopologia {
 
             while (!fila.isEmpty()) {
                 String u = fila.poll();
-                for (Enlace e : adjacencia.getOrDefault(u, List.of())) {
+                for (Enlace e : adjacencia.getOrDefault(u, Compat.listOf())) {
                     String v = e.vizinho().macNormalizado();
                     if (porId.containsKey(v) && visitados.add(v)) {
                         idsNaComponente.add(v);
@@ -678,7 +942,7 @@ public class RelatorioTopologia {
             String idOrigem = origem.macNormalizado();
             for (TopologyEngine.VizinhoLldpClassificado viz : engine.vizinhosLldpDeInteresse(idOrigem)) {
                 String portaLocal = viz.neighbor().localPort();
-                if (portaLocal == null || portaLocal.isBlank()) continue;
+                if (portaLocal == null || Compat.isBlank(portaLocal)) continue;
 
                 if (viz.categoria() == CategoriaInteresse.SWITCH_OU_OLT_EXTERNO
                         || viz.categoria() == CategoriaInteresse.ROTEADOR_UPLINK) {
@@ -715,7 +979,7 @@ public class RelatorioTopologia {
         // Fase 2: Correlação MAC + ARP para equipamentos/portas sem vizinho LLDP coletado
         for (SwitchIdentity origem : switches) {
             String idOrigem = origem.macNormalizado();
-            Set<String> confirmadas = portasConfirmadasLldp.getOrDefault(idOrigem, Set.of());
+            Set<String> confirmadas = portasConfirmadasLldp.getOrDefault(idOrigem, Compat.setOf());
             Map<String, TopologyEngine.PortaAnalise> portas = engine.analisarPortas(idOrigem);
             List<String> portasOrd = new ArrayList<>(portas.keySet());
             portasOrd.sort(RelatorioTopologia::compararPortas);
@@ -736,11 +1000,11 @@ public class RelatorioTopologia {
 
                     if (engine.ehPortaDeEntradaGateway(idOrigem, porta)
                             && engine.ehNoNaFronteiraGateway(idDireto)
-                            && (portaRemOpt.isEmpty() || engine.ehPortaDeEntradaGateway(idDireto, portaRemOpt.get()))) {
+                            && (!portaRemOpt.isPresent() || engine.ehPortaDeEntradaGateway(idDireto, portaRemOpt.get()))) {
                         continue;
                     }
 
-                    if (portaRemOpt.isEmpty()
+                    if (!portaRemOpt.isPresent()
                             && !engine.analisarPortas(idDireto).isEmpty()
                             && (analise.hostsDesconhecidos() >= 3
                             || (analise.hostsDesconhecidos() >= 1 && engine.possuiInfraestruturaSemAcesso()))) {
@@ -765,7 +1029,7 @@ public class RelatorioTopologia {
     static List<LoopDetector.ArestaFisica> extrairArestasFisicas(TopologyEngine engine) {
         List<SwitchIdentity> switches = new ArrayList<>(engine.switchesRegistrados());
         if (switches.size() < 2) {
-            return List.of();
+            return Compat.listOf();
         }
         Map<String, List<Enlace>> adj = construirGrafoEnlacesDiretos(engine, switches);
         List<ParEnlace> pares = extrairParesUnicos(switches, adj);
@@ -794,8 +1058,8 @@ public class RelatorioTopologia {
                     .resolverSwitchColetado(reverso, engine.switchesRegistrados());
             if (revAlvo.isPresent() && revAlvo.get().macNormalizado().equalsIgnoreCase(idOrigem)) {
                 String pRevRem = ComwareParser.resolverMelhorPortaRemota(reverso.remotePort(), reverso.remotePortDescription());
-                if (pRevRem.isBlank() || pRevRem.equalsIgnoreCase(portaLocal)) {
-                    if (reverso.localPort() != null && !reverso.localPort().isBlank()) {
+                if (Compat.isBlank(pRevRem) || pRevRem.equalsIgnoreCase(portaLocal)) {
+                    if (reverso.localPort() != null && !Compat.isBlank(reverso.localPort())) {
                         return reverso.localPort();
                     }
                 }
@@ -803,11 +1067,11 @@ public class RelatorioTopologia {
         }
         // 2. Usa remotePort / remotePortDescription do próprio LLDP quando não for apenas um MAC cru
         String melhor = ComwareParser.resolverMelhorPortaRemota(lldp.remotePort(), lldp.remotePortDescription());
-        if (!melhor.isBlank() && !MacUtils.ehMacValido(MacUtils.normalizar(melhor))) {
+        if (!Compat.isBlank(melhor) && !MacUtils.ehMacValido(MacUtils.normalizar(melhor))) {
             return melhor;
         }
         // 3. Fallback na correlação MAC
-        return engine.portaRemota(idOrigem, idDireto).orElse(!melhor.isBlank() ? melhor : "?");
+        return engine.portaRemota(idOrigem, idDireto).orElse(!Compat.isBlank(melhor) ? melhor : "?");
     }
 
     private static void formatarVizinhosExternosLldp(
@@ -828,18 +1092,29 @@ public class RelatorioTopologia {
                         continue; // Já exibido como Gateway principal na topologia
                     }
                 }
-                String pLocal = v.neighbor().localPort().isBlank() ? "?" : v.neighbor().localPort();
+                String pLocal = Compat.isBlank(v.neighbor().localPort()) ? "?" : v.neighbor().localPort();
                 String pRem = ComwareParser.resolverMelhorPortaRemota(
                         v.neighbor().remotePort(), v.neighbor().remotePortDescription());
-                String pRemStr = pRem.isBlank() ? "?" : pRem;
-                String ipStr = !v.neighbor().managementIp().isBlank() ? " (" + v.neighbor().managementIp() + ")" : "";
-                String tipo = switch (v.categoria()) {
-                    case ROTEADOR_UPLINK -> "Roteador Uplink";
-                    case SWITCH_OU_OLT_EXTERNO -> "Switch/OLT Externo (sem coleta CLI)";
-                    case ACCESS_POINT -> "Access Point";
-                    case RADIO_INTELBRAS -> "Rádio Intelbras";
-                    default -> "Externo";
-                };
+                String pRemStr = Compat.isBlank(pRem) ? "?" : pRem;
+                String ipStr = !Compat.isBlank(v.neighbor().managementIp()) ? " (" + v.neighbor().managementIp() + ")" : "";
+                String tipo;
+                switch (v.categoria()) {
+                    case ROTEADOR_UPLINK:
+                        tipo = "Roteador Uplink";
+                        break;
+                    case SWITCH_OU_OLT_EXTERNO:
+                        tipo = "Switch/OLT Externo (sem coleta CLI)";
+                        break;
+                    case ACCESS_POINT:
+                        tipo = "Access Point";
+                        break;
+                    case RADIO_INTELBRAS:
+                        tipo = "Rádio Intelbras";
+                        break;
+                    default:
+                        tipo = "Externo";
+                        break;
+                }
                 linhas.add(String.format("%s [%s] <-> [%s] %s%s [%s]",
                         rotuloVisualSwitch(sw), pLocal, pRemStr, v.neighbor().rotuloExibicao(), ipStr, tipo));
             }
@@ -864,7 +1139,7 @@ public class RelatorioTopologia {
         sb.append("EQUIPAMENTOS SEM ACESSO CLI / PENDÊNCIAS DE COLETA\n");
         sb.append("====================================================================================================\n");
         for (TopologyEngine.EquipamentoSemAcesso eq : pendencias) {
-            String macStr = eq.macNormalizado().isBlank() ? "" : " (" + Serie3000Parser.formatarMacPadrao(eq.macNormalizado()) + ")";
+            String macStr = Compat.isBlank(eq.macNormalizado()) ? "" : " (" + Serie3000Parser.formatarMacPadrao(eq.macNormalizado()) + ")";
             sb.append(String.format(" - %s [%s]%s | Categoria: %s | Situação: %s%n",
                     eq.rotuloModelo(), eq.ipBase(), macStr, eq.categoria(), eq.descricaoMotivo()));
         }
@@ -886,13 +1161,13 @@ public class RelatorioTopologia {
     }
 
     private static String rotuloVizinhoLldp(LldpNeighbor n) {
-        String ip = !n.managementIp().isBlank() ? " (" + n.managementIp() + ")" : "";
+        String ip = !Compat.isBlank(n.managementIp()) ? " (" + n.managementIp() + ")" : "";
         return n.rotuloExibicao() + ip;
     }
 
     private static String resolverPortaRemotaCurta(LldpNeighbor n) {
         String pRem = ComwareParser.resolverMelhorPortaRemota(n.remotePort(), n.remotePortDescription());
-        return pRem.isBlank() ? "?" : pRem;
+        return Compat.isBlank(pRem) ? "?" : pRem;
     }
 
     private static String rotuloEquipamentoSemAcesso(TopologyEngine.EquipamentoSemAcesso eq) {
@@ -932,17 +1207,17 @@ public class RelatorioTopologia {
             String tag = d.severidade() == LoopDiagnostic.Severidade.CRITICO ? "[CRÍTICO / LOOP]" : "[AVISO / STP]";
             SwitchIdentity swOrig = porId.get(d.switchOrigemId());
             String origStr = swOrig != null ? rotuloVisualSwitch(swOrig) : d.switchOrigemId();
-            String portaOrig = d.portaOrigem().isBlank() ? "?" : d.portaOrigem();
+            String portaOrig = Compat.isBlank(d.portaOrigem()) ? "?" : d.portaOrigem();
             String destinoStr = "";
-            if (!d.switchDestinoId().isBlank()) {
+            if (!Compat.isBlank(d.switchDestinoId())) {
                 SwitchIdentity swDest = porId.get(d.switchDestinoId());
                 String destNome = swDest != null ? rotuloVisualSwitch(swDest) : d.switchDestinoId();
-                String pDest = d.portaDestino().isBlank() ? "?" : d.portaDestino();
+                String pDest = Compat.isBlank(d.portaDestino()) ? "?" : d.portaDestino();
                 destinoStr = " <-> " + destNome + " [" + pDest + "]";
             }
             sb.append(String.format("%s %s | %s [%s]%s%n", tag, d.tipo(), origStr, portaOrig, destinoStr));
             sb.append("   Evidência: ").append(d.evidencia()).append("\n");
-            if (!d.acaoRecomendada().isBlank()) {
+            if (!Compat.isBlank(d.acaoRecomendada())) {
                 sb.append("   Sugestão : ").append(d.acaoRecomendada()).append("\n");
             }
         }
@@ -996,7 +1271,7 @@ public class RelatorioTopologia {
                     && !modelo.equalsIgnoreCase("Série 3000")) {
                 return modelo;
             }
-            if (sw.ip() != null && !sw.ip().isBlank()) {
+            if (sw.ip() != null && !Compat.isBlank(sw.ip())) {
                 return "S30-" + sw.ip().trim();
             }
             return "Switch";

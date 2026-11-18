@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import java.util.stream.Collectors;
+import tpDiscover.intelbras.util.Compat;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CredenciaisEIncrementalTest {
@@ -20,7 +22,7 @@ class CredenciaisEIncrementalTest {
     @Test
     void deveFiltrarCredenciaisAlternativasPorEscopoESemDuplicarPrincipal() {
         SwitchTarget alvo = new SwitchTarget("10.1.40.140", "admin", "MinhaSenha@1", null);
-        List<CredencialAcesso> extras = List.of(
+        List<CredencialAcesso> extras = Compat.listOf(
                 new CredencialAcesso(true, "Repetida", "admin", "MinhaSenha@1", Escopo.TODOS),
                 new CredencialAcesso(true, "OLT AN", "GEPON", "GEPON", Escopo.OLT),
                 new CredencialAcesso(true, "OLT Padrao", "admin", "admin", Escopo.OLT),
@@ -32,14 +34,14 @@ class CredenciaisEIncrementalTest {
         List<CredencialAcesso> paraOlt = ColetorEmLote.selecionarCredenciaisAplicaveis(
                 alvo, FamiliaProduto.OLT, extras);
         assertEquals(3, paraOlt.size());
-        assertEquals(List.of("GEPON", "admin", "operador"),
-                paraOlt.stream().map(CredencialAcesso::usuario).toList());
+        assertEquals(Compat.listOf("GEPON", "admin", "operador"),
+                paraOlt.stream().map(CredencialAcesso::usuario).collect(Collectors.toList()));
 
         List<CredencialAcesso> paraSwitch = ColetorEmLote.selecionarCredenciaisAplicaveis(
                 alvo, FamiliaProduto.SWITCH_COMWARE, extras);
         assertEquals(2, paraSwitch.size());
-        assertEquals(List.of("suporte", "operador"),
-                paraSwitch.stream().map(CredencialAcesso::usuario).toList());
+        assertEquals(Compat.listOf("suporte", "operador"),
+                paraSwitch.stream().map(CredencialAcesso::usuario).collect(Collectors.toList()));
     }
 
     @Test
@@ -50,9 +52,9 @@ class CredenciaisEIncrementalTest {
         ColetorEmLote.ColetaDispositivoSnapshot snapOk3Novo = criarSnapshot("10.1.40.204", "S3_NEW", "001A-3FC1-0003");
 
         List<ColetorEmLote.ColetaDispositivoSnapshot> consolidado = DiscoverySessionService.consolidarSnapshots(
-                List.of(snapOk1, snapOk2Antigo),
-                List.of(snapOk2Novo, snapOk3Novo),
-                Set.of("10.1.40.203", "10.1.40.204")
+                Compat.listOf(snapOk1, snapOk2Antigo),
+                Compat.listOf(snapOk2Novo, snapOk3Novo),
+                Compat.setOf("10.1.40.203", "10.1.40.204")
         );
 
         assertEquals(3, consolidado.size());
@@ -64,17 +66,17 @@ class CredenciaisEIncrementalTest {
     @Test
     void deveAplicarSenhaEmLoteEMarcarSemSenhaNaTabelaDeEquipamentos() {
         TargetTableModel model = new TargetTableModel();
-        model.mesclarProdutosDescobertos(List.of(
-                new DiscoveredProduct("10.1.40.1", List.of(80), FamiliaProduto.ROTEADOR_GATEWAY,
+        model.mesclarProdutosDescobertos(Compat.listOf(
+                new DiscoveredProduct("10.1.40.1", Compat.listOf(80), FamiliaProduto.ROTEADOR_GATEWAY,
                         "FortiGate", "", "00090f091e0a", "Fortinet", false, "", null),
-                new DiscoveredProduct("10.1.40.140", List.of(23), FamiliaProduto.OLT,
+                new DiscoveredProduct("10.1.40.140", Compat.listOf(23), FamiliaProduto.OLT,
                         "AN6000-2", "", "30e1f1101005", "Intelbras", true, "TELNET", 23),
-                new DiscoveredProduct("10.1.40.50", List.of(80), FamiliaProduto.ACCESS_POINT,
+                new DiscoveredProduct("10.1.40.50", Compat.listOf(80), FamiliaProduto.ACCESS_POINT,
                         "AP 1250", "", "aabbccdd0011", "Intelbras", true, "SSH", 22)
         ));
 
         model.atualizarStatusPorEndereco("10.1.40.140", EstadoColeta.FALHA, "Falha: FALHA_AUTENTICACAO");
-        model.aplicarCredenciaisEmLinhas(List.of(1), "GEPON", "NovaSenhaOlt");
+        model.aplicarCredenciaisEmLinhas(Compat.listOf(1), "GEPON", "NovaSenhaOlt");
 
         assertEquals("GEPON", model.getLinhas().get(1).getUsuario());
         assertEquals("NovaSenhaOlt", model.getLinhas().get(1).getSenha());
@@ -82,7 +84,7 @@ class CredenciaisEIncrementalTest {
         assertTrue(model.getLinhas().get(1).isSelecionado());
 
         // Marca AP 1250 como Sem Senha (passivo) e garante que não entra na coleta CLI
-        model.marcarComoSemSenha(List.of(2));
+        model.marcarComoSemSenha(Compat.listOf(2));
         assertEquals(EstadoColeta.SEM_SENHA, model.getLinhas().get(2).getEstado());
         assertFalse(model.getLinhas().get(2).isSelecionado());
 
@@ -102,7 +104,7 @@ class CredenciaisEIncrementalTest {
         SwitchTarget target = new SwitchTarget(ip, "admin", "123", null);
         SwitchIdentity id = new SwitchIdentity(nome, "SN-" + nome, mac, nome, ip);
         return new ColetorEmLote.ColetaDispositivoSnapshot(
-                target, id, "Comware", List.of(), List.of(), "10.1.40.1",
-                List.of(), List.of(), List.of(), Map.of(), null);
+                target, id, "Comware", Compat.listOf(), Compat.listOf(), "10.1.40.1",
+                Compat.listOf(), Compat.listOf(), Compat.listOf(), Compat.mapOf(), null);
     }
 }

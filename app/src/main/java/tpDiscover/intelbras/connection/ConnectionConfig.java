@@ -4,22 +4,101 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-public record ConnectionConfig(
-        String ip,
-        String usuario,
-        String senha,
-        int portaSsh,
-        int portaTelnet,
-        long timeoutMillis,
-        int probeTimeoutMillis,
-        boolean tentarTelnetAposFalhaAuth,
-        boolean preferirTelnet,
-        List<CredencialLogin> credenciaisAlternativas
-) {
-    public ConnectionConfig {
+import java.util.stream.Collectors;
+import tpDiscover.intelbras.util.Compat;
+public final class ConnectionConfig {
+    private final String ip;
+    private final String usuario;
+    private final String senha;
+    private final int portaSsh;
+    private final int portaTelnet;
+    private final long timeoutMillis;
+    private final int probeTimeoutMillis;
+    private final boolean tentarTelnetAposFalhaAuth;
+    private final boolean preferirTelnet;
+    private final List<CredencialLogin> credenciaisAlternativas;
+
+    public ConnectionConfig(String ip, String usuario, String senha, int portaSsh, int portaTelnet, long timeoutMillis, int probeTimeoutMillis, boolean tentarTelnetAposFalhaAuth, boolean preferirTelnet, List<CredencialLogin> credenciaisAlternativas) {
         credenciaisAlternativas = credenciaisAlternativas != null
-                ? credenciaisAlternativas.stream().filter(Objects::nonNull).toList()
-                : List.of();
+                ? credenciaisAlternativas.stream().filter(Objects::nonNull).collect(Collectors.toList())
+                : Compat.listOf();
+        this.ip = ip;
+        this.usuario = usuario;
+        this.senha = senha;
+        this.portaSsh = portaSsh;
+        this.portaTelnet = portaTelnet;
+        this.timeoutMillis = timeoutMillis;
+        this.probeTimeoutMillis = probeTimeoutMillis;
+        this.tentarTelnetAposFalhaAuth = tentarTelnetAposFalhaAuth;
+        this.preferirTelnet = preferirTelnet;
+        this.credenciaisAlternativas = credenciaisAlternativas;
+    }
+
+    public String ip() {
+        return ip;
+    }
+
+    public String usuario() {
+        return usuario;
+    }
+
+    public String senha() {
+        return senha;
+    }
+
+    public int portaSsh() {
+        return portaSsh;
+    }
+
+    public int portaTelnet() {
+        return portaTelnet;
+    }
+
+    public long timeoutMillis() {
+        return timeoutMillis;
+    }
+
+    public int probeTimeoutMillis() {
+        return probeTimeoutMillis;
+    }
+
+    public boolean tentarTelnetAposFalhaAuth() {
+        return tentarTelnetAposFalhaAuth;
+    }
+
+    public boolean preferirTelnet() {
+        return preferirTelnet;
+    }
+
+    public List<CredencialLogin> credenciaisAlternativas() {
+        return credenciaisAlternativas;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (!(obj instanceof ConnectionConfig)) return false;
+        ConnectionConfig o = (ConnectionConfig) obj;
+        return java.util.Objects.equals(ip, o.ip)
+                && java.util.Objects.equals(usuario, o.usuario)
+                && java.util.Objects.equals(senha, o.senha)
+                && portaSsh == o.portaSsh
+                && portaTelnet == o.portaTelnet
+                && timeoutMillis == o.timeoutMillis
+                && probeTimeoutMillis == o.probeTimeoutMillis
+                && tentarTelnetAposFalhaAuth == o.tentarTelnetAposFalhaAuth
+                && preferirTelnet == o.preferirTelnet
+                && java.util.Objects.equals(credenciaisAlternativas, o.credenciaisAlternativas);
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(ip, usuario, senha, portaSsh, portaTelnet, timeoutMillis, probeTimeoutMillis, tentarTelnetAposFalhaAuth, preferirTelnet, credenciaisAlternativas);
+    }
+
+    @Override
+    public String toString() {
+        return "ConnectionConfig[ip=" + ip + ", usuario=" + usuario + ", senha=" + senha + ", portaSsh=" + portaSsh + ", portaTelnet=" + portaTelnet + ", timeoutMillis=" + timeoutMillis + ", probeTimeoutMillis=" + probeTimeoutMillis + ", tentarTelnetAposFalhaAuth=" + tentarTelnetAposFalhaAuth + ", preferirTelnet=" + preferirTelnet + ", credenciaisAlternativas=" + credenciaisAlternativas + "]";
     }
 
     /** Construtor retrocompatível com assinatura de 9 argumentos (sem credenciais alternativas). */
@@ -35,7 +114,7 @@ public record ConnectionConfig(
             boolean preferirTelnet
     ) {
         this(ip, usuario, senha, portaSsh, portaTelnet, timeoutMillis, probeTimeoutMillis,
-                tentarTelnetAposFalhaAuth, preferirTelnet, List.of());
+                tentarTelnetAposFalhaAuth, preferirTelnet, Compat.listOf());
     }
 
     /** Construtor retrocompatível com assinatura de 6 argumentos. */

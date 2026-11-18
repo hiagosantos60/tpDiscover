@@ -18,6 +18,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Parser para a saída de CLI dos switches Intelbras linha S23/S33 (firmware Comware).
  *
@@ -89,7 +90,7 @@ public class ComwareParser {
         if (rawOutput == null) return entries;
 
         for (String line : rawOutput.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
 
             Matcher m = MAC_LINE.matcher(trimmed);
@@ -109,12 +110,12 @@ public class ComwareParser {
     }
 
     public Optional<String> parseDefaultGatewayIp(String rawOutput) {
-        if (rawOutput == null || rawOutput.isBlank()) {
+        if (rawOutput == null || Compat.isBlank(rawOutput)) {
             return Optional.empty();
         }
         Pattern ipv4 = Pattern.compile("\\b" + IPV4_REGEX + "\\b");
         for (String line : rawOutput.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
             if (DEFAULT_ROUTE_LINE.matcher(trimmed).matches()) {
                 Matcher mIp = ipv4.matcher(trimmed);
@@ -131,12 +132,12 @@ public class ComwareParser {
 
     public List<ArpEntry> parseArpTable(String rawOutput) {
         List<ArpEntry> entries = new ArrayList<>();
-        if (rawOutput == null || rawOutput.isBlank()) {
+        if (rawOutput == null || Compat.isBlank(rawOutput)) {
             return entries;
         }
 
         for (String line : rawOutput.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
 
             Matcher m = ARP_LINE.matcher(trimmed);
@@ -171,7 +172,7 @@ public class ComwareParser {
     }
 
     private static String extrairPortaFisicaArpComware(String token) {
-        if (token == null || token.isBlank()) return null;
+        if (token == null || Compat.isBlank(token)) return null;
         String t = token.trim();
         String lower = t.toLowerCase();
         if (lower.startsWith("vlan") || lower.startsWith("inloop") || lower.startsWith("null") || t.equals("--") || t.equals("N/A")) {
@@ -185,15 +186,15 @@ public class ComwareParser {
 
     public Map<String, List<String>> parseLinkAggregation(String rawOutput) {
         Map<String, Set<String>> membrosPorBagg = new LinkedHashMap<>();
-        if (rawOutput == null || rawOutput.isBlank()) {
-            return Map.of();
+        if (rawOutput == null || Compat.isBlank(rawOutput)) {
+            return Compat.mapOf();
         }
 
         String baggAtual = null;
         boolean emSecaoRemota = false;
 
         for (String line : rawOutput.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
 
             Matcher mHeader = BAGG_HEADER.matcher(trimmed);
@@ -227,7 +228,7 @@ public class ComwareParser {
         Map<String, List<String>> resultado = new LinkedHashMap<>();
         membrosPorBagg.forEach((bagg, portas) -> {
             if (!portas.isEmpty()) {
-                resultado.put(bagg, List.copyOf(portas));
+                resultado.put(bagg, Compat.listCopyOf(portas));
             }
         });
         return resultado;
@@ -255,7 +256,7 @@ public class ComwareParser {
      */
     public List<LldpNeighbor> parseLldpNeighborsVerbose(String switchId, String rawOutput) {
         List<LldpNeighbor> vizinhos = new ArrayList<>();
-        if (rawOutput == null || rawOutput.isBlank() || rawOutput.toLowerCase().contains("global status of lldp: disable")) {
+        if (rawOutput == null || Compat.isBlank(rawOutput) || rawOutput.toLowerCase().contains("global status of lldp: disable")) {
             return vizinhos;
         }
 
@@ -271,7 +272,7 @@ public class ComwareParser {
         boolean temBlocoAtivo = false;
 
         for (String line : rawOutput.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) {
                 lendoSysDesc = false;
                 continue;
@@ -346,7 +347,7 @@ public class ComwareParser {
                     }
                 }
             } else if (lendoSysDesc && line.startsWith(" ")) {
-                if (!sysDesc.isEmpty()) sysDesc.append("\n");
+                if (sysDesc.length() > 0) sysDesc.append("\n");
                 sysDesc.append(trimmed);
             }
         }
@@ -364,11 +365,11 @@ public class ComwareParser {
      */
     public List<LldpNeighbor> parseLldpNeighborsList(String switchId, String rawOutput) {
         List<LldpNeighbor> vizinhos = new ArrayList<>();
-        if (rawOutput == null || rawOutput.isBlank() || rawOutput.toLowerCase().contains("global status of lldp: disable")) {
+        if (rawOutput == null || Compat.isBlank(rawOutput) || rawOutput.toLowerCase().contains("global status of lldp: disable")) {
             return vizinhos;
         }
         for (String line : rawOutput.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
             Matcher m = LLDP_LIST_LINE.matcher(trimmed);
             if (!m.matches()) continue;
@@ -376,7 +377,7 @@ public class ComwareParser {
             String chassis = m.group(2).trim();
             String remotePortRaw = m.group(3).trim();
             String sysName = m.group(4) != null ? m.group(4).trim() : null;
-            vizinhos.add(criarLldpNeighbor(switchId, localPort, chassis, remotePortRaw, null, sysName, null, null, Set.of()));
+            vizinhos.add(criarLldpNeighbor(switchId, localPort, chassis, remotePortRaw, null, sysName, null, null, Compat.setOf()));
         }
         return vizinhos;
     }
@@ -404,22 +405,22 @@ public class ComwareParser {
                 sysName,
                 sysDesc,
                 mgmtIp,
-                Set.copyOf(capabilities)
+                Compat.setCopyOf(capabilities)
         );
     }
 
     static String extrairMacNormalizadoDeChassis(String chassisId) {
-        if (chassisId == null || chassisId.isBlank()) return "";
+        if (chassisId == null || Compat.isBlank(chassisId)) return "";
         String norm = MacUtils.normalizar(chassisId);
         return MacUtils.ehMacValido(norm) ? norm : "";
     }
 
     public static String resolverMelhorPortaRemota(String portId, String portDesc) {
-        String cand = (portId != null && !portId.isBlank()) ? portId.trim() : null;
+        String cand = (portId != null && !Compat.isBlank(portId)) ? portId.trim() : null;
         if (cand != null && !cand.matches("^\\d+$")) {
             return Serie3000Parser.normalizarPorta(cand);
         }
-        if (portDesc != null && !portDesc.isBlank()) {
+        if (portDesc != null && !Compat.isBlank(portDesc)) {
             return Serie3000Parser.normalizarPorta(portDesc.replaceFirst("(?i)\\s+Interface$", "").trim());
         }
         return cand != null ? cand : "?";
@@ -430,7 +431,7 @@ public class ComwareParser {
      */
     public List<StpPortState> parseStpBrief(String switchId, String rawOutput) {
         List<StpPortState> estados = new ArrayList<>();
-        if (rawOutput == null || rawOutput.isBlank()) {
+        if (rawOutput == null || Compat.isBlank(rawOutput)) {
             return estados;
         }
         if (rawOutput.toLowerCase().contains("stp is not enabled")
@@ -439,7 +440,7 @@ public class ComwareParser {
             return estados;
         }
         for (String line : rawOutput.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
             Matcher m = STP_BRIEF_LINE.matcher(trimmed);
             if (!m.matches()) continue;
@@ -456,13 +457,13 @@ public class ComwareParser {
      */
     public List<LoopDiagnostic> parseLoopbackDetection(String switchId, String rawOutput) {
         List<LoopDiagnostic> achados = new ArrayList<>();
-        if (rawOutput == null || rawOutput.isBlank()) return achados;
+        if (rawOutput == null || Compat.isBlank(rawOutput)) return achados;
         String lower = rawOutput.toLowerCase();
         if (lower.contains("no loop is detected") || lower.contains("not enabled")) {
             return achados;
         }
         for (String line : rawOutput.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
             Matcher m = LOOPBACK_PORT_LINE.matcher(trimmed);
             if (m.find()) {

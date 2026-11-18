@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Motor somente-leitura para detecção e diagnóstico de loops L2, auto-loops,
  * MAC flapping e redundâncias protegidas ou não por STP.
@@ -33,12 +34,56 @@ public final class LoopDetector {
     /**
      * Aresta física entre dois equipamentos já coletados usada na busca de ciclos/anéis L2.
      */
-    public record ArestaFisica(
-            String switchAId,
-            String portaA,
-            String switchBId,
-            String portaB
-    ) {}
+    public static final class ArestaFisica {
+        private final String switchAId;
+        private final String portaA;
+        private final String switchBId;
+        private final String portaB;
+
+        public ArestaFisica(String switchAId, String portaA, String switchBId, String portaB) {
+            this.switchAId = switchAId;
+            this.portaA = portaA;
+            this.switchBId = switchBId;
+            this.portaB = portaB;
+        }
+
+        public String switchAId() {
+            return switchAId;
+        }
+
+        public String portaA() {
+            return portaA;
+        }
+
+        public String switchBId() {
+            return switchBId;
+        }
+
+        public String portaB() {
+            return portaB;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof ArestaFisica)) return false;
+            ArestaFisica o = (ArestaFisica) obj;
+            return java.util.Objects.equals(switchAId, o.switchAId)
+                    && java.util.Objects.equals(portaA, o.portaA)
+                    && java.util.Objects.equals(switchBId, o.switchBId)
+                    && java.util.Objects.equals(portaB, o.portaB);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(switchAId, portaA, switchBId, portaB);
+        }
+
+        @Override
+        public String toString() {
+            return "ArestaFisica[switchAId=" + switchAId + ", portaA=" + portaA + ", switchBId=" + switchBId + ", portaB=" + portaB + "]";
+        }
+    }
 
     private LoopDetector() {}
 
@@ -57,12 +102,12 @@ public final class LoopDetector {
         List<LoopDiagnostic> diagnosticos = new ArrayList<>();
         Set<String> chavesDeduplicacao = new HashSet<>();
 
-        Map<String, SwitchIdentity> switches = switchesPorId != null ? switchesPorId : Map.of();
-        Map<String, List<MacEntry>> macs = entradasPorSwitch != null ? entradasPorSwitch : Map.of();
-        Map<String, List<LldpNeighbor>> lldp = lldpPorSwitch != null ? lldpPorSwitch : Map.of();
-        Map<String, List<StpPortState>> stp = stpPorSwitch != null ? stpPorSwitch : Map.of();
-        Map<String, List<LoopDiagnostic>> hwLoops = loopbackHardwarePorSwitch != null ? loopbackHardwarePorSwitch : Map.of();
-        Map<String, Map<String, List<String>>> baggs = baggsPorSwitch != null ? baggsPorSwitch : Map.of();
+        Map<String, SwitchIdentity> switches = switchesPorId != null ? switchesPorId : Compat.mapOf();
+        Map<String, List<MacEntry>> macs = entradasPorSwitch != null ? entradasPorSwitch : Compat.mapOf();
+        Map<String, List<LldpNeighbor>> lldp = lldpPorSwitch != null ? lldpPorSwitch : Compat.mapOf();
+        Map<String, List<StpPortState>> stp = stpPorSwitch != null ? stpPorSwitch : Compat.mapOf();
+        Map<String, List<LoopDiagnostic>> hwLoops = loopbackHardwarePorSwitch != null ? loopbackHardwarePorSwitch : Compat.mapOf();
+        Map<String, Map<String, List<String>>> baggs = baggsPorSwitch != null ? baggsPorSwitch : Compat.mapOf();
 
         // 1. Diagnósticos diretos de loopback-detection relatados pelo próprio switch
         for (List<LoopDiagnostic> lista : hwLoops.values()) {
@@ -125,7 +170,7 @@ public final class LoopDetector {
                             "Validar se o cabo conectado entre as portas do switch é intencional; considerar remover o cabo redundante."
                     ));
                 } else {
-                    String detRemota = (pRemota != null && !pRemota.isBlank()) ? " e porta remota " + pRemota : "";
+                    String detRemota = (pRemota != null && !Compat.isBlank(pRemota)) ? " e porta remota " + pRemota : "";
                     adicionarSeUnico(out, dedup, new LoopDiagnostic(
                             Severidade.CRITICO,
                             TipoLoop.SELF_LOOP_LLDP,
@@ -386,7 +431,7 @@ public final class LoopDetector {
     ) {
         if (caminhoNos.size() > 8) return; // Evita explosão combinatória em malhas densas
 
-        for (ArestaFisica aresta : adj.getOrDefault(atual, List.of())) {
+        for (ArestaFisica aresta : adj.getOrDefault(atual, Compat.listOf())) {
             String prox = aresta.switchBId();
             if (prox.equals(pai)) continue;
 
@@ -439,7 +484,7 @@ public final class LoopDetector {
             if (!stpEstaHabilitadoNoSwitch(a.switchAId(), stp) || !stpEstaHabilitadoNoSwitch(a.switchBId(), stp)) {
                 stpDesabilitadoEmAlgum = true;
             }
-            for (ArestaFisica real : arestasPorPar.getOrDefault(parOrdenado(a.switchAId(), a.switchBId()), List.of(a))) {
+            for (ArestaFisica real : arestasPorPar.getOrDefault(parOrdenado(a.switchAId(), a.switchBId()), Compat.listOf(a))) {
                 if (portaEhBloqueadaPorStp(real.switchAId(), real.portaA(), stp)) {
                     swBloqId = real.switchAId();
                     portaBloq = real.portaA();
@@ -512,7 +557,7 @@ public final class LoopDetector {
             String porta,
             Map<String, Map<String, List<String>>> baggs
     ) {
-        if (porta == null || porta.isBlank()) return "";
+        if (porta == null || Compat.isBlank(porta)) return "";
         String pUp = porta.trim().toUpperCase();
         Map<String, List<String>> grupos = baggs.get(swId);
         if (grupos == null || grupos.isEmpty()) return pUp;
@@ -544,9 +589,9 @@ public final class LoopDetector {
             String porta,
             Map<String, List<StpPortState>> stpPorSwitch
     ) {
-        if (porta == null || porta.isBlank()) return false;
+        if (porta == null || Compat.isBlank(porta)) return false;
         String pUp = porta.trim().toUpperCase();
-        for (StpPortState s : stpPorSwitch.getOrDefault(swId, List.of())) {
+        for (StpPortState s : stpPorSwitch.getOrDefault(swId, Compat.listOf())) {
             if (s.port().trim().equalsIgnoreCase(pUp) && s.estaBloqueada()) {
                 return true;
             }
@@ -567,7 +612,7 @@ public final class LoopDetector {
     }
 
     private static boolean ehPortaInternaOuLogica(String porta) {
-        if (porta == null || porta.isBlank()) return true;
+        if (porta == null || Compat.isBlank(porta)) return true;
         String up = porta.trim().toUpperCase();
         return up.equals("CPU")
                 || up.equals("SELF")
@@ -592,7 +637,7 @@ public final class LoopDetector {
 
     private static String rotuloSwitch(SwitchIdentity sw) {
         if (sw == null) return "desconhecido";
-        String nome = (sw.deviceName() != null && !sw.deviceName().isBlank()) ? sw.deviceName() : sw.productId();
+        String nome = (sw.deviceName() != null && !Compat.isBlank(sw.deviceName())) ? sw.deviceName() : sw.productId();
         return nome + " (" + sw.ip() + ")";
     }
 

@@ -31,7 +31,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -39,6 +38,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import java.util.stream.Collectors;
+import tpDiscover.intelbras.util.Compat;
+import java.util.concurrent.ExecutorService;
 /**
  * Coleta uma lista de equipamentos de rede Intelbras em paralelo (Virtual Threads),
  * com suporte somente-leitura para MAC, ARP, rotas, LLDP, STP e loopback-detection em:
@@ -60,7 +62,7 @@ public class ColetorEmLote {
             + "|no\\s+matched\\s+command|error\\s+input|parameter\\s+error|too\\s+many\\s+parameters)\\b)"
     );
     private static final Pattern INTERFACE_VLAN_UP = Pattern.compile("(?im)^\\s*(vlan\\d+)\\s+\\S+\\s+up\\b");
-    private static final List<String> COMANDOS_MAC_S30 = List.of(
+    private static final List<String> COMANDOS_MAC_S30 = Compat.listOf(
             "show mac-address all",
             "show mac-address-table",
             "show mac address-table",
@@ -68,7 +70,7 @@ public class ColetorEmLote {
             "show mac-address dynamic",
             "show bridge address all"
     );
-    private static final List<String> COMANDOS_LAG_S30 = List.of(
+    private static final List<String> COMANDOS_LAG_S30 = Compat.listOf(
             "show link-aggregation group",
             "show link-aggregation",
             "show lacp port etherchannel",
@@ -82,39 +84,201 @@ public class ColetorEmLote {
     private final OltParser oltParser = new OltParser();
     private final ApParser apParser = new ApParser();
 
-    public record FalhaColeta(SwitchTarget alvo, SwitchConnectionException.Tipo tipo, String mensagem) {
-    }
+    public static final class FalhaColeta {
+        private final SwitchTarget alvo;
+        private final SwitchConnectionException.Tipo tipo;
+        private final String mensagem;
 
-    public record ColetaDispositivoSnapshot(
-            SwitchTarget alvo,
-            SwitchIdentity identidade,
-            String familiaLog,
-            List<MacEntry> entradasMac,
-            List<ArpEntry> entradasArp,
-            String rotaPadrao,
-            List<LldpNeighbor> lldpNeighbors,
-            List<StpPortState> stpStates,
-            List<LoopDiagnostic> loopbackHardware,
-            Map<String, List<String>> baggs,
-            String credencialAlternativaUsada
-    ) {
-        public ColetaDispositivoSnapshot {
-            entradasMac = entradasMac != null ? List.copyOf(entradasMac) : List.of();
-            entradasArp = entradasArp != null ? List.copyOf(entradasArp) : List.of();
-            lldpNeighbors = lldpNeighbors != null ? List.copyOf(lldpNeighbors) : List.of();
-            stpStates = stpStates != null ? List.copyOf(stpStates) : List.of();
-            loopbackHardware = loopbackHardware != null ? List.copyOf(loopbackHardware) : List.of();
-            baggs = baggs != null ? Map.copyOf(baggs) : Map.of();
+        public FalhaColeta(SwitchTarget alvo, SwitchConnectionException.Tipo tipo, String mensagem) {
+            this.alvo = alvo;
+            this.tipo = tipo;
+            this.mensagem = mensagem;
+        }
+
+        public SwitchTarget alvo() {
+            return alvo;
+        }
+
+        public SwitchConnectionException.Tipo tipo() {
+            return tipo;
+        }
+
+        public String mensagem() {
+            return mensagem;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof FalhaColeta)) return false;
+            FalhaColeta o = (FalhaColeta) obj;
+            return java.util.Objects.equals(alvo, o.alvo)
+                    && java.util.Objects.equals(tipo, o.tipo)
+                    && java.util.Objects.equals(mensagem, o.mensagem);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(alvo, tipo, mensagem);
+        }
+
+        @Override
+        public String toString() {
+            return "FalhaColeta[alvo=" + alvo + ", tipo=" + tipo + ", mensagem=" + mensagem + "]";
         }
     }
 
-    public record ResultadoColeta(
-            List<SwitchIdentity> sucesso,
-            List<FalhaColeta> falhas,
-            List<ColetaDispositivoSnapshot> snapshotsSucesso
-    ) {
+    public static final class ColetaDispositivoSnapshot {
+        private final SwitchTarget alvo;
+        private final SwitchIdentity identidade;
+        private final String familiaLog;
+        private final List<MacEntry> entradasMac;
+        private final List<ArpEntry> entradasArp;
+        private final String rotaPadrao;
+        private final List<LldpNeighbor> lldpNeighbors;
+        private final List<StpPortState> stpStates;
+        private final List<LoopDiagnostic> loopbackHardware;
+        private final Map<String, List<String>> baggs;
+        private final String credencialAlternativaUsada;
+
+        public ColetaDispositivoSnapshot(SwitchTarget alvo, SwitchIdentity identidade, String familiaLog, List<MacEntry> entradasMac, List<ArpEntry> entradasArp, String rotaPadrao, List<LldpNeighbor> lldpNeighbors, List<StpPortState> stpStates, List<LoopDiagnostic> loopbackHardware, Map<String, List<String>> baggs, String credencialAlternativaUsada) {
+            entradasMac = entradasMac != null ? Compat.listCopyOf(entradasMac) : Compat.listOf();
+            entradasArp = entradasArp != null ? Compat.listCopyOf(entradasArp) : Compat.listOf();
+            lldpNeighbors = lldpNeighbors != null ? Compat.listCopyOf(lldpNeighbors) : Compat.listOf();
+            stpStates = stpStates != null ? Compat.listCopyOf(stpStates) : Compat.listOf();
+            loopbackHardware = loopbackHardware != null ? Compat.listCopyOf(loopbackHardware) : Compat.listOf();
+            baggs = baggs != null ? Compat.mapCopyOf(baggs) : Compat.mapOf();
+            this.alvo = alvo;
+            this.identidade = identidade;
+            this.familiaLog = familiaLog;
+            this.entradasMac = entradasMac;
+            this.entradasArp = entradasArp;
+            this.rotaPadrao = rotaPadrao;
+            this.lldpNeighbors = lldpNeighbors;
+            this.stpStates = stpStates;
+            this.loopbackHardware = loopbackHardware;
+            this.baggs = baggs;
+            this.credencialAlternativaUsada = credencialAlternativaUsada;
+        }
+
+        public SwitchTarget alvo() {
+            return alvo;
+        }
+
+        public SwitchIdentity identidade() {
+            return identidade;
+        }
+
+        public String familiaLog() {
+            return familiaLog;
+        }
+
+        public List<MacEntry> entradasMac() {
+            return entradasMac;
+        }
+
+        public List<ArpEntry> entradasArp() {
+            return entradasArp;
+        }
+
+        public String rotaPadrao() {
+            return rotaPadrao;
+        }
+
+        public List<LldpNeighbor> lldpNeighbors() {
+            return lldpNeighbors;
+        }
+
+        public List<StpPortState> stpStates() {
+            return stpStates;
+        }
+
+        public List<LoopDiagnostic> loopbackHardware() {
+            return loopbackHardware;
+        }
+
+        public Map<String, List<String>> baggs() {
+            return baggs;
+        }
+
+        public String credencialAlternativaUsada() {
+            return credencialAlternativaUsada;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof ColetaDispositivoSnapshot)) return false;
+            ColetaDispositivoSnapshot o = (ColetaDispositivoSnapshot) obj;
+            return java.util.Objects.equals(alvo, o.alvo)
+                    && java.util.Objects.equals(identidade, o.identidade)
+                    && java.util.Objects.equals(familiaLog, o.familiaLog)
+                    && java.util.Objects.equals(entradasMac, o.entradasMac)
+                    && java.util.Objects.equals(entradasArp, o.entradasArp)
+                    && java.util.Objects.equals(rotaPadrao, o.rotaPadrao)
+                    && java.util.Objects.equals(lldpNeighbors, o.lldpNeighbors)
+                    && java.util.Objects.equals(stpStates, o.stpStates)
+                    && java.util.Objects.equals(loopbackHardware, o.loopbackHardware)
+                    && java.util.Objects.equals(baggs, o.baggs)
+                    && java.util.Objects.equals(credencialAlternativaUsada, o.credencialAlternativaUsada);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(alvo, identidade, familiaLog, entradasMac, entradasArp, rotaPadrao, lldpNeighbors, stpStates, loopbackHardware, baggs, credencialAlternativaUsada);
+        }
+
+        @Override
+        public String toString() {
+            return "ColetaDispositivoSnapshot[alvo=" + alvo + ", identidade=" + identidade + ", familiaLog=" + familiaLog + ", entradasMac=" + entradasMac + ", entradasArp=" + entradasArp + ", rotaPadrao=" + rotaPadrao + ", lldpNeighbors=" + lldpNeighbors + ", stpStates=" + stpStates + ", loopbackHardware=" + loopbackHardware + ", baggs=" + baggs + ", credencialAlternativaUsada=" + credencialAlternativaUsada + "]";
+        }
+    }
+
+    public static final class ResultadoColeta {
+        private final List<SwitchIdentity> sucesso;
+        private final List<FalhaColeta> falhas;
+        private final List<ColetaDispositivoSnapshot> snapshotsSucesso;
+
+        public ResultadoColeta(List<SwitchIdentity> sucesso, List<FalhaColeta> falhas, List<ColetaDispositivoSnapshot> snapshotsSucesso) {
+            this.sucesso = sucesso;
+            this.falhas = falhas;
+            this.snapshotsSucesso = snapshotsSucesso;
+        }
+
+        public List<SwitchIdentity> sucesso() {
+            return sucesso;
+        }
+
+        public List<FalhaColeta> falhas() {
+            return falhas;
+        }
+
+        public List<ColetaDispositivoSnapshot> snapshotsSucesso() {
+            return snapshotsSucesso;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof ResultadoColeta)) return false;
+            ResultadoColeta o = (ResultadoColeta) obj;
+            return java.util.Objects.equals(sucesso, o.sucesso)
+                    && java.util.Objects.equals(falhas, o.falhas)
+                    && java.util.Objects.equals(snapshotsSucesso, o.snapshotsSucesso);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(sucesso, falhas, snapshotsSucesso);
+        }
+
+        @Override
+        public String toString() {
+            return "ResultadoColeta[sucesso=" + sucesso + ", falhas=" + falhas + ", snapshotsSucesso=" + snapshotsSucesso + "]";
+        }
+
         public ResultadoColeta(List<SwitchIdentity> sucesso, List<FalhaColeta> falhas) {
-            this(sucesso, falhas, List.of());
+            this(sucesso, falhas, Compat.listOf());
         }
 
         public int total() {
@@ -130,26 +294,156 @@ public class ColetorEmLote {
         default void onExpansaoLldpIniciada(List<SwitchTarget> novosAlvos) {}
     }
 
-    private record ConexaoBemSucedida(
-            SwitchClient cliente,
-            SwitchTarget alvoEfetivo,
-            String credencialAlternativaUsada
-    ) {}
+    private static final class ConexaoBemSucedida {
+        private final SwitchClient cliente;
+        private final SwitchTarget alvoEfetivo;
+        private final String credencialAlternativaUsada;
 
-    private record ColetaDispositivoResultado(
-            SwitchTarget alvo,
-            SwitchIdentity identidade,
-            String familiaLog,
-            List<MacEntry> entradasMac,
-            List<ArpEntry> entradasArp,
-            String rotaPadrao,
-            List<LldpNeighbor> lldpNeighbors,
-            List<StpPortState> stpStates,
-            List<LoopDiagnostic> loopbackHardware,
-            Map<String, List<String>> baggs,
-            SwitchConnectionException erro,
-            String credencialAlternativaUsada
-    ) {
+        private ConexaoBemSucedida(SwitchClient cliente, SwitchTarget alvoEfetivo, String credencialAlternativaUsada) {
+            this.cliente = cliente;
+            this.alvoEfetivo = alvoEfetivo;
+            this.credencialAlternativaUsada = credencialAlternativaUsada;
+        }
+
+        public SwitchClient cliente() {
+            return cliente;
+        }
+
+        public SwitchTarget alvoEfetivo() {
+            return alvoEfetivo;
+        }
+
+        public String credencialAlternativaUsada() {
+            return credencialAlternativaUsada;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof ConexaoBemSucedida)) return false;
+            ConexaoBemSucedida o = (ConexaoBemSucedida) obj;
+            return java.util.Objects.equals(cliente, o.cliente)
+                    && java.util.Objects.equals(alvoEfetivo, o.alvoEfetivo)
+                    && java.util.Objects.equals(credencialAlternativaUsada, o.credencialAlternativaUsada);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(cliente, alvoEfetivo, credencialAlternativaUsada);
+        }
+
+        @Override
+        public String toString() {
+            return "ConexaoBemSucedida[cliente=" + cliente + ", alvoEfetivo=" + alvoEfetivo + ", credencialAlternativaUsada=" + credencialAlternativaUsada + "]";
+        }
+    }
+
+    private static final class ColetaDispositivoResultado {
+        private final SwitchTarget alvo;
+        private final SwitchIdentity identidade;
+        private final String familiaLog;
+        private final List<MacEntry> entradasMac;
+        private final List<ArpEntry> entradasArp;
+        private final String rotaPadrao;
+        private final List<LldpNeighbor> lldpNeighbors;
+        private final List<StpPortState> stpStates;
+        private final List<LoopDiagnostic> loopbackHardware;
+        private final Map<String, List<String>> baggs;
+        private final SwitchConnectionException erro;
+        private final String credencialAlternativaUsada;
+
+        private ColetaDispositivoResultado(SwitchTarget alvo, SwitchIdentity identidade, String familiaLog, List<MacEntry> entradasMac, List<ArpEntry> entradasArp, String rotaPadrao, List<LldpNeighbor> lldpNeighbors, List<StpPortState> stpStates, List<LoopDiagnostic> loopbackHardware, Map<String, List<String>> baggs, SwitchConnectionException erro, String credencialAlternativaUsada) {
+            this.alvo = alvo;
+            this.identidade = identidade;
+            this.familiaLog = familiaLog;
+            this.entradasMac = entradasMac;
+            this.entradasArp = entradasArp;
+            this.rotaPadrao = rotaPadrao;
+            this.lldpNeighbors = lldpNeighbors;
+            this.stpStates = stpStates;
+            this.loopbackHardware = loopbackHardware;
+            this.baggs = baggs;
+            this.erro = erro;
+            this.credencialAlternativaUsada = credencialAlternativaUsada;
+        }
+
+        public SwitchTarget alvo() {
+            return alvo;
+        }
+
+        public SwitchIdentity identidade() {
+            return identidade;
+        }
+
+        public String familiaLog() {
+            return familiaLog;
+        }
+
+        public List<MacEntry> entradasMac() {
+            return entradasMac;
+        }
+
+        public List<ArpEntry> entradasArp() {
+            return entradasArp;
+        }
+
+        public String rotaPadrao() {
+            return rotaPadrao;
+        }
+
+        public List<LldpNeighbor> lldpNeighbors() {
+            return lldpNeighbors;
+        }
+
+        public List<StpPortState> stpStates() {
+            return stpStates;
+        }
+
+        public List<LoopDiagnostic> loopbackHardware() {
+            return loopbackHardware;
+        }
+
+        public Map<String, List<String>> baggs() {
+            return baggs;
+        }
+
+        public SwitchConnectionException erro() {
+            return erro;
+        }
+
+        public String credencialAlternativaUsada() {
+            return credencialAlternativaUsada;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof ColetaDispositivoResultado)) return false;
+            ColetaDispositivoResultado o = (ColetaDispositivoResultado) obj;
+            return java.util.Objects.equals(alvo, o.alvo)
+                    && java.util.Objects.equals(identidade, o.identidade)
+                    && java.util.Objects.equals(familiaLog, o.familiaLog)
+                    && java.util.Objects.equals(entradasMac, o.entradasMac)
+                    && java.util.Objects.equals(entradasArp, o.entradasArp)
+                    && java.util.Objects.equals(rotaPadrao, o.rotaPadrao)
+                    && java.util.Objects.equals(lldpNeighbors, o.lldpNeighbors)
+                    && java.util.Objects.equals(stpStates, o.stpStates)
+                    && java.util.Objects.equals(loopbackHardware, o.loopbackHardware)
+                    && java.util.Objects.equals(baggs, o.baggs)
+                    && java.util.Objects.equals(erro, o.erro)
+                    && java.util.Objects.equals(credencialAlternativaUsada, o.credencialAlternativaUsada);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(alvo, identidade, familiaLog, entradasMac, entradasArp, rotaPadrao, lldpNeighbors, stpStates, loopbackHardware, baggs, erro, credencialAlternativaUsada);
+        }
+
+        @Override
+        public String toString() {
+            return "ColetaDispositivoResultado[alvo=" + alvo + ", identidade=" + identidade + ", familiaLog=" + familiaLog + ", entradasMac=" + entradasMac + ", entradasArp=" + entradasArp + ", rotaPadrao=" + rotaPadrao + ", lldpNeighbors=" + lldpNeighbors + ", stpStates=" + stpStates + ", loopbackHardware=" + loopbackHardware + ", baggs=" + baggs + ", erro=" + erro + ", credencialAlternativaUsada=" + credencialAlternativaUsada + "]";
+        }
+
         ColetaDispositivoResultado(
                 SwitchTarget alvo,
                 SwitchIdentity identidade,
@@ -211,7 +505,7 @@ public class ColetorEmLote {
     ) {
         return coletarTudo(
                 alvos, engine, maxConcorrencia, expandirViaLldp, usuarioPadraoLldp, senhaPadraoLldp,
-                Map.of(), CredencialAcesso.presetsPadrao(), listener, cancelar);
+                Compat.mapOf(), CredencialAcesso.presetsPadrao(), listener, cancelar);
     }
 
     public ResultadoColeta coletarTudo(
@@ -228,7 +522,7 @@ public class ColetorEmLote {
     ) {
         return coletarTudo(
                 alvos, engine, maxConcorrencia, expandirViaLldp, usuarioPadraoLldp, senhaPadraoLldp,
-                familiasPorIp, Map.of(), credenciaisAlternativas, listener, cancelar);
+                familiasPorIp, Compat.mapOf(), credenciaisAlternativas, listener, cancelar);
     }
 
     public ResultadoColeta coletarTudo(
@@ -251,9 +545,9 @@ public class ColetorEmLote {
             return new ResultadoColeta(sucesso, falhas, snapshots);
         }
 
-        Map<String, DiscoveredProduct.FamiliaProduto> familias = familiasPorIp != null ? familiasPorIp : Map.of();
-        Map<String, String> protos = protocolosPreferidosPorIp != null ? protocolosPreferidosPorIp : Map.of();
-        List<CredencialAcesso> extras = credenciaisAlternativas != null ? credenciaisAlternativas : List.of();
+        Map<String, DiscoveredProduct.FamiliaProduto> familias = familiasPorIp != null ? familiasPorIp : Compat.mapOf();
+        Map<String, String> protos = protocolosPreferidosPorIp != null ? protocolosPreferidosPorIp : Compat.mapOf();
+        List<CredencialAcesso> extras = credenciaisAlternativas != null ? credenciaisAlternativas : Compat.listOf();
         int concorrencia = Math.max(1, maxConcorrencia);
 
         List<ColetaDispositivoResultado> resultadosOnda1 = executarOndaParalela(
@@ -297,7 +591,8 @@ public class ColetorEmLote {
         AtomicInteger concluidos = new AtomicInteger(0);
         int total = alvos.size();
         List<ColetaDispositivoResultado> resultados = new ArrayList<>(total);
-        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+        ExecutorService executor = Compat.novoExecutor("coleta", Math.max(1, maxConcorrencia));
+        try {
             List<Future<ColetaDispositivoResultado>> futures = new ArrayList<>(total);
             for (SwitchTarget alvo : alvos) {
                 futures.add(executor.submit(() -> {
@@ -312,7 +607,7 @@ public class ColetorEmLote {
                             listener.onAlvoConcluido(alvo, false, "Cancelado", done, total);
                         }
                         return new ColetaDispositivoResultado(
-                                alvo, null, null, List.of(), List.of(), null, List.of(), List.of(), List.of(), Map.of(), sce
+                                alvo, null, null, Compat.listOf(), Compat.listOf(), null, Compat.listOf(), Compat.listOf(), Compat.listOf(), Compat.mapOf(), sce
                         );
                     }
                     semaforo.acquire();
@@ -328,7 +623,7 @@ public class ColetorEmLote {
                                     null
                             );
                             r = new ColetaDispositivoResultado(
-                                    alvo, null, null, List.of(), List.of(), null, List.of(), List.of(), List.of(), Map.of(), sce
+                                    alvo, null, null, Compat.listOf(), Compat.listOf(), null, Compat.listOf(), Compat.listOf(), Compat.listOf(), Compat.mapOf(), sce
                             );
                         } else {
                             r = coletarUmIsolado(alvo, familiasPorIp, protocolosPreferidosPorIp, credenciaisAlternativas);
@@ -339,7 +634,7 @@ public class ColetorEmLote {
                         int done = concluidos.incrementAndGet();
                         if (listener != null) {
                             if (r != null && r.obteveSucesso()) {
-                                String sufixoCred = (r.credencialAlternativaUsada() != null && !r.credencialAlternativaUsada().isBlank())
+                                String sufixoCred = (r.credencialAlternativaUsada() != null && !Compat.isBlank(r.credencialAlternativaUsada()))
                                         ? " • cred: " + r.credencialAlternativaUsada()
                                         : "";
                                 String desc = r.familiaLog() + " • " + r.entradasMac().size() + " MAC(s)" + sufixoCred;
@@ -358,18 +653,20 @@ public class ColetorEmLote {
                     resultados.add(futures.get(i).get());
                 } catch (Exception e) {
                     Throwable causa = e.getCause() != null ? e.getCause() : e;
-                    SwitchConnectionException sce = causa instanceof SwitchConnectionException s
-                            ? s
+                    SwitchConnectionException sce = causa instanceof SwitchConnectionException
+                            ? (SwitchConnectionException) causa
                             : new SwitchConnectionException(
                                     SwitchConnectionException.Tipo.ERRO_PROTOCOLO,
                                     "Erro inesperado na coleta: " + causa.getMessage(),
                                     causa
                             );
                     resultados.add(new ColetaDispositivoResultado(
-                            alvo, null, null, List.of(), List.of(), null, List.of(), List.of(), List.of(), Map.of(), sce
+                            alvo, null, null, Compat.listOf(), Compat.listOf(), null, Compat.listOf(), Compat.listOf(), Compat.listOf(), Compat.mapOf(), sce
                     ));
                 }
             }
+        } finally {
+            Compat.encerrarEAguardar(executor);
         }
         return resultados;
     }
@@ -436,14 +733,14 @@ public class ColetorEmLote {
             ipsJaTentados.add(t.ip());
         }
 
-        String credUser = (usuarioPadrao != null && !usuarioPadrao.isBlank())
+        String credUser = (usuarioPadrao != null && !Compat.isBlank(usuarioPadrao))
                 ? usuarioPadrao
                 : onda1Alvos.get(0).usuario();
         String credPass = senhaPadrao != null
                 ? senhaPadrao
                 : onda1Alvos.get(0).senha();
-        if (credUser == null || credUser.isBlank()) {
-            return List.of();
+        if (credUser == null || Compat.isBlank(credUser)) {
+            return Compat.listOf();
         }
 
         Map<String, SwitchTarget> candidatos = new LinkedHashMap<>();
@@ -479,7 +776,7 @@ public class ColetorEmLote {
     }
 
     private static boolean pareceswitchIntelbras(String texto) {
-        if (texto == null || texto.isBlank()) return false;
+        if (texto == null || Compat.isBlank(texto)) return false;
         String lower = texto.toLowerCase();
         return lower.contains("intelbras")
                 || lower.matches(".*\\b(s2[0-9]{3}|s3[0-9]{3}|sg\\s*\\d{4}|olt|sc\\s*\\d{4})\\b.*");
@@ -491,11 +788,11 @@ public class ColetorEmLote {
                         .ifPresent(mac -> engine.registrarMacExternoParaIp(ipGw, mac))
         );
 
-        if (engine.gatewayIdentificado().isEmpty()) {
+        if (!engine.gatewayIdentificado().isPresent()) {
             List<String> ipsColetados = coletados.stream()
                     .map(SwitchIdentity::ip)
-                    .filter(ip -> ip != null && !ip.isBlank())
-                    .toList();
+                    .filter(ip -> ip != null && !Compat.isBlank(ip))
+                    .collect(Collectors.toList());
             LocalGatewayDetector.detectarGatewayLocalNaMesmaSubRede(ipsColetados)
                     .ifPresent(engine::definirGatewayFallbackLocal);
         }
@@ -516,7 +813,7 @@ public class ColetorEmLote {
                     alvo.ip(), "", ProductFingerprinter.ProbeConfig.preColeta());
             if (prod.isPresent()) {
                 familia = prod.get().familia();
-                if (proto == null || proto.isBlank()) {
+                if (proto == null || Compat.isBlank(proto)) {
                     proto = prod.get().protocoloPreferido();
                 }
             }
@@ -535,7 +832,7 @@ public class ColetorEmLote {
                     : bruto;
         } catch (SwitchConnectionException e) {
             return new ColetaDispositivoResultado(
-                    alvo, null, null, List.of(), List.of(), null, List.of(), List.of(), List.of(), Map.of(), e
+                    alvo, null, null, Compat.listOf(), Compat.listOf(), null, Compat.listOf(), Compat.listOf(), Compat.listOf(), Compat.mapOf(), e
             );
         } finally {
             if (cliente != null) {
@@ -637,7 +934,7 @@ public class ColetorEmLote {
         SwitchIdentity identidade = comwareParser.parseDeviceManuInfo(ipIdentidade, manuinfo);
         String swId = identidade.macNormalizado();
 
-        Map<String, List<String>> membrosPorBagg = Map.of();
+        Map<String, List<String>> membrosPorBagg = Compat.mapOf();
         List<MacEntry> entradas = comwareParser.parseMacAddressTable(swId, macTableBruta);
         if (possuiPortaAgregada(entradas)) {
             String lagBruto = cliente.executarComando("display link-aggregation verbose");
@@ -652,7 +949,7 @@ public class ColetorEmLote {
                 ? comwareParser.parseDefaultGatewayIp(rotasBrutas).orElse(null)
                 : null;
 
-        List<ArpEntry> entradasArp = List.of();
+        List<ArpEntry> entradasArp = Compat.listOf();
         String arpBruto = cliente.executarComando("display arp");
         if (!ehComandoInvalido(arpBruto)) {
             entradasArp = comwareParser.parseArpTable(arpBruto);
@@ -661,7 +958,7 @@ public class ColetorEmLote {
             }
         }
 
-        List<LldpNeighbor> lldp = List.of();
+        List<LldpNeighbor> lldp = Compat.listOf();
         String lldpVerbose = cliente.executarComando("display lldp neighbor-information verbose");
         if (!ehComandoInvalido(lldpVerbose)) {
             lldp = comwareParser.parseLldpNeighborsVerbose(swId, lldpVerbose);
@@ -676,12 +973,12 @@ public class ColetorEmLote {
         String stpBruto = cliente.executarComando("display stp brief");
         List<StpPortState> stp = !ehComandoInvalido(stpBruto)
                 ? comwareParser.parseStpBrief(swId, stpBruto)
-                : List.of();
+                : Compat.listOf();
 
         String lbBruto = cliente.executarComando("display loopback-detection");
         List<LoopDiagnostic> loopback = !ehComandoInvalido(lbBruto)
                 ? comwareParser.parseLoopbackDetection(swId, lbBruto)
-                : List.of();
+                : Compat.listOf();
 
         return Optional.of(new ColetaDispositivoResultado(
                 alvo, identidade, "Comware", entradas, entradasArp, rotaPadrao, lldp, stp, loopback, membrosPorBagg, null
@@ -751,7 +1048,7 @@ public class ColetorEmLote {
             List<CredencialAcesso> extras
     ) {
         if (extras == null || extras.isEmpty()) {
-            return List.of();
+            return Compat.listOf();
         }
         String uOrig = alvoPrincipal != null && alvoPrincipal.usuario() != null ? alvoPrincipal.usuario() : "";
         String sOrig = alvoPrincipal != null && alvoPrincipal.senha() != null ? alvoPrincipal.senha() : "";
@@ -789,8 +1086,8 @@ public class ColetorEmLote {
                 ? oltParser.parseDefaultGatewayIp(rotasBrutas).orElse(null)
                 : null;
 
-        List<ArpEntry> entradasArp = List.of();
-        for (String cmdArp : List.of("show arp all", "show arp", "show ip fdb")) {
+        List<ArpEntry> entradasArp = Compat.listOf();
+        for (String cmdArp : Compat.listOf("show arp all", "show arp", "show ip fdb")) {
             String raw = cliente.executarComando(cmdArp);
             if (!ehComandoInvalido(raw)) {
                 List<ArpEntry> parsed = oltParser.parseArpTable(raw);
@@ -801,8 +1098,8 @@ public class ColetorEmLote {
             }
         }
 
-        List<LldpNeighbor> lldp = List.of();
-        for (String cmdLldp : List.of("show lldp interface", "show lldp neighbors detail", "show lldp neighbors")) {
+        List<LldpNeighbor> lldp = Compat.listOf();
+        for (String cmdLldp : Compat.listOf("show lldp interface", "show lldp neighbors detail", "show lldp neighbors")) {
             String raw = cliente.executarComando(cmdLldp);
             if (!ehComandoInvalido(raw)) {
                 lldp = OltParser.parseLldpNeighbors(swId, raw);
@@ -810,8 +1107,8 @@ public class ColetorEmLote {
             }
         }
 
-        List<StpPortState> stp = List.of();
-        for (String cmdStp : List.of("show spanning-tree", "show spanning-tree interface brief")) {
+        List<StpPortState> stp = Compat.listOf();
+        for (String cmdStp : Compat.listOf("show spanning-tree", "show spanning-tree interface brief")) {
             String raw = cliente.executarComando(cmdStp);
             if (!ehComandoInvalido(raw)) {
                 List<StpPortState> parsed = oltParser.parseSpanningTree(swId, raw);
@@ -823,7 +1120,7 @@ public class ColetorEmLote {
         }
 
         return new ColetaDispositivoResultado(
-                alvo, identidade, "OLT", entradas, entradasArp, rotaPadrao, lldp, stp, List.of(), Map.of(), null
+                alvo, identidade, "OLT", entradas, entradasArp, rotaPadrao, lldp, stp, Compat.listOf(), Compat.mapOf(), null
         );
     }
 
@@ -845,7 +1142,7 @@ public class ColetorEmLote {
         String swId = identidade.macNormalizado();
 
         String macRaw = cliente.executarComando("show mac-address all");
-        List<MacEntry> entradas = !ehComandoInvalido(macRaw) ? oltParser.parseMacTableAn(swId, macRaw) : List.of();
+        List<MacEntry> entradas = !ehComandoInvalido(macRaw) ? oltParser.parseMacTableAn(swId, macRaw) : Compat.listOf();
 
         // Fallback para linha legada AN5516-04 (cd fdb -> show fdb slot <N>)
         if (ehComandoInvalido(macRaw)) {
@@ -857,7 +1154,7 @@ public class ColetorEmLote {
             if (!ehComandoInvalido(cdResp)) {
                 List<Integer> slots = oltParser.extrairSlotsAtivosAn(showCard);
                 if (slots.isEmpty()) {
-                    slots = List.of(1, 2, 9, 19);
+                    slots = Compat.listOf(1, 2, 9, 19);
                 }
                 List<MacEntry> acumulados = new ArrayList<>();
                 for (Integer slot : slots) {
@@ -872,8 +1169,8 @@ public class ColetorEmLote {
             }
         }
 
-        List<ArpEntry> entradasArp = List.of();
-        for (String cmdArp : List.of("show arp-table all", "show arp all")) {
+        List<ArpEntry> entradasArp = Compat.listOf();
+        for (String cmdArp : Compat.listOf("show arp-table all", "show arp all")) {
             String raw = cliente.executarComando(cmdArp);
             if (!ehComandoInvalido(raw)) {
                 entradasArp = oltParser.parseArpTableAn(raw);
@@ -882,7 +1179,7 @@ public class ColetorEmLote {
         }
 
         String rotaPadrao = null;
-        for (String cmdRota : List.of("show ipv4 route", "show static-route running-config", "show ip route")) {
+        for (String cmdRota : Compat.listOf("show ipv4 route", "show static-route running-config", "show ip route")) {
             String raw = cliente.executarComando(cmdRota);
             if (!ehComandoInvalido(raw)) {
                 Optional<String> gw = oltParser.parseDefaultGatewayAn(raw, identidade.ip(), entradasArp);
@@ -893,8 +1190,8 @@ public class ColetorEmLote {
             }
         }
 
-        List<LldpNeighbor> lldp = List.of();
-        for (String cmdLldp : List.of("show lldp neighbor-information", "show lldp neighbor-information brief")) {
+        List<LldpNeighbor> lldp = Compat.listOf();
+        for (String cmdLldp : Compat.listOf("show lldp neighbor-information", "show lldp neighbor-information brief")) {
             String raw = cliente.executarComando(cmdLldp);
             if (!ehComandoInvalido(raw)) {
                 lldp = OltParser.parseLldpNeighbors(swId, raw);
@@ -905,10 +1202,10 @@ public class ColetorEmLote {
         String stpRaw = cliente.executarComando("show stp brief");
         List<StpPortState> stp = !ehComandoInvalido(stpRaw)
                 ? oltParser.parseSpanningTree(swId, stpRaw)
-                : List.of();
+                : Compat.listOf();
 
         return new ColetaDispositivoResultado(
-                alvo, identidade, "OLT", entradas, entradasArp, rotaPadrao, lldp, stp, List.of(), Map.of(), null
+                alvo, identidade, "OLT", entradas, entradasArp, rotaPadrao, lldp, stp, Compat.listOf(), Compat.mapOf(), null
         );
     }
 
@@ -941,7 +1238,7 @@ public class ColetorEmLote {
         String swId = identidade.macNormalizado();
 
         String macRaw = executarComRetryBusy8820(cliente, "bridge show mac all");
-        List<MacEntry> entradas = !ehComandoInvalido(macRaw) ? oltParser.parseMacTable8820(swId, macRaw) : List.of();
+        List<MacEntry> entradas = !ehComandoInvalido(macRaw) ? oltParser.parseMacTable8820(swId, macRaw) : Compat.listOf();
 
         String routeRaw = executarComRetryBusy8820(cliente, "route show");
         String rotaPadrao = !ehComandoInvalido(routeRaw)
@@ -949,7 +1246,7 @@ public class ColetorEmLote {
                 : null;
 
         return new ColetaDispositivoResultado(
-                alvo, identidade, "OLT", entradas, List.of(), rotaPadrao, List.of(), List.of(), List.of(), Map.of(), null
+                alvo, identidade, "OLT", entradas, Compat.listOf(), rotaPadrao, Compat.listOf(), Compat.listOf(), Compat.listOf(), Compat.mapOf(), null
         );
     }
 
@@ -1010,7 +1307,7 @@ public class ColetorEmLote {
 
         // Sempre coleta STP para diagnóstico de redundância/loop (e fallback de Bridge MAC)
         String stpInfo = coletarStpBrutoSerie3000(cliente, ehLegadoSgMr2013);
-        if (!stpInfo.isBlank()) {
+        if (!Compat.isBlank(stpInfo)) {
             identidadeBruta.append("\n").append(stpInfo);
         }
 
@@ -1029,7 +1326,7 @@ public class ColetorEmLote {
                     }
                 }
             }
-            for (String cmdInt : List.of("show interface gi1/0/1", "show interface gi0/1", "show interface g0/1")) {
+            for (String cmdInt : Compat.listOf("show interface gi1/0/1", "show interface gi0/1", "show interface g0/1")) {
                 if (ehComandoInvalido(mgmtInfo) || !serie3000Parser.contemMacExtraivel(mgmtInfo)) {
                     mgmtInfo = cliente.executarComando(cmdInt);
                 } else {
@@ -1050,9 +1347,9 @@ public class ColetorEmLote {
 
         // Coleta tabela MAC antes de fechar a identidade para aproveitar 'local vlan1.1' (S2050G-A / Lite) caso necessário
         String macTableBrutaValida = coletarTabelaMacSerie3000(cliente, ehLegadoSgMr2013);
-        if (!serie3000Parser.contemMacExtraivel(identidadeBruta.toString()) && !macTableBrutaValida.isBlank()) {
+        if (!serie3000Parser.contemMacExtraivel(identidadeBruta.toString()) && !Compat.isBlank(macTableBrutaValida)) {
             String macLocal = Serie3000Parser.extrairMacLocalVlan(macTableBrutaValida);
-            if (macLocal != null && !macLocal.isBlank()) {
+            if (macLocal != null && !Compat.isBlank(macLocal)) {
                 identidadeBruta.append("\nSystem MAC address: ").append(macLocal).append("\n");
             }
         }
@@ -1061,9 +1358,9 @@ public class ColetorEmLote {
                 ipIdentidade, null, identidadeBruta.toString());
         String swId = identidade.macNormalizado();
 
-        List<MacEntry> entradas = !macTableBrutaValida.isBlank()
+        List<MacEntry> entradas = !Compat.isBlank(macTableBrutaValida)
                 ? serie3000Parser.parseMacAddressTable(swId, macTableBrutaValida)
-                : List.of();
+                : Compat.listOf();
 
         Map<String, List<String>> membrosPorBagg = coletarAggregacaoSerie3000(cliente, ehLegadoSgMr2013);
         if (!membrosPorBagg.isEmpty()) {
@@ -1078,7 +1375,7 @@ public class ColetorEmLote {
                 ? serie3000Parser.parseDefaultGatewayIp(rotasBrutas).orElse(null)
                 : null;
         if (rotaPadrao == null) {
-            if (ipAddressBruto.isBlank()) {
+            if (Compat.isBlank(ipAddressBruto)) {
                 String fallbackIp = cliente.executarComando("show ip address");
                 if (!ehComandoInvalido(fallbackIp)) {
                     identidadeBruta.append("\n").append(fallbackIp);
@@ -1087,9 +1384,9 @@ public class ColetorEmLote {
             rotaPadrao = serie3000Parser.parseDefaultGatewayIp(identidadeBruta.toString()).orElse(null);
         }
 
-        List<ArpEntry> entradasArp = List.of();
+        List<ArpEntry> entradasArp = Compat.listOf();
         if (!ehLegadoSgMr2013) {
-            for (String cmdArp : List.of("show arp", "show ip arp")) {
+            for (String cmdArp : Compat.listOf("show arp", "show ip arp")) {
                 String arpBruto = cliente.executarComando(cmdArp);
                 if (!ehComandoInvalido(arpBruto)) {
                     entradasArp = serie3000Parser.parseArpTable(arpBruto);
@@ -1101,15 +1398,15 @@ public class ColetorEmLote {
             }
         }
 
-        List<LldpNeighbor> lldp = ehLegadoSgMr2013 ? List.of() : coletarLldpSerie3000(cliente, swId);
-        List<StpPortState> stp = !stpInfo.isBlank()
+        List<LldpNeighbor> lldp = ehLegadoSgMr2013 ? Compat.listOf() : coletarLldpSerie3000(cliente, swId);
+        List<StpPortState> stp = !Compat.isBlank(stpInfo)
                 ? serie3000Parser.parseSpanningTree(swId, stpInfo)
-                : List.of();
+                : Compat.listOf();
 
         String lbBruto = ehLegadoSgMr2013 ? "" : cliente.executarComando("show loopback-detection");
         List<LoopDiagnostic> loopback = !ehComandoInvalido(lbBruto)
                 ? serie3000Parser.parseLoopbackDetection(swId, lbBruto)
-                : List.of();
+                : Compat.listOf();
 
         return new ColetaDispositivoResultado(
                 alvo, identidade, "Série 3000", entradas, entradasArp, rotaPadrao, lldp, stp, loopback, membrosPorBagg, null
@@ -1118,7 +1415,7 @@ public class ColetorEmLote {
 
     private String coletarTabelaMacSerie3000(SwitchClient cliente, boolean ehLegadoSgMr2013) throws SwitchConnectionException {
         List<String> comandos = ehLegadoSgMr2013
-                ? List.of("show bridge address all", "show mac-address all", "show mac-address-table")
+                ? Compat.listOf("show bridge address all", "show mac-address all", "show mac-address-table")
                 : COMANDOS_MAC_S30;
         String valida = "";
         for (String cmdMac : comandos) {
@@ -1127,7 +1424,7 @@ public class ColetorEmLote {
                 valida = macTableBruta;
                 String macLocal = Serie3000Parser.extrairMacLocalVlan(macTableBruta);
                 if (!serie3000Parser.parseMacAddressTable("tmp", macTableBruta).isEmpty()
-                        || (macLocal != null && !macLocal.isBlank())) {
+                        || (macLocal != null && !Compat.isBlank(macLocal))) {
                     break;
                 }
             }
@@ -1157,7 +1454,7 @@ public class ColetorEmLote {
     private Map<String, List<String>> coletarAggregacaoSerie3000(SwitchClient cliente, boolean ehLegadoSgMr2013)
             throws SwitchConnectionException {
         List<String> comandos = ehLegadoSgMr2013
-                ? List.of("show interface link-aggregation", "show link-aggregation group", "show link-aggregation")
+                ? Compat.listOf("show interface link-aggregation", "show link-aggregation group", "show link-aggregation")
                 : COMANDOS_LAG_S30;
         for (String cmd : comandos) {
             String lagBruto = cliente.executarComando(cmd);
@@ -1165,7 +1462,7 @@ public class ColetorEmLote {
                 return serie3000Parser.parseLinkAggregation(lagBruto);
             }
         }
-        return Map.of();
+        return Compat.mapOf();
     }
 
     private List<LldpNeighbor> coletarLldpSerie3000(SwitchClient cliente, String swId) throws SwitchConnectionException {
@@ -1190,7 +1487,7 @@ public class ColetorEmLote {
             }
             return res;
         }
-        return List.of();
+        return Compat.listOf();
     }
 
     private Optional<ColetaDispositivoResultado> tentarColetarApIsolado(
@@ -1220,7 +1517,7 @@ public class ColetorEmLote {
 
         Map<String, Integer> vlanPorBridge = apParser.parseBridgesEVlans(brctlShow);
         if (vlanPorBridge.isEmpty()) {
-            vlanPorBridge = Map.of("br-lan", 1);
+            vlanPorBridge = Compat.mapOf("br-lan", 1);
         }
 
         List<MacEntry> todasEntradas = new ArrayList<>();
@@ -1241,28 +1538,28 @@ public class ColetorEmLote {
                 ? apParser.parseDefaultGatewayIp(rotasBrutas).orElse(null)
                 : null;
 
-        List<ArpEntry> entradasArp = List.of();
+        List<ArpEntry> entradasArp = Compat.listOf();
         String neighBruto = cliente.executarComando("ip neigh");
         if (!ehComandoInvalido(neighBruto)) {
             entradasArp = apParser.parseArpTable(neighBruto, todasEntradas);
         }
 
-        List<LldpNeighbor> lldp = List.of();
+        List<LldpNeighbor> lldp = Compat.listOf();
         String lldpBruto = cliente.executarComando("lldpcli show neighbors 2>/dev/null || lldpctl 2>/dev/null");
         if (!ehComandoInvalido(lldpBruto)) {
             lldp = ApParser.parseLldpNeighbors(swId, lldpBruto);
         }
 
         return Optional.of(new ColetaDispositivoResultado(
-                alvo, identidade, "AP", todasEntradas, entradasArp, rotaPadrao, lldp, List.of(), List.of(), Map.of(), null
+                alvo, identidade, "AP", todasEntradas, entradasArp, rotaPadrao, lldp, Compat.listOf(), Compat.listOf(), Compat.mapOf(), null
         ));
     }
 
     private static boolean promptInicialTerminaComHash(String banner) {
-        if (banner == null || banner.isBlank()) return false;
+        if (banner == null || Compat.isBlank(banner)) return false;
         String[] linhas = banner.split("\\R");
         for (int i = linhas.length - 1; i >= 0; i--) {
-            if (!linhas[i].isBlank()) {
+            if (!Compat.isBlank(linhas[i])) {
                 return linhas[i].trim().endsWith("#");
             }
         }
@@ -1280,7 +1577,7 @@ public class ColetorEmLote {
     }
 
     public static boolean ehComandoInvalido(String resposta) {
-        if (resposta == null || resposta.isBlank()) return true;
+        if (resposta == null || Compat.isBlank(resposta)) return true;
         return ERRO_CLI_PATTERN.matcher(resposta).find();
     }
 }

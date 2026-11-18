@@ -5,17 +5,52 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Par usuário/senha usado pela camada de conexão (SSH/Telnet) durante o login.
  * O {@code rotulo} é apenas descritivo (ex.: "Padrão Intelbras") para logs/relatórios; nunca expõe a senha.
  */
-public record CredencialLogin(String usuario, String senha, String rotulo) {
+public final class CredencialLogin {
+    private final String usuario;
+    private final String senha;
+    private final String rotulo;
 
-    public CredencialLogin {
+    public CredencialLogin(String usuario, String senha, String rotulo) {
         usuario = usuario != null ? usuario.trim() : "";
         senha = senha != null ? senha : "";
-        rotulo = rotulo != null && !rotulo.isBlank() ? rotulo.trim() : usuario;
+        rotulo = rotulo != null && !Compat.isBlank(rotulo) ? rotulo.trim() : usuario;
+        this.usuario = usuario;
+        this.senha = senha;
+        this.rotulo = rotulo;
     }
+
+    public String usuario() {
+        return usuario;
+    }
+
+    public String senha() {
+        return senha;
+    }
+
+    public String rotulo() {
+        return rotulo;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (!(obj instanceof CredencialLogin)) return false;
+        CredencialLogin o = (CredencialLogin) obj;
+        return java.util.Objects.equals(usuario, o.usuario)
+                && java.util.Objects.equals(senha, o.senha)
+                && java.util.Objects.equals(rotulo, o.rotulo);
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(usuario, senha, rotulo);
+    }
+
 
     public CredencialLogin(String usuario, String senha) {
         this(usuario, senha, null);
@@ -37,7 +72,7 @@ public record CredencialLogin(String usuario, String senha, String rotulo) {
         }
         Set<String> vistas = new LinkedHashSet<>();
         for (CredencialLogin c : credenciais) {
-            if (c == null || c.usuario().isBlank()) {
+            if (c == null || Compat.isBlank(c.usuario())) {
                 continue;
             }
             if (vistas.add(c.usuario() + "\0" + c.senha())) {

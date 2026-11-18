@@ -186,6 +186,6 @@ class TelnetSwitchClientTest {
             }
             buf.write(b);
         }
-        return buf.toString(StandardCharsets.UTF_8).trim();
+        return new String(buf.toByteArray(), StandardCharsets.UTF_8).trim();
     }
 }

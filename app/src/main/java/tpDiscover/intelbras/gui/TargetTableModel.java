@@ -22,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Modelo Swing da tabela de equipamentos descobertos ou adicionados manualmente.
  * Permite editar IP/Porta, usuário e senha individuais e filtrar alvos selecionados para coleta.
@@ -65,25 +66,35 @@ public class TargetTableModel extends AbstractTableModel {
     public boolean isCellEditable(int rowIndex, int columnIndex) {
         if (rowIndex < 0 || rowIndex >= linhas.size()) return false;
         DiscoveredTargetRow r = linhas.get(rowIndex);
-        return switch (columnIndex) {
-            case COL_SELECIONADO -> r.isSuportaCli();
-            case COL_IP_PORTA, COL_USUARIO, COL_SENHA -> true;
-            default -> false;
-        };
+        switch (columnIndex) {
+            case COL_SELECIONADO:
+                return r.isSuportaCli();
+            case COL_IP_PORTA: case COL_USUARIO: case COL_SENHA:
+                return true;
+            default:
+                return false;
+        }
     }
 
     @Override
     public Object getValueAt(int rowIndex, int columnIndex) {
         DiscoveredTargetRow r = linhas.get(rowIndex);
-        return switch (columnIndex) {
-            case COL_SELECIONADO -> r.isSelecionado();
-            case COL_IP_PORTA -> r.getIpPorta();
-            case COL_MODELO -> r.getProdutoModelo();
-            case COL_USUARIO -> r.getUsuario();
-            case COL_SENHA -> r.getSenha();
-            case COL_STATUS -> r.getStatus();
-            default -> "";
-        };
+        switch (columnIndex) {
+            case COL_SELECIONADO:
+                return r.isSelecionado();
+            case COL_IP_PORTA:
+                return r.getIpPorta();
+            case COL_MODELO:
+                return r.getProdutoModelo();
+            case COL_USUARIO:
+                return r.getUsuario();
+            case COL_SENHA:
+                return r.getSenha();
+            case COL_STATUS:
+                return r.getStatus();
+            default:
+                return "";
+        }
     }
 
     @Override
@@ -91,23 +102,27 @@ public class TargetTableModel extends AbstractTableModel {
         if (rowIndex < 0 || rowIndex >= linhas.size()) return;
         DiscoveredTargetRow r = linhas.get(rowIndex);
         switch (columnIndex) {
-            case COL_SELECIONADO -> r.setSelecionado(Boolean.TRUE.equals(aValue));
-            case COL_IP_PORTA -> {
+            case COL_SELECIONADO:
+                r.setSelecionado(Boolean.TRUE.equals(aValue));
+                break;
+            case COL_IP_PORTA: {
                 String novo = aValue != null ? aValue.toString().trim() : "";
                 if (!novo.isEmpty()) {
                     r.setIpPorta(novo);
                 }
+                break;
             }
-            case COL_USUARIO -> {
+            case COL_USUARIO: {
                 r.setUsuario(aValue != null ? aValue.toString() : "");
-                if (r.isSuportaCli() && (!r.getUsuario().isBlank() || !r.getSenha().isEmpty())
+                if (r.isSuportaCli() && (!Compat.isBlank(r.getUsuario()) || !r.getSenha().isEmpty())
                         && (r.getEstado() == EstadoColeta.SEM_SENHA || r.getEstado() == EstadoColeta.FALHA)) {
                     r.setEstado(EstadoColeta.AGUARDANDO);
                     r.setStatus("Pronto para recoleta");
                     r.setSelecionado(true);
                 }
+                break;
             }
-            case COL_SENHA -> {
+            case COL_SENHA: {
                 r.setSenha(aValue != null ? aValue.toString() : "");
                 if (r.isSuportaCli() && !r.getSenha().isEmpty()
                         && (r.getEstado() == EstadoColeta.SEM_SENHA || r.getEstado() == EstadoColeta.FALHA)) {
@@ -115,8 +130,10 @@ public class TargetTableModel extends AbstractTableModel {
                     r.setStatus("Pronto para recoleta");
                     r.setSelecionado(true);
                 }
+                break;
             }
-            default -> {
+            default: {
+                break;
             }
         }
         fireTableRowsUpdated(rowIndex, rowIndex);
@@ -131,7 +148,7 @@ public class TargetTableModel extends AbstractTableModel {
     }
 
     public List<DiscoveredTargetRow> getLinhas() {
-        return List.copyOf(linhas);
+        return Compat.listCopyOf(linhas);
     }
 
     public int contarSelecionados() {
@@ -209,7 +226,7 @@ public class TargetTableModel extends AbstractTableModel {
             if (atual != null) {
                 atual.setSelecionado(true);
                 atual.setSuportaCli(true);
-                if (t.usuario() != null && !t.usuario().isBlank()) {
+                if (t.usuario() != null && !Compat.isBlank(t.usuario())) {
                     atual.setUsuario(t.usuario());
                 }
                 if (t.possuiSenha()) {
@@ -266,14 +283,14 @@ public class TargetTableModel extends AbstractTableModel {
 
     public List<SwitchTarget> extrairOverridesManuais(String usuarioPadrao, String senhaPadrao) {
         List<SwitchTarget> overrides = new ArrayList<>();
-        String userPadraoResolvido = (usuarioPadrao != null && !usuarioPadrao.isBlank()) ? usuarioPadrao.trim() : "admin";
+        String userPadraoResolvido = (usuarioPadrao != null && !Compat.isBlank(usuarioPadrao)) ? usuarioPadrao.trim() : "admin";
         for (DiscoveredTargetRow r : linhas) {
             if (!r.isSuportaCli() || !r.isSelecionado() || r.getEstado() == EstadoColeta.SEM_SENHA) continue;
-            String user = !r.getUsuario().isBlank() ? r.getUsuario() : "";
+            String user = !Compat.isBlank(r.getUsuario()) ? r.getUsuario() : "";
             String pass = !r.getSenha().isEmpty() ? r.getSenha() : "";
-            if (!user.isBlank() || !pass.isEmpty() || r.getIpPorta().contains(":")) {
+            if (!Compat.isBlank(user) || !pass.isEmpty() || r.getIpPorta().contains(":")) {
                 try {
-                    String resolvedUser = !user.isBlank() ? user : userPadraoResolvido;
+                    String resolvedUser = !Compat.isBlank(user) ? user : userPadraoResolvido;
                     String resolvedPass = !pass.isEmpty() ? pass : senhaPadrao;
                     overrides.add(parsearEnderecoTarget(r.getIpPorta(), resolvedUser, resolvedPass));
                 } catch (IllegalArgumentException ignored) {
@@ -285,7 +302,7 @@ public class TargetTableModel extends AbstractTableModel {
 
     public void adicionarManual(String ipPorta, String usuario, String senha) {
         SwitchTarget parsed = parsearEnderecoTarget(ipPorta, usuario, senha);
-        mesclarAlvosImportados(List.of(parsed), "Manual");
+        mesclarAlvosImportados(Compat.listOf(parsed), "Manual");
     }
 
     public void removerLinhas(int[] indicesView, JTable tabela) {
@@ -327,7 +344,7 @@ public class TargetTableModel extends AbstractTableModel {
         for (int idx : modelIndices) {
             if (idx < 0 || idx >= linhas.size()) continue;
             DiscoveredTargetRow r = linhas.get(idx);
-            if (usuario != null && !usuario.isBlank()) {
+            if (usuario != null && !Compat.isBlank(usuario)) {
                 r.setUsuario(usuario.trim());
             }
             if (senha != null && !senha.isEmpty()) {
@@ -376,16 +393,25 @@ public class TargetTableModel extends AbstractTableModel {
         List<TopologyEngine.EquipamentoSemAcesso> lista = new ArrayList<>();
         for (DiscoveredTargetRow r : linhas) {
             if (r.isEhGateway()) continue;
-            String motivo = switch (r.getEstado()) {
-                case SEM_SENHA -> "SEM_SENHA";
-                case NAO_SUPORTADO_CLI -> "SEM_CLI";
-                case FALHA -> (incluirTodasFalhas || !r.isSelecionado()) ? "FALHA_AUTENTICACAO" : null;
-                default -> null;
-            };
+            String motivo;
+            switch (r.getEstado()) {
+                case SEM_SENHA:
+                    motivo = "SEM_SENHA";
+                    break;
+                case NAO_SUPORTADO_CLI:
+                    motivo = "SEM_CLI";
+                    break;
+                case FALHA:
+                    motivo = (incluirTodasFalhas || !r.isSelecionado()) ? "FALHA_AUTENTICACAO" : null;
+                    break;
+                default:
+                    motivo = null;
+                    break;
+            }
             if (motivo == null) continue;
             String ipBase = extrairIpBase(r.getIpPorta());
-            if (ipBase.isBlank()) continue;
-            String modelo = !r.getProdutoModelo().isBlank() ? r.getProdutoModelo() : "Equipamento";
+            if (Compat.isBlank(ipBase)) continue;
+            String modelo = !Compat.isBlank(r.getProdutoModelo()) ? r.getProdutoModelo() : "Equipamento";
             lista.add(new TopologyEngine.EquipamentoSemAcesso(
                     ipBase, modelo, r.getCategoriaInferida(), r.getMacConhecido(), motivo));
         }
@@ -394,14 +420,18 @@ public class TargetTableModel extends AbstractTableModel {
 
     private static String categoriaProduto(DiscoveredProduct p) {
         if (p == null) return "SWITCH";
-        return switch (p.familia()) {
-            case OLT -> "OLT";
-            case ACCESS_POINT -> (p.modeloInferido().toLowerCase(java.util.Locale.ROOT).contains("wom")
+        switch (p.familia()) {
+            case OLT:
+                return "OLT";
+            case ACCESS_POINT:
+                return (p.modeloInferido().toLowerCase(java.util.Locale.ROOT).contains("wom")
                     || p.modeloInferido().toLowerCase(java.util.Locale.ROOT).contains("apc"))
                     ? "RADIO" : "AP";
-            case ROTEADOR_GATEWAY -> "ROUTER";
-            default -> "SWITCH";
-        };
+            case ROTEADOR_GATEWAY:
+                return "ROUTER";
+            default:
+                return "SWITCH";
+        }
     }
 
     public void marcarAguardandoParaSelecionados() {
@@ -432,14 +462,12 @@ public class TargetTableModel extends AbstractTableModel {
         List<SwitchTarget> alvos = new ArrayList<>();
         for (DiscoveredTargetRow r : linhas) {
             if (!r.isSelecionado() || !r.isSuportaCli() || r.getEstado() == EstadoColeta.SEM_SENHA) continue;
-            String user = !r.getUsuario().isBlank()
+            String user = !Compat.isBlank(r.getUsuario())
                     ? r.getUsuario()
-                    : (usuarioPadrao != null && !usuarioPadrao.isBlank() ? usuarioPadrao.trim() : "admin");
+                    : (usuarioPadrao != null && !Compat.isBlank(usuarioPadrao) ? usuarioPadrao.trim() : "admin");
             String pass = !r.getSenha().isEmpty() ? r.getSenha() : senhaPadrao;
-            if (exigirSenha && (pass == null || pass.isEmpty())) {
-                throw new IllegalArgumentException(
-                        "Informe a senha padrão (ou uma senha específica na linha " + r.getIpPorta() + ")."
-                );
+            if (pass == null) {
+                pass = ""; // só usuário: a senha em branco é enviada vazia
             }
             alvos.add(parsearEnderecoTarget(r.getIpPorta(), user, pass));
         }
@@ -450,9 +478,9 @@ public class TargetTableModel extends AbstractTableModel {
         List<SwitchTarget> alvos = new ArrayList<>();
         for (DiscoveredTargetRow r : linhas) {
             if (!r.isSuportaCli()) continue;
-            String user = !r.getUsuario().isBlank()
+            String user = !Compat.isBlank(r.getUsuario())
                     ? r.getUsuario()
-                    : (usuarioPadrao != null && !usuarioPadrao.isBlank() ? usuarioPadrao.trim() : "admin");
+                    : (usuarioPadrao != null && !Compat.isBlank(usuarioPadrao) ? usuarioPadrao.trim() : "admin");
             String pass = !r.getSenha().isEmpty() ? r.getSenha() : senhaPadrao;
             alvos.add(parsearEnderecoTarget(r.getIpPorta(), user, pass));
         }
@@ -460,7 +488,7 @@ public class TargetTableModel extends AbstractTableModel {
     }
 
     public static SwitchTarget parsearEnderecoTarget(String ipPorta, String usuario, String senha) {
-        if (ipPorta == null || ipPorta.isBlank()) {
+        if (ipPorta == null || Compat.isBlank(ipPorta)) {
             throw new IllegalArgumentException("IP do equipamento em branco.");
         }
         String limpo = ipPorta.trim();
@@ -518,10 +546,10 @@ public class TargetTableModel extends AbstractTableModel {
 
     private static String formatarModeloDescoberto(DiscoveredProduct p) {
         String base = p.familia().rotulo();
-        if (!p.modeloInferido().isBlank() && !base.contains(p.modeloInferido())) {
+        if (!Compat.isBlank(p.modeloInferido()) && !base.contains(p.modeloInferido())) {
             base += " (" + p.modeloInferido() + ")";
         }
-        if (!p.protocoloPreferido().isBlank()) {
+        if (!Compat.isBlank(p.protocoloPreferido())) {
             base += " [" + p.protocoloPreferido() + "]";
         }
         return base;
@@ -586,7 +614,35 @@ public class TargetTableModel extends AbstractTableModel {
         }
     }
 
-    private record PontoStatus(Color cor) implements javax.swing.Icon {
+    private static final class PontoStatus implements javax.swing.Icon {
+        private final Color cor;
+
+        private PontoStatus(Color cor) {
+            this.cor = cor;
+        }
+
+        public Color cor() {
+            return cor;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof PontoStatus)) return false;
+            PontoStatus o = (PontoStatus) obj;
+            return java.util.Objects.equals(cor, o.cor);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(cor);
+        }
+
+        @Override
+        public String toString() {
+            return "PontoStatus[cor=" + cor + "]";
+        }
+
         @Override public int getIconWidth() { return 8; }
         @Override public int getIconHeight() { return 8; }
 
@@ -606,20 +662,34 @@ public class TargetTableModel extends AbstractTableModel {
                                                        boolean hasFocus, int row, int column) {
             JLabel lbl = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
             String texto = value != null ? value.toString() : "";
-            lbl.setToolTipText(texto.isBlank() ? null : texto);
+            lbl.setToolTipText(Compat.isBlank(texto) ? null : texto);
             lbl.setBorder(new EmptyBorder(2, 10, 2, 10));
             lbl.setHorizontalAlignment(SwingConstants.LEFT);
             lbl.setIconTextGap(8);
-            if (table.getModel() instanceof TargetTableModel model) {
+            if (table.getModel() instanceof TargetTableModel) {
+                TargetTableModel model = (TargetTableModel) table.getModel();
                 int modelRow = table.convertRowIndexToModel(row);
                 EstadoColeta estado = model.getLinhas().get(modelRow).getEstado();
-                Color cor = switch (estado) {
-                    case OK -> SwingThemeHelper.STATUS_OK_FG;
-                    case FALHA -> SwingThemeHelper.STATUS_ERR_FG;
-                    case COLETANDO -> SwingThemeHelper.STATUS_RUN_FG;
-                    case NAO_SUPORTADO_CLI, SEM_SENHA -> SwingThemeHelper.STATUS_WARN_FG;
-                    case AGUARDANDO -> SwingThemeHelper.STATUS_IDLE_FG;
-                };
+                Color cor;
+                switch (estado) {
+                    case OK:
+                        cor = SwingThemeHelper.STATUS_OK_FG;
+                        break;
+                    case FALHA:
+                        cor = SwingThemeHelper.STATUS_ERR_FG;
+                        break;
+                    case COLETANDO:
+                        cor = SwingThemeHelper.STATUS_RUN_FG;
+                        break;
+                    case NAO_SUPORTADO_CLI: case SEM_SENHA:
+                        cor = SwingThemeHelper.STATUS_WARN_FG;
+                        break;
+                    case AGUARDANDO:
+                        cor = SwingThemeHelper.STATUS_IDLE_FG;
+                        break;
+                    default:
+                        throw new IllegalStateException("Valor inesperado: " + (estado));
+                }
                 lbl.setIcon(new PontoStatus(cor));
                 if (!isSelected) {
                     lbl.setBackground(SwingThemeHelper.BG_CARD);

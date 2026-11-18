@@ -6,6 +6,7 @@ import tpDiscover.intelbras.modelos.SwitchIdentity;
 
 import java.util.*;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Armazena, em memória, os dados coletados durante uma sessão de atendimento.
  *
@@ -53,7 +54,7 @@ public class SwitchDataRepository {
 
     /** Retorna, para um switch, quantos MACs distintos cada porta aprendeu. Útil para classificar portas. */
     public Map<String, Integer> contagemMacsPorPorta(String switchId) {
-        Map<String, Set<String>> portas = macsPorPorta.getOrDefault(switchId, Map.of());
+        Map<String, Set<String>> portas = macsPorPorta.getOrDefault(switchId, Compat.mapOf());
         Map<String, Integer> resultado = new LinkedHashMap<>();
         portas.forEach((porta, macs) -> resultado.put(porta, macs.size()));
         return resultado;
@@ -68,6 +69,6 @@ public class SwitchDataRepository {
     }
 
     public Map<String, Set<String>> macsPorPortaDoSwitch(String switchId) {
-        return macsPorPorta.getOrDefault(switchId, Map.of());
+        return macsPorPorta.getOrDefault(switchId, Compat.mapOf());
     }
 }

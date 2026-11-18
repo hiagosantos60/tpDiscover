@@ -21,11 +21,11 @@ import javax.swing.table.TableColumn;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
 import java.awt.Window;
 import java.util.ArrayList;
 import java.util.List;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Diálogo modal limpo para configurar credenciais extras (fallback automático)
  * usadas quando um equipamento (ex.: OLT com senha alterada ou switch de outro setor)
@@ -42,8 +42,8 @@ public class CredenciaisExtrasDialog extends JDialog {
         this.tableModel = new CredencialTableModel(atuais);
         this.table = new JTable(tableModel);
 
-        setMinimumSize(new Dimension(560, 340));
-        setSize(600, 380);
+        setMinimumSize(new Dimension(720, 360));
+        setSize(760, 400);
         setLocationRelativeTo(owner);
 
         JPanel root = new JPanel(new BorderLayout(0, 10));
@@ -51,7 +51,8 @@ public class CredenciaisExtrasDialog extends JDialog {
         root.setBorder(BorderFactory.createEmptyBorder(14, 16, 14, 16));
 
         JLabel dica = new JLabel("<html>Tentadas automaticamente nesta ordem caso a credencial padrão falhe na autenticação.<br>"
-                + "Você pode ajustar as senhas das OLTs do cliente ou adicionar combinações extras.</html>");
+                + "Você pode ajustar as senhas do cliente ou adicionar combinações extras. "
+                + "Deixe a senha em branco para equipamentos que pedem só o usuário.</html>");
         dica.setForeground(SwingThemeHelper.TEXT_MUTED);
         root.add(dica, BorderLayout.NORTH);
 
@@ -60,11 +61,8 @@ public class CredenciaisExtrasDialog extends JDialog {
         scroll.setBorder(BorderFactory.createLineBorder(SwingThemeHelper.BORDER_SUBTLE, 1, true));
         root.add(scroll, BorderLayout.CENTER);
 
-        JPanel rodape = new JPanel(new BorderLayout(8, 0));
-        rodape.setOpaque(false);
-
-        JPanel esquerda = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-        esquerda.setOpaque(false);
+        // Uma única linha: ações da tabela à esquerda, Cancelar/Salvar à direita (sem sobreposição)
+        javax.swing.Box rodape = javax.swing.Box.createHorizontalBox();
         JButton btnAdicionar = new JButton("Adicionar");
         JButton btnRemover = new JButton("Remover");
         JButton btnRestaurar = new JButton("Restaurar Padrão");
@@ -73,21 +71,21 @@ public class CredenciaisExtrasDialog extends JDialog {
         SwingThemeHelper.estilizarBotaoSecundario(btnRestaurar);
         btnAdicionar.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.PLUS, SwingThemeHelper.TEXT_PRIMARY));
         btnRemover.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.MINUS, SwingThemeHelper.TEXT_PRIMARY));
-        esquerda.add(btnAdicionar);
-        esquerda.add(btnRemover);
-        esquerda.add(btnRestaurar);
-
-        JPanel direita = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        direita.setOpaque(false);
+        btnRestaurar.setToolTipText("Volta às credenciais padrão: GEPON/GEPON e admin/admin para OLTs, admin/admin para switches e APs");
+        rodape.add(btnAdicionar);
+        rodape.add(javax.swing.Box.createHorizontalStrut(6));
+        rodape.add(btnRemover);
+        rodape.add(javax.swing.Box.createHorizontalStrut(6));
+        rodape.add(btnRestaurar);
+        rodape.add(javax.swing.Box.createHorizontalGlue());
+        rodape.add(javax.swing.Box.createHorizontalStrut(16));
         JButton btnCancelar = new JButton("Cancelar");
         JButton btnSalvar = new JButton("Salvar");
         SwingThemeHelper.estilizarBotaoSecundario(btnCancelar);
         SwingThemeHelper.estilizarBotaoPrimario(btnSalvar);
-        direita.add(btnCancelar);
-        direita.add(btnSalvar);
-
-        rodape.add(esquerda, BorderLayout.WEST);
-        rodape.add(direita, BorderLayout.EAST);
+        rodape.add(btnCancelar);
+        rodape.add(javax.swing.Box.createHorizontalStrut(8));
+        rodape.add(btnSalvar);
         root.add(rodape, BorderLayout.SOUTH);
 
         btnAdicionar.addActionListener(e -> {
@@ -164,7 +162,8 @@ public class CredenciaisExtrasDialog extends JDialog {
             @Override
             protected void setValue(Object value) {
                 String s = value != null ? value.toString() : "";
-                setText(s.isEmpty() ? "" : "•".repeat(Math.min(12, s.length())));
+                setText(s.isEmpty() ? "(sem senha)" : Compat.repeat("•", Math.min(12, s.length())));
+                setForeground(s.isEmpty() ? SwingThemeHelper.TEXT_MUTED : SwingThemeHelper.TEXT_PRIMARY);
             }
         });
     }
@@ -216,11 +215,11 @@ public class CredenciaisExtrasDialog extends JDialog {
         List<CredencialAcesso> extrairValidas() {
             List<CredencialAcesso> out = new ArrayList<>();
             for (CredRow r : linhas) {
-                if (!r.usuario.isBlank()) {
+                if (!Compat.isBlank(r.usuario)) {
                     out.add(new CredencialAcesso(r.ativa, r.nomePerfil, r.usuario.trim(), r.senha, r.escopo));
                 }
             }
-            return List.copyOf(out);
+            return Compat.listCopyOf(out);
         }
 
         @Override
@@ -246,26 +245,35 @@ public class CredenciaisExtrasDialog extends JDialog {
         @Override
         public Object getValueAt(int rowIndex, int columnIndex) {
             CredRow r = linhas.get(rowIndex);
-            return switch (columnIndex) {
-                case 0 -> r.escopo;
-                case 1 -> r.usuario;
-                case 2 -> r.senha;
-                default -> "";
-            };
+            switch (columnIndex) {
+                case 0:
+                    return r.escopo;
+                case 1:
+                    return r.usuario;
+                case 2:
+                    return r.senha;
+                default:
+                    return "";
+            }
         }
 
         @Override
         public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
             CredRow r = linhas.get(rowIndex);
             switch (columnIndex) {
-                case 0 -> {
-                    if (aValue instanceof Escopo esc) {
-                        r.escopo = esc;
+                case 0:
+                    if (aValue instanceof Escopo) {
+                        r.escopo = (Escopo) aValue;
                     }
-                }
-                case 1 -> r.usuario = aValue != null ? aValue.toString().trim() : "";
-                case 2 -> r.senha = aValue != null ? aValue.toString() : "";
-                default -> {
+                    break;
+                case 1:
+                    r.usuario = aValue != null ? aValue.toString().trim() : "";
+                    break;
+                case 2:
+                    r.senha = aValue != null ? aValue.toString() : "";
+                    break;
+                default: {
+                    break;
                 }
             }
             fireTableRowsUpdated(rowIndex, rowIndex);
@@ -280,7 +288,7 @@ public class CredenciaisExtrasDialog extends JDialog {
 
             CredRow(boolean ativa, String nomePerfil, Escopo escopo, String usuario, String senha) {
                 this.ativa = ativa;
-                this.nomePerfil = (nomePerfil != null && !nomePerfil.isBlank()) ? nomePerfil : "Credencial extra";
+                this.nomePerfil = (nomePerfil != null && !Compat.isBlank(nomePerfil)) ? nomePerfil : "Credencial extra";
                 this.escopo = escopo != null ? escopo : Escopo.TODOS;
                 this.usuario = usuario != null ? usuario : "";
                 this.senha = senha != null ? senha : "";

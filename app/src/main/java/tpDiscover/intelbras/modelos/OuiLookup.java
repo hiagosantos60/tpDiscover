@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Consulta de fabricante por OUI (3 primeiros bytes do MAC),
  * sem dependência de bibliotecas externas.
@@ -169,7 +170,7 @@ public final class OuiLookup {
      * Indica se o MAC pertence a um bloco OUI conhecido do fabricante informado.
      */
     public static boolean ehFabricante(String mac, String fabricante) {
-        if (fabricante == null || fabricante.isBlank()) return false;
+        if (fabricante == null || Compat.isBlank(fabricante)) return false;
         return identificarFabricante(mac)
                 .map(v -> v.equalsIgnoreCase(fabricante.trim()))
                 .orElse(false);

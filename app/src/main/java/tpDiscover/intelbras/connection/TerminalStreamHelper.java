@@ -13,6 +13,7 @@ import java.util.function.LongConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Utilitário compartilhado de leitura de stream CLI para SSH e Telnet.
  * Unifica detecção de prompt, paginação (--More-- / ---MORE--- / OLT), login com cadeia de
@@ -246,7 +247,7 @@ final class TerminalStreamHelper {
         if (texto == null) return "";
         String[] linhas = limparAnsi(texto).split("\\R");
         for (int i = linhas.length - 1; i >= 0; i--) {
-            if (!linhas[i].isBlank()) return linhas[i];
+            if (!Compat.isBlank(linhas[i])) return linhas[i];
         }
         return "";
     }
@@ -267,7 +268,7 @@ final class TerminalStreamHelper {
     }
 
     static boolean ehBannerOltAn(String banner) {
-        if (banner == null || banner.isBlank()) return false;
+        if (banner == null || Compat.isBlank(banner)) return false;
         String lower = banner.toLowerCase();
         return lower.contains("zzzzzzzzzzzz")
                 || lower.contains("an6000")
@@ -277,7 +278,7 @@ final class TerminalStreamHelper {
     }
 
     static boolean ehBannerOltGenerico(String banner) {
-        if (banner == null || banner.isBlank()) return false;
+        if (banner == null || Compat.isBlank(banner)) return false;
         String lower = banner.toLowerCase();
         return ehBannerOltAn(lower)
                 || lower.contains("olt")
@@ -294,16 +295,69 @@ final class TerminalStreamHelper {
      * @param lineEnding terminador de linha efetivo (pode ter sido alternado no socket raw)
      * @param cadeia     cadeia de credenciais usada (inclui GEPON adicionado por banner AN), para o 'enable'
      */
-    record AuthResult(
-            String bannerCompleto,
-            String ultimaSaida,
-            String senhaEfetiva,
-            CredencialLogin credencial,
-            String lineEnding,
-            List<CredencialLogin> cadeia
-    ) {
-        AuthResult {
-            cadeia = cadeia != null ? List.copyOf(cadeia) : List.of();
+    static final class AuthResult {
+        private final String bannerCompleto;
+        private final String ultimaSaida;
+        private final String senhaEfetiva;
+        private final CredencialLogin credencial;
+        private final String lineEnding;
+        private final List<CredencialLogin> cadeia;
+
+        AuthResult(String bannerCompleto, String ultimaSaida, String senhaEfetiva, CredencialLogin credencial, String lineEnding, List<CredencialLogin> cadeia) {
+            cadeia = cadeia != null ? Compat.listCopyOf(cadeia) : Compat.listOf();
+            this.bannerCompleto = bannerCompleto;
+            this.ultimaSaida = ultimaSaida;
+            this.senhaEfetiva = senhaEfetiva;
+            this.credencial = credencial;
+            this.lineEnding = lineEnding;
+            this.cadeia = cadeia;
+        }
+
+        public String bannerCompleto() {
+            return bannerCompleto;
+        }
+
+        public String ultimaSaida() {
+            return ultimaSaida;
+        }
+
+        public String senhaEfetiva() {
+            return senhaEfetiva;
+        }
+
+        public CredencialLogin credencial() {
+            return credencial;
+        }
+
+        public String lineEnding() {
+            return lineEnding;
+        }
+
+        public List<CredencialLogin> cadeia() {
+            return cadeia;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof AuthResult)) return false;
+            AuthResult o = (AuthResult) obj;
+            return java.util.Objects.equals(bannerCompleto, o.bannerCompleto)
+                    && java.util.Objects.equals(ultimaSaida, o.ultimaSaida)
+                    && java.util.Objects.equals(senhaEfetiva, o.senhaEfetiva)
+                    && java.util.Objects.equals(credencial, o.credencial)
+                    && java.util.Objects.equals(lineEnding, o.lineEnding)
+                    && java.util.Objects.equals(cadeia, o.cadeia);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(bannerCompleto, ultimaSaida, senhaEfetiva, credencial, lineEnding, cadeia);
+        }
+
+        @Override
+        public String toString() {
+            return "AuthResult[bannerCompleto=" + bannerCompleto + ", ultimaSaida=" + ultimaSaida + ", senhaEfetiva=" + senhaEfetiva + ", credencial=" + credencial + ", lineEnding=" + lineEnding + ", cadeia=" + cadeia + "]";
         }
     }
 
@@ -597,7 +651,7 @@ final class TerminalStreamHelper {
     }
 
     static SwitchConnectionException comEtapaFalha(String etapa, SwitchConnectionException e) {
-        if (e == null || etapa == null || etapa.isBlank()) {
+        if (e == null || etapa == null || Compat.isBlank(etapa)) {
             return e;
         }
         if (e.getTipo() != SwitchConnectionException.Tipo.TIMEOUT

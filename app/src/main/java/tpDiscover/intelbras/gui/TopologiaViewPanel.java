@@ -12,7 +12,6 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
-import javax.swing.JTextArea;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
@@ -25,14 +24,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 
+import tpDiscover.intelbras.util.Compat;
 /**
- * Aba "Topologia": faixa de diagnóstico (saudável / atenção / loop), problemas encontrados,
- * conexões entre equipamentos, relatório completo em texto e ações do PDF.
+ * Aba "Topologia": faixa de diagnóstico (saudável / atenção / loop), mapa interativo da rede
+ * para consulta rápida, problemas encontrados, conexões entre equipamentos e ações do PDF.
  */
 public class TopologiaViewPanel extends JPanel {
 
-    private static final int ABA_PROBLEMAS = 0;
-    private static final int ABA_CONEXOES = 1;
+    private static final int ABA_MAPA = 0;
+    private static final int ABA_PROBLEMAS = 1;
+    private static final int ABA_CONEXOES = 2;
 
     private final JPanel loopCard = new JPanel(new BorderLayout(12, 0));
     private final JLabel lblLoopBanner = new JLabel("Nenhuma coleta realizada ainda.");
@@ -45,7 +46,7 @@ public class TopologiaViewPanel extends JPanel {
     private final JTabbedPane abas = new JTabbedPane();
     private final DefaultTableModel enlacesModel;
     private final DefaultTableModel loopsModel;
-    private final JTextArea txtTopologia = new JTextArea();
+    private final TopologiaMapaPanel mapaPanel = new TopologiaMapaPanel();
 
     private Path ultimoPdfGerado;
     private Path pastaSaidaAtual;
@@ -135,16 +136,10 @@ public class TopologiaViewPanel extends JPanel {
         };
         JTable tblEnlaces = criarTabela(enlacesModel);
 
-        txtTopologia.setEditable(false);
-        txtTopologia.setBackground(SwingThemeHelper.BG_CONSOLE);
-        txtTopologia.setForeground(new Color(0xB9C1CE));
-        txtTopologia.setFont(SwingThemeHelper.fonteMonoespacada());
-        txtTopologia.setBorder(BorderFactory.createEmptyBorder(12, 14, 12, 14));
-        txtTopologia.setText("Faça uma coleta na aba Coleta para visualizar a topologia e o diagnóstico de loops.");
-
+        mapaPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
+        abas.addTab("Mapa", mapaPanel);
         abas.addTab("Problemas (0)", envolverScroll(tblLoops, SwingThemeHelper.BG_CARD));
         abas.addTab("Conexões (0)", envolverScroll(tblEnlaces, SwingThemeHelper.BG_CARD));
-        abas.addTab("Relatório completo", envolverScroll(txtTopologia, SwingThemeHelper.BG_CONSOLE));
         conteudoCard.add(abas, BorderLayout.CENTER);
         add(conteudoCard, BorderLayout.CENTER);
     }
@@ -188,6 +183,7 @@ public class TopologiaViewPanel extends JPanel {
 
     public void setPastaSaidaAtual(Path pasta) {
         this.pastaSaidaAtual = pasta;
+        mapaPanel.setPastaRelatorio(pasta, ultimoPdfGerado);
     }
 
     public void limparParaNovaExecucao() {
@@ -200,8 +196,10 @@ public class TopologiaViewPanel extends JPanel {
     public void exibirRelatorio(RelatorioTopologia.ResultadoRelatorio relatorio) {
         if (relatorio == null) return;
 
-        txtTopologia.setText(relatorio.textoCompleto());
-        txtTopologia.setCaretPosition(0);
+        mapaPanel.exibir(relatorio.mapa());
+        Path relatorioArquivo = relatorio.arquivoGerado() != null && Files.exists(relatorio.arquivoGerado())
+                ? relatorio.arquivoGerado() : null;
+        mapaPanel.setPastaRelatorio(pastaSaidaAtual, relatorioArquivo);
 
         enlacesModel.setRowCount(0);
         for (RelatorioTopologia.EnlaceResumo e : relatorio.enlaces()) {
@@ -215,16 +213,16 @@ public class TopologiaViewPanel extends JPanel {
         for (LoopDiagnostic d : relatorio.loops()) {
             if (d.severidade() == LoopDiagnostic.Severidade.CRITICO) criticos++;
             else avisos++;
-            String orig = d.switchOrigemId() + (d.portaOrigem().isBlank() ? "" : " [" + d.portaOrigem() + "]");
-            String dest = d.switchDestinoId().isBlank()
+            String orig = d.switchOrigemId() + (Compat.isBlank(d.portaOrigem()) ? "" : " [" + d.portaOrigem() + "]");
+            String dest = Compat.isBlank(d.switchDestinoId())
                     ? "-"
-                    : d.switchDestinoId() + (d.portaDestino().isBlank() ? "" : " [" + d.portaDestino() + "]");
+                    : d.switchDestinoId() + (Compat.isBlank(d.portaDestino()) ? "" : " [" + d.portaDestino() + "]");
             loopsModel.addRow(new Object[]{
                     d.severidade(), d.tipo(), orig, dest, d.evidencia(), d.acaoRecomendada()
             });
         }
         abas.setTitleAt(ABA_PROBLEMAS, "Problemas (" + relatorio.loops().size() + ")");
-        abas.setSelectedIndex(relatorio.loops().isEmpty() ? ABA_CONEXOES : ABA_PROBLEMAS);
+        abas.setSelectedIndex(ABA_MAPA);
 
         atualizarBannerLoop(criticos, avisos, relatorio.topologiaParcial(), relatorio.pendenciasAcesso().size(),
                 relatorio.enlaces().size());
@@ -250,7 +248,7 @@ public class TopologiaViewPanel extends JPanel {
                     criticos + (criticos == 1 ? " possível loop crítico detectado" : " possíveis loops críticos detectados"),
                     (avisos > 0 ? avisos + " aviso(s) de STP. " : "")
                             + (topologiaParcial ? "Topologia parcial. " : "")
-                            + "Veja a aba Problemas para saber onde e o que fazer.");
+                            + "No mapa, os pontos em vermelho mostram onde; a aba Problemas diz o que fazer.");
         } else if (topologiaParcial) {
             aplicarBanner(TipoStatus.WARN, IconKind.ALERT,
                     "Topologia parcial",
@@ -286,7 +284,7 @@ public class TopologiaViewPanel extends JPanel {
                                                        boolean hasFocus, int row, int column) {
             JLabel l = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
             String txt = value != null ? value.toString() : "";
-            l.setToolTipText(txt.isBlank() ? null : txt);
+            l.setToolTipText(Compat.isBlank(txt) ? null : txt);
             l.setBorder(new EmptyBorder(2, 10, 2, 10));
             if (!isSelected) {
                 l.setBackground(SwingThemeHelper.BG_CARD);

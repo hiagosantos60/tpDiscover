@@ -1,0 +1,16 @@
+tpDiscover Intelbras
+====================
+
+Requisitos
+- Windows 7, 8, 10 ou 11
+- Java 8 (JRE 8) instalado: https://www.java.com
+- Para o PDF: Microsoft Edge ou Google Chrome
+
+Como usar
+- Interface grafica: de dois cliques em tpDiscover.bat
+- Terminal: tpDiscover.bat --help
+
+O aplicativo pede a senha de acesso ao abrir.
+Cada relatorio gera dois arquivos na pasta escolhida:
+- topologia_AAAA-MM-DD_HHmm.pdf (relatorio executivo)
+- topologia_AAAA-MM-DD_HHmm_planejador.json (abra no Planejador de Rede pelo botao Abrir)

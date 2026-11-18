@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Ponto de entrada único para conectar em um dispositivo via CLI:
  *  1) Evita abrir e fechar conexão descartada na porta Telnet imediatamente antes do login
@@ -145,7 +146,7 @@ public class SwitchConnector {
 
     /** Verifica rapidamente via TCP connect se a porta está aberta no host alvo. */
     public static boolean portaTcpAberta(String ip, int porta, int timeoutMs) {
-        if (ip == null || ip.isBlank() || porta < 1 || porta > 65535) {
+        if (ip == null || Compat.isBlank(ip) || porta < 1 || porta > 65535) {
             return false;
         }
         try (Socket socket = new Socket()) {

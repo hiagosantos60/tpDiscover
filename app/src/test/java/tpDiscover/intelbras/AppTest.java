@@ -26,6 +26,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
+import tpDiscover.intelbras.util.Compat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -60,16 +61,14 @@ class AppTest {
     @Test
     void testOltParserComSaidaReal() {
         OltParser parser = new OltParser();
-        String rawInfo = """
-                software platform   :Broadband Network Platform Software
-                software version    :OLT-04P V100R001B01D001P007SP6
-                MAC address         :58:10:8c:68:da:f0
-                product serial no.  :1
-                system configuration
-                system description     :EPON
-                system name            :OLT4880E
-                product name           :OLT-04P EPON Product
-                """;
+        String rawInfo = "software platform   :Broadband Network Platform Software\n" +
+                "software version    :OLT-04P V100R001B01D001P007SP6\n" +
+                "MAC address         :58:10:8c:68:da:f0\n" +
+                "product serial no.  :1\n" +
+                "system configuration\n" +
+                "system description     :EPON\n" +
+                "system name            :OLT4880E\n" +
+                "product name           :OLT-04P EPON Product\n";
 
         assertTrue(parser.ehDispositivoOlt(rawInfo));
         SwitchIdentity id = parser.parseDeviceInfo("10.1.40.131", "OLT", rawInfo);
@@ -78,14 +77,12 @@ class AppTest {
         assertEquals("OLT-04P EPON", id.productId());
         assertEquals("1", id.serialNumber());
 
-        String rawMacTable = """
-                MAC Address           VLAN ID  port     status
-                00:09:0f:09:1e:0a     1        e0/2     dynamic
-                80:85:44:01:e3:84     1        e0/2     dynamic
-                58:10:8c:68:da:f0     1        cpu      static
-                30:e1:f1:ff:66:1f     1        e0/2     dynamic
-                Total entries: 4 .
-                """;
+        String rawMacTable = "MAC Address           VLAN ID  port     status\n" +
+                "00:09:0f:09:1e:0a     1        e0/2     dynamic\n" +
+                "80:85:44:01:e3:84     1        e0/2     dynamic\n" +
+                "58:10:8c:68:da:f0     1        cpu      static\n" +
+                "30:e1:f1:ff:66:1f     1        e0/2     dynamic\n" +
+                "Total entries: 4 .\n";
 
         List<MacEntry> entries = parser.parseMacAddressTable(id.macNormalizado(), rawMacTable);
         // A entrada "cpu" deve ser ignorada
@@ -98,31 +95,29 @@ class AppTest {
     @Test
     void testSerie3000ParserComSaidaReal() {
         Serie3000Parser parser = new Serie3000Parser();
-        String rawOutput = """
-                                         Mac Address Table
-        ----------------------------------------------------------------------------------
-
-         FLAG Codes:
-         C -- config by CLI , NC -- not config by CLI ,
-         V -- dynamic mac address for vlan mapping , M -- multi-chassis link aggregation group
-
-        ----------------------------------------------------------------------------------
-
-         VLAN          MAC           TYPE          INTERFACE             STATE       FLAG
-         ----     --------------    -------     --------------------    --------    ------
-         1        48F9.7CEA.064A    STATIC      gi1/0/2                   FWD        [NC]
-         1        0009.0F09.1E0A    STATIC      gi1/0/2                   FWD        [NC]
-         1        DC4E.F40F.2ED7    DYNAMIC     gi1/0/2                   FWD        [NC]
-         1        4851.CFCC.8BF4    DYNAMIC     gi1/0/2                   FWD        [NC]
-         1        001A.3F4A.97FD    DYNAMIC     gi1/0/2                   FWD        [NC]
-         1        5810.8C68.DAF0    DYNAMIC     gi1/0/2                   FWD        [NC]
-         1        808F.E89C.C0FA    DYNAMIC     gi1/0/2                   FWD        [NC]
-         1        D836.5FDF.1D2B    DYNAMIC     gi1/0/2                   FWD        [NC]
-         1        BC24.1113.6D16    DYNAMIC     gi1/0/2                   FWD        [NC]
-         1        D877.8BB2.9397    DYNAMIC     gi1/0/2                   FWD        [NC]
-         1        D836.5F89.9B40    DYNAMIC     gi1/0/2                   FWD        [NC]
-         1        50D4.F724.2C0D    DYNAMIC     gi1/0/2                   FWD        [NC]
-        """;
+        String rawOutput = "                                 Mac Address Table\n" +
+                "----------------------------------------------------------------------------------\n" +
+                "\n" +
+                " FLAG Codes:\n" +
+                " C -- config by CLI , NC -- not config by CLI ,\n" +
+                " V -- dynamic mac address for vlan mapping , M -- multi-chassis link aggregation group\n" +
+                "\n" +
+                "----------------------------------------------------------------------------------\n" +
+                "\n" +
+                " VLAN          MAC           TYPE          INTERFACE             STATE       FLAG\n" +
+                " ----     --------------    -------     --------------------    --------    ------\n" +
+                " 1        48F9.7CEA.064A    STATIC      gi1/0/2                   FWD        [NC]\n" +
+                " 1        0009.0F09.1E0A    STATIC      gi1/0/2                   FWD        [NC]\n" +
+                " 1        DC4E.F40F.2ED7    DYNAMIC     gi1/0/2                   FWD        [NC]\n" +
+                " 1        4851.CFCC.8BF4    DYNAMIC     gi1/0/2                   FWD        [NC]\n" +
+                " 1        001A.3F4A.97FD    DYNAMIC     gi1/0/2                   FWD        [NC]\n" +
+                " 1        5810.8C68.DAF0    DYNAMIC     gi1/0/2                   FWD        [NC]\n" +
+                " 1        808F.E89C.C0FA    DYNAMIC     gi1/0/2                   FWD        [NC]\n" +
+                " 1        D836.5FDF.1D2B    DYNAMIC     gi1/0/2                   FWD        [NC]\n" +
+                " 1        BC24.1113.6D16    DYNAMIC     gi1/0/2                   FWD        [NC]\n" +
+                " 1        D877.8BB2.9397    DYNAMIC     gi1/0/2                   FWD        [NC]\n" +
+                " 1        D836.5F89.9B40    DYNAMIC     gi1/0/2                   FWD        [NC]\n" +
+                " 1        50D4.F724.2C0D    DYNAMIC     gi1/0/2                   FWD        [NC]\n";
 
         List<MacEntry> entries = parser.parseMacAddressTable("d8365f9a5468", rawOutput);
         assertEquals(12, entries.size());
@@ -159,7 +154,7 @@ class AppTest {
         engine.registrarSwitch(swB);
 
         // Switch A vê Switch B na GE1/0/20, um host na GE1/0/1 e 2 hosts na GE1/0/24
-        engine.registrarEntradas(swA.macNormalizado(), List.of(
+        engine.registrarEntradas(swA.macNormalizado(), Compat.listOf(
                 new MacEntry(swA.macNormalizado(), "d836-5f9a-49bd", 1, "Learned", "GE1/0/20"),
                 new MacEntry(swA.macNormalizado(), "0014-2201-0203", 1, "Learned", "GE1/0/24"),
                 new MacEntry(swA.macNormalizado(), "001a-a055-6677", 1, "Learned", "GE1/0/24"),
@@ -167,7 +162,7 @@ class AppTest {
         ));
 
         // Switch B (S30) vê Switch A na porta normalizada GE1/0/23
-        engine.registrarEntradas(swB.macNormalizado(), List.of(
+        engine.registrarEntradas(swB.macNormalizado(), Compat.listOf(
                 new MacEntry(swB.macNormalizado(), "30e1-f1ff-6620", 1, "STATIC", "GE1/0/23")
         ));
 
@@ -203,16 +198,16 @@ class AppTest {
         engine.registrarSwitch(swB);
         engine.registrarSwitch(swC);
 
-        engine.registrarEntradas(swA.macNormalizado(), List.of(
+        engine.registrarEntradas(swA.macNormalizado(), Compat.listOf(
                 new MacEntry(swA.macNormalizado(), "30e1-f1ff-661f", 1, "Learned", "GE1/0/20")
         ));
 
-        engine.registrarEntradas(swB.macNormalizado(), List.of(
+        engine.registrarEntradas(swB.macNormalizado(), Compat.listOf(
                 new MacEntry(swB.macNormalizado(), "8085-4401-e384", 1, "Learned", "GE1/0/23"),
                 new MacEntry(swB.macNormalizado(), "d836-5f42-5c7b", 1, "Learned", "BAGG2")
         ));
 
-        engine.registrarEntradas(swC.macNormalizado(), List.of(
+        engine.registrarEntradas(swC.macNormalizado(), Compat.listOf(
                 new MacEntry(swC.macNormalizado(), "30e1-f1ff-661f", 1, "DYNAMIC", "GE1/0/2"),
                 new MacEntry(swC.macNormalizado(), "8085-4401-e384", 1, "DYNAMIC", "GE1/0/2")
         ));
@@ -244,25 +239,25 @@ class AppTest {
         engine.registrarSwitch(sw18);
         engine.registrarSwitch(sw21);
 
-        engine.registrarEntradas(sw24.macNormalizado(), List.of(
+        engine.registrarEntradas(sw24.macNormalizado(), Compat.listOf(
                 new MacEntry(sw24.macNormalizado(), "8085-4407-f634", 1, "Learned", "GE1/0/11"),
                 new MacEntry(sw24.macNormalizado(), "8085-4403-c045", 1, "Learned", "GE1/0/11"),
                 new MacEntry(sw24.macNormalizado(), "8085-4407-b35c", 1, "Learned", "GE1/0/35")
         ));
 
-        engine.registrarEntradas(sw10.macNormalizado(), List.of(
+        engine.registrarEntradas(sw10.macNormalizado(), Compat.listOf(
                 new MacEntry(sw10.macNormalizado(), "d836-5f9a-5469", 1, "Learned", "GE1/0/1"),
                 new MacEntry(sw10.macNormalizado(), "8085-4407-b367", 1, "Learned", "GE1/0/1"),
                 new MacEntry(sw10.macNormalizado(), "8085-4403-c050", 1, "Learned", "GE1/0/26"),
                 new MacEntry(sw10.macNormalizado(), "8085-4403-c05f", 1, "Learned", "GE1/0/26")
         ));
 
-        engine.registrarEntradas(sw18.macNormalizado(), List.of(
+        engine.registrarEntradas(sw18.macNormalizado(), Compat.listOf(
                 new MacEntry(sw18.macNormalizado(), "d836-5f9a-5469", 1, "Learned", "GE1/0/13"),
                 new MacEntry(sw18.macNormalizado(), "8085-4407-b367", 1, "Learned", "GE1/0/13")
         ));
 
-        engine.registrarEntradas(sw21.macNormalizado(), List.of(
+        engine.registrarEntradas(sw21.macNormalizado(), Compat.listOf(
                 new MacEntry(sw21.macNormalizado(), "d836-5f9a-5469", 1, "Learned", "GE1/0/3"),
                 new MacEntry(sw21.macNormalizado(), "8085-4407-f63f", 1, "Learned", "GE1/0/3"),
                 new MacEntry(sw21.macNormalizado(), "8085-4403-c050", 1, "Learned", "GE1/0/3")
@@ -277,26 +272,24 @@ class AppTest {
     @Test
     void testExpansaoPortasAgregadasComware() {
         ComwareParser parser = new ComwareParser();
-        String lagOutput = """
-                Aggregate Interface: Bridge-Aggregation2
-                Aggregation Mode: Dynamic
-                Loadsharing Type: Shar
-                System ID: 0x8000, 30e1-f1ff-661f
-                Local:
-                  Port             Status  Priority Oper-Key  Flag
-                --------------------------------------------------------------------------------
-                  GE1/0/1          S       32768    2         {ACDEF}
-                  GE1/0/2          S       32768    2         {ACDEF}
-                Remote:
-                  Actor            Partner Priority Oper-Key  SystemID               Flag
-                --------------------------------------------------------------------------------
-                  GE1/0/1          2       32768    1         0x8000, d836-5f42-5c7b {ACDEF}
-                """;
+        String lagOutput = "Aggregate Interface: Bridge-Aggregation2\n" +
+                "Aggregation Mode: Dynamic\n" +
+                "Loadsharing Type: Shar\n" +
+                "System ID: 0x8000, 30e1-f1ff-661f\n" +
+                "Local:\n" +
+                "  Port             Status  Priority Oper-Key  Flag\n" +
+                "--------------------------------------------------------------------------------\n" +
+                "  GE1/0/1          S       32768    2         {ACDEF}\n" +
+                "  GE1/0/2          S       32768    2         {ACDEF}\n" +
+                "Remote:\n" +
+                "  Actor            Partner Priority Oper-Key  SystemID               Flag\n" +
+                "--------------------------------------------------------------------------------\n" +
+                "  GE1/0/1          2       32768    1         0x8000, d836-5f42-5c7b {ACDEF}\n";
 
         Map<String, List<String>> membros = parser.parseLinkAggregation(lagOutput);
-        assertEquals(List.of("GE1/0/1", "GE1/0/2"), membros.get("BAGG2"));
+        assertEquals(Compat.listOf("GE1/0/1", "GE1/0/2"), membros.get("BAGG2"));
 
-        List<MacEntry> originais = List.of(
+        List<MacEntry> originais = Compat.listOf(
                 new MacEntry("30e1f1ff661f", "d836-5f42-5c7b", 1, "Learned", "BAGG2")
         );
         List<MacEntry> expandidas = parser.expandirPortasAgregadas(originais, membros);
@@ -305,39 +298,35 @@ class AppTest {
 
     @Test
     void testSerie3000IdentidadeRealS30SemIntelbrasERotaArpReais() {
-        String showInterfaceVlan1 = """
-                vlan1:
-                     line protocol is up
-                     Internet address: 10.1.40.130/24
-                     Ethernet address is d836.5f42.5c7b
-                     5 minutes input rate 459 bits/sec, 0 packet/sec, bandwidth utilization 0.00%
-                     Unknown protocol 5168065
-                INTELBRAS#
-                """;
+        String showInterfaceVlan1 = "vlan1:\n" +
+                "     line protocol is up\n" +
+                "     Internet address: 10.1.40.130/24\n" +
+                "     Ethernet address is d836.5f42.5c7b\n" +
+                "     5 minutes input rate 459 bits/sec, 0 packet/sec, bandwidth utilization 0.00%\n" +
+                "     Unknown protocol 5168065\n" +
+                "INTELBRAS#\n";
         assertFalse(ColetorEmLote.ehComandoInvalido(showInterfaceVlan1));
         assertTrue(ColetorEmLote.ehComandoInvalido("% Invalid input detected at '^' marker"));
         assertTrue(ColetorEmLote.ehComandoInvalido("% Unknown command"));
 
-        String saidaCombinadaS30 = """
-                               Intelbras (R) Operating System Software
-                Intelbras S3028G-PB Max system image file (flash0: /flash/sp35-g-9.7.400.1(R).pck), version 9.7.400.1
-                Intelbras S3028G-PB Max Version Information
-                \tSystem ID           : d8365f9a4cbc
-                \tHardware Model\t    : Intelbras S3028G-PB Max
-                \tSoftware Version    : 9.7.400.1
-                INTELBRAS#
-                system mac information:
-                                ap mac: d836.5f42.5c7c
-                                ag mac: d836.5f42.5c7d
-                              intf mac: d836.5f42.5c7b
-                               dc0 mac: d836.5f42.5c7a
-                INTELBRAS#
-                 System Card Information(Device:1 - Mpu 0 - ONLINE)
-                                    Type:   Intelbras S3028G-PB Max
-                              Serial No.:   H3TK3900068UN
-                             Core-Utilization:  9%
-                INTELBRAS#
-                """;
+        String saidaCombinadaS30 = "               Intelbras (R) Operating System Software\n" +
+                "Intelbras S3028G-PB Max system image file (flash0: /flash/sp35-g-9.7.400.1(R).pck), version 9.7.400.1\n" +
+                "Intelbras S3028G-PB Max Version Information\n" +
+                "\tSystem ID           : d8365f9a4cbc\n" +
+                "\tHardware Model\t    : Intelbras S3028G-PB Max\n" +
+                "\tSoftware Version    : 9.7.400.1\n" +
+                "INTELBRAS#\n" +
+                "system mac information:\n" +
+                "                ap mac: d836.5f42.5c7c\n" +
+                "                ag mac: d836.5f42.5c7d\n" +
+                "              intf mac: d836.5f42.5c7b\n" +
+                "               dc0 mac: d836.5f42.5c7a\n" +
+                "INTELBRAS#\n" +
+                " System Card Information(Device:1 - Mpu 0 - ONLINE)\n" +
+                "                    Type:   Intelbras S3028G-PB Max\n" +
+                "              Serial No.:   H3TK3900068UN\n" +
+                "             Core-Utilization:  9%\n" +
+                "INTELBRAS#\n";
 
         Serie3000Parser parser = new Serie3000Parser();
         SwitchIdentity id = parser.parseDeviceVersion("10.1.40.130", null, saidaCombinadaS30);
@@ -354,22 +343,18 @@ class AppTest {
         assertEquals("S3028G-PB Max", idCustom.productId());
 
         // Valida parse de "show ip route" e "show arp" capturados do S30 real 10.1.40.130
-        String showIpRouteReal = """
-                Codes: C - Connected, L - Local, S - static, R - RIP,  B - BGP, i-ISIS
-                S   0.0.0.0/0 [1/0] via 10.1.40.1, 9w5d:03:58:13, vlan1
-                C   10.1.40.0/24 is directly connected, 9w5d:03:58:13, vlan1
-                L   10.1.40.130/32 is directly connected, 9w5d:03:58:13, vlan1
-                INTELBRAS#
-                """;
-        assertEquals("10.1.40.1", parser.parseDefaultGatewayIp(showIpRouteReal).orElseThrow());
+        String showIpRouteReal = "Codes: C - Connected, L - Local, S - static, R - RIP,  B - BGP, i-ISIS\n" +
+                "S   0.0.0.0/0 [1/0] via 10.1.40.1, 9w5d:03:58:13, vlan1\n" +
+                "C   10.1.40.0/24 is directly connected, 9w5d:03:58:13, vlan1\n" +
+                "L   10.1.40.130/32 is directly connected, 9w5d:03:58:13, vlan1\n" +
+                "INTELBRAS#\n";
+        assertEquals("10.1.40.1", parser.parseDefaultGatewayIp(showIpRouteReal).get());
 
-        String showArpReal = """
-                Protocol  Address             Age (min) Hardware Addr   Type    Interface                          Switchport
-                Internet  10.1.40.1           0         0009.0f09.1e0a  ARPA    vlan1                              gi1/0/2
-                Internet  10.1.40.130         -         d836.5f42.5c7b  ARPA    vlan1                              ---
-                Internet  10.1.40.142         0         48f9.7cea.064a  ARPA    vlan1                              gi1/0/2
-                INTELBRAS#
-                """;
+        String showArpReal = "Protocol  Address             Age (min) Hardware Addr   Type    Interface                          Switchport\n" +
+                "Internet  10.1.40.1           0         0009.0f09.1e0a  ARPA    vlan1                              gi1/0/2\n" +
+                "Internet  10.1.40.130         -         d836.5f42.5c7b  ARPA    vlan1                              ---\n" +
+                "Internet  10.1.40.142         0         48f9.7cea.064a  ARPA    vlan1                              gi1/0/2\n" +
+                "INTELBRAS#\n";
         List<ArpEntry> arps = parser.parseArpTable(showArpReal);
         assertEquals(3, arps.size());
         assertEquals("10.1.40.1", arps.get(0).ip());
@@ -382,43 +367,35 @@ class AppTest {
     void testDeteccaoRoteadorCoreNaArvoreEDestaqueGatewayEmTudo(@TempDir Path tempDir) throws IOException {
         // Valida também diretiva opcional '# gateway=...' no switches.txt
         Path arqSwitches = tempDir.resolve("switches.txt");
-        Files.writeString(arqSwitches, """
-                # Lista do cliente
-                # gateway=10.1.40.1
-                10.1.40.203;admin;Admin@1234
-                10.1.40.130;admin;Admin@1234
-                10.1.40.204;admin;Admin@1234
-                """);
+        Compat.writeString(arqSwitches, "# Lista do cliente\n" +
+                "# gateway=10.1.40.1\n" +
+                "10.1.40.203;admin;Admin@1234\n" +
+                "10.1.40.130;admin;Admin@1234\n" +
+                "10.1.40.204;admin;Admin@1234\n");
         AlvosLoader.ConfiguracaoAlvos cfg = AlvosLoader.carregarConfiguracao(arqSwitches);
         assertEquals(3, cfg.alvos().size());
         assertEquals("10.1.40.1", cfg.gatewayIpManual());
 
         // Valida parser de rota/ARP Comware e ARP local Windows
         ComwareParser comwareParser = new ComwareParser();
-        String comwareRoute = """
-                Destinations : 6        Routes : 6
-                Destination/Mask    Proto   Pre  Cost        NextHop         Interface
-                0.0.0.0/0           Static  60   0           10.1.40.1       Vlan-interface1
-                10.1.40.0/24        Direct  0    0           10.1.40.203     Vlan-interface1
-                """;
-        assertEquals("10.1.40.1", comwareParser.parseDefaultGatewayIp(comwareRoute).orElseThrow());
+        String comwareRoute = "Destinations : 6        Routes : 6\n" +
+                "Destination/Mask    Proto   Pre  Cost        NextHop         Interface\n" +
+                "0.0.0.0/0           Static  60   0           10.1.40.1       Vlan-interface1\n" +
+                "10.1.40.0/24        Direct  0    0           10.1.40.203     Vlan-interface1\n";
+        assertEquals("10.1.40.1", comwareParser.parseDefaultGatewayIp(comwareRoute).get());
 
-        String comwareArp = """
-                Type: S-Static   D-Dynamic   O-Openflow   R-Rule   I-Invalid
-                IP Address       MAC Address    VLAN ID  Interface              Aging Type
-                10.1.40.1        0009-0f09-1e0a 1        GE1/0/1                1180  D
-                """;
+        String comwareArp = "Type: S-Static   D-Dynamic   O-Openflow   R-Rule   I-Invalid\n" +
+                "IP Address       MAC Address    VLAN ID  Interface              Aging Type\n" +
+                "10.1.40.1        0009-0f09-1e0a 1        GE1/0/1                1180  D\n";
         List<ArpEntry> arpsComware = comwareParser.parseArpTable(comwareArp);
         assertEquals(1, arpsComware.size());
         assertEquals("GE1/0/1", arpsComware.get(0).port());
 
-        String saidaArpWindows = """
-                Interface: 10.1.40.142 --- 0x17
-                  Endereço IP           Endereço físico       Tipo
-                  10.1.40.1             00-09-0f-09-1e-0a     dinâmico
-                  10.1.40.255           ff-ff-ff-ff-ff-ff     estático
-                """;
-        assertEquals("0009-0f09-1e0a", LocalGatewayDetector.extrairMacDeSaidaArp("10.1.40.1", saidaArpWindows).orElseThrow());
+        String saidaArpWindows = "Interface: 10.1.40.142 --- 0x17\n" +
+                "  Endereço IP           Endereço físico       Tipo\n" +
+                "  10.1.40.1             00-09-0f-09-1e-0a     dinâmico\n" +
+                "  10.1.40.255           ff-ff-ff-ff-ff-ff     estático\n";
+        assertEquals("0009-0f09-1e0a", LocalGatewayDetector.extrairMacDeSaidaArp("10.1.40.1", saidaArpWindows).get());
 
         // Monta topologia onde swAcesso1 (.203) vem ANTES de swCore (.130) no switches.txt,
         // mas o Roteador Fortinet (10.1.40.1 / 0009-0f09-1e0a) entra fisicamente na GE1/0/24 do swCore (.130)!
@@ -427,28 +404,28 @@ class AppTest {
         SwitchIdentity swCore    = new SwitchIdentity("S3028G-PB Max", "H3TK3900068UN", "D836-5F42-5C7B", "S3028G-PB Max", "10.1.40.130");
         SwitchIdentity swAcesso2 = new SwitchIdentity("S2352G-PB", "SN204", "8085-4401-E384", "LS-2352G-PB", "10.1.40.204");
 
-        List.of(swAcesso1, swCore, swAcesso2).forEach(engine::registrarSwitch);
+        Compat.listOf(swAcesso1, swCore, swAcesso2).forEach(engine::registrarSwitch);
 
         // Todos os switches aprendem o MAC do Fortinet (0009-0f09-1e0a), porém nos switches de acesso ele aparece
         // junto com o uplink para o swCore, enquanto no swCore aparece isolado na porta de entrada GE1/0/24!
-        engine.registrarEntradas(swAcesso1.macNormalizado(), List.of(
+        engine.registrarEntradas(swAcesso1.macNormalizado(), Compat.listOf(
                 new MacEntry(swAcesso1.macNormalizado(), "d836-5f42-5c7b", 1, "Learned", "GE1/0/1"),
                 new MacEntry(swAcesso1.macNormalizado(), "8085-4401-e384", 1, "Learned", "GE1/0/1"),
                 new MacEntry(swAcesso1.macNormalizado(), "0009-0f09-1e0a", 1, "Learned", "GE1/0/1")
         ));
-        engine.registrarEntradas(swCore.macNormalizado(), List.of(
+        engine.registrarEntradas(swCore.macNormalizado(), Compat.listOf(
                 new MacEntry(swCore.macNormalizado(), "0009-0f09-1e0a", 1, "DYNAMIC", "GE1/0/24"),
                 new MacEntry(swCore.macNormalizado(), "30e1-f1ff-661f", 1, "DYNAMIC", "GE1/0/1"),
                 new MacEntry(swCore.macNormalizado(), "8085-4401-e384", 1, "DYNAMIC", "GE1/0/2")
         ));
-        engine.registrarEntradas(swAcesso2.macNormalizado(), List.of(
+        engine.registrarEntradas(swAcesso2.macNormalizado(), Compat.listOf(
                 new MacEntry(swAcesso2.macNormalizado(), "d836-5f42-5c7b", 1, "Learned", "GE1/0/1"),
                 new MacEntry(swAcesso2.macNormalizado(), "30e1-f1ff-661f", 1, "Learned", "GE1/0/1"),
                 new MacEntry(swAcesso2.macNormalizado(), "0009-0f09-1e0a", 1, "Learned", "GE1/0/1")
         ));
 
         engine.registrarRotaPadrao(swCore.macNormalizado(), "10.1.40.1");
-        engine.registrarEntradasArp(swCore.macNormalizado(), List.of(
+        engine.registrarEntradasArp(swCore.macNormalizado(), Compat.listOf(
                 new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE1/0/24")
         ));
 
@@ -468,12 +445,10 @@ class AppTest {
 
         // 3) ÁRVORE DA TOPOLOGIA iniciada no Roteador -> Core (.130) derivando para baixo para .203 e .204
         String secaoArvore = relatorio.substring(relatorio.indexOf("ÁRVORE DA TOPOLOGIA"));
-        String arvoreEsperada = """
-                Roteador/Gateway 10.1.40.1 [0009-0f09-1e0a (Fortinet)]
-                └─ <-> GE1/0/24 ─ S3028G-PB Max (10.1.40.130)
-                   ├─ GE1/0/1 <-> GE1/0/1 ─ S2328G-PA (10.1.40.203)
-                   └─ GE1/0/2 <-> GE1/0/1 ─ S2352G-PB (10.1.40.204)
-                """;
+        String arvoreEsperada = "Roteador/Gateway 10.1.40.1 [0009-0f09-1e0a (Fortinet)]\n" +
+                "└─ <-> GE1/0/24 ─ S3028G-PB Max (10.1.40.130)\n" +
+                "   ├─ GE1/0/1 <-> GE1/0/1 ─ S2328G-PA (10.1.40.203)\n" +
+                "   └─ GE1/0/2 <-> GE1/0/1 ─ S2352G-PB (10.1.40.204)\n";
         assertTrue(secaoArvore.contains(arvoreEsperada));
     }
 
@@ -487,26 +462,24 @@ class AppTest {
 
         // Ambos estão plugados diretamente em 2 portas LAN em bridge do mesmo Fortigate (0009-0f09-1e0a):
         // logo, swCore1 vê Fortigate + swCore2 na GE1/0/24, e swCore2 vê Fortigate + swCore1 na GE0/24.
-        engine.registrarEntradas(swCore1.macNormalizado(), List.of(
+        engine.registrarEntradas(swCore1.macNormalizado(), Compat.listOf(
                 new MacEntry(swCore1.macNormalizado(), "0009-0f09-1e0a", 1, "Learned", "GE1/0/24"),
                 new MacEntry(swCore1.macNormalizado(), "d836-5f42-5c7b", 1, "Learned", "GE1/0/24")
         ));
-        engine.registrarEntradas(swCore2.macNormalizado(), List.of(
+        engine.registrarEntradas(swCore2.macNormalizado(), Compat.listOf(
                 new MacEntry(swCore2.macNormalizado(), "0009-0f09-1e0a", 1, "DYNAMIC", "GE0/24"),
                 new MacEntry(swCore2.macNormalizado(), "30e1-f1ff-661f", 1, "DYNAMIC", "GE0/24")
         ));
         engine.registrarRotaPadrao(swCore1.macNormalizado(), "10.1.40.1");
-        engine.registrarEntradasArp(swCore1.macNormalizado(), List.of(new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE1/0/24")));
+        engine.registrarEntradasArp(swCore1.macNormalizado(), Compat.listOf(new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE1/0/24")));
 
         String relatorio = RelatorioTopologia.gerarRelatorioTexto(engine);
         String secaoArvore = relatorio.substring(relatorio.indexOf("ÁRVORE DA TOPOLOGIA"));
 
         // Ambos devem aparecer como cores derivados diretamente do Roteador/Gateway (sem cabo falso direto entre eles)
-        String esperado = """
-                Roteador/Gateway 10.1.40.1 [0009-0f09-1e0a (Fortinet)]
-                ├─ <-> GE1/0/24 ─ S2328G-PA (10.1.40.10)
-                └─ <-> GE0/24 ─ S3028G-B (10.1.40.20)
-                """;
+        String esperado = "Roteador/Gateway 10.1.40.1 [0009-0f09-1e0a (Fortinet)]\n" +
+                "├─ <-> GE1/0/24 ─ S2328G-PA (10.1.40.10)\n" +
+                "└─ <-> GE0/24 ─ S3028G-B (10.1.40.20)\n";
         assertTrue(secaoArvore.contains(esperado));
     }
 
@@ -520,92 +493,86 @@ class AppTest {
 
         // 1) Cenário 4 (Cascata pura: .10 -> .11 -> .12 -> .13 -> .14)
         TopologyEngine engine4 = new TopologyEngine();
-        List.of(sw10, sw11, sw12, sw13, sw14).forEach(engine4::registrarSwitch);
-        engine4.registrarEntradas(sw10.macNormalizado(), List.of(new MacEntry(sw10.macNormalizado(), "d836-5f9a-49bd", 1, "Learned", "GE1/0/2")));
-        engine4.registrarEntradas(sw11.macNormalizado(), List.of(
+        Compat.listOf(sw10, sw11, sw12, sw13, sw14).forEach(engine4::registrarSwitch);
+        engine4.registrarEntradas(sw10.macNormalizado(), Compat.listOf(new MacEntry(sw10.macNormalizado(), "d836-5f9a-49bd", 1, "Learned", "GE1/0/2")));
+        engine4.registrarEntradas(sw11.macNormalizado(), Compat.listOf(
                 new MacEntry(sw11.macNormalizado(), "30e1-f1fc-90c7", 1, "DYNAMIC", "GE0/2"),
                 new MacEntry(sw11.macNormalizado(), "8085-4403-c045", 1, "DYNAMIC", "GE0/3")
         ));
-        engine4.registrarEntradas(sw12.macNormalizado(), List.of(
+        engine4.registrarEntradas(sw12.macNormalizado(), Compat.listOf(
                 new MacEntry(sw12.macNormalizado(), "d836-5f9a-49bd", 1, "Learned", "GE1/0/3"),
                 new MacEntry(sw12.macNormalizado(), "8085-4406-b4a5", 1, "Learned", "GE1/0/6")
         ));
-        engine4.registrarEntradas(sw13.macNormalizado(), List.of(
+        engine4.registrarEntradas(sw13.macNormalizado(), Compat.listOf(
                 new MacEntry(sw13.macNormalizado(), "8085-4403-c045", 1, "Learned", "GE1/0/5"),
                 new MacEntry(sw13.macNormalizado(), "8085-4405-71c5", 1, "Learned", "GE1/0/8")
         ));
-        engine4.registrarEntradas(sw14.macNormalizado(), List.of(new MacEntry(sw14.macNormalizado(), "8085-4406-b4a5", 1, "Learned", "GE1/0/9")));
+        engine4.registrarEntradas(sw14.macNormalizado(), Compat.listOf(new MacEntry(sw14.macNormalizado(), "8085-4406-b4a5", 1, "Learned", "GE1/0/9")));
 
         String rel4 = RelatorioTopologia.gerarRelatorioTexto(engine4);
         String arvore4 = rel4.substring(rel4.indexOf("ÁRVORE DA TOPOLOGIA"));
-        String esperadoCenario4 = """
-                ÁRVORE DA TOPOLOGIA
-                ====================================================================================================
-
-                └─ S2328G-PA (10.0.0.10)
-                   └─ GE1/0/2 <-> GE0/2 ─ S3028G-B (10.0.0.11)
-                      └─ GE0/3 <-> GE1/0/3 ─ S2328G-PB (10.0.0.12)
-                         └─ GE1/0/6 <-> GE1/0/5 ─ S2352G-PB (10.0.0.13)
-                            └─ GE1/0/8 <-> GE1/0/9 ─ S2352G-A (10.0.0.14)
-                """;
+        String esperadoCenario4 = "ÁRVORE DA TOPOLOGIA\n" +
+                "====================================================================================================\n" +
+                "\n" +
+                "└─ S2328G-PA (10.0.0.10)\n" +
+                "   └─ GE1/0/2 <-> GE0/2 ─ S3028G-B (10.0.0.11)\n" +
+                "      └─ GE0/3 <-> GE1/0/3 ─ S2328G-PB (10.0.0.12)\n" +
+                "         └─ GE1/0/6 <-> GE1/0/5 ─ S2352G-PB (10.0.0.13)\n" +
+                "            └─ GE1/0/8 <-> GE1/0/9 ─ S2352G-A (10.0.0.14)\n";
         assertTrue(arvore4.contains(esperadoCenario4));
 
         // 2) Cenário 2 (Derivação no .11 sem colocar .11 como principal; topo vazio descendo em └─ .10)
         TopologyEngine engine2 = new TopologyEngine();
-        List.of(sw10, sw11, sw12, sw13, sw14).forEach(engine2::registrarSwitch);
-        engine2.registrarEntradas(sw10.macNormalizado(), List.of(new MacEntry(sw10.macNormalizado(), "d836-5f9a-49bd", 1, "Learned", "GE1/0/1")));
-        engine2.registrarEntradas(sw11.macNormalizado(), List.of(
+        Compat.listOf(sw10, sw11, sw12, sw13, sw14).forEach(engine2::registrarSwitch);
+        engine2.registrarEntradas(sw10.macNormalizado(), Compat.listOf(new MacEntry(sw10.macNormalizado(), "d836-5f9a-49bd", 1, "Learned", "GE1/0/1")));
+        engine2.registrarEntradas(sw11.macNormalizado(), Compat.listOf(
                 new MacEntry(sw11.macNormalizado(), "30e1-f1fc-90c7", 1, "DYNAMIC", "GE0/2"),
                 new MacEntry(sw11.macNormalizado(), "8085-4403-c045", 1, "DYNAMIC", "GE0/9"),
                 new MacEntry(sw11.macNormalizado(), "8085-4406-b4a5", 1, "DYNAMIC", "GE0/16")
         ));
-        engine2.registrarEntradas(sw12.macNormalizado(), List.of(new MacEntry(sw12.macNormalizado(), "d836-5f9a-49bd", 1, "Learned", "GE1/0/7")));
-        engine2.registrarEntradas(sw13.macNormalizado(), List.of(
+        engine2.registrarEntradas(sw12.macNormalizado(), Compat.listOf(new MacEntry(sw12.macNormalizado(), "d836-5f9a-49bd", 1, "Learned", "GE1/0/7")));
+        engine2.registrarEntradas(sw13.macNormalizado(), Compat.listOf(
                 new MacEntry(sw13.macNormalizado(), "d836-5f9a-49bd", 1, "Learned", "GE1/0/15"),
                 new MacEntry(sw13.macNormalizado(), "8085-4405-71c5", 1, "Learned", "GE1/0/24")
         ));
-        engine2.registrarEntradas(sw14.macNormalizado(), List.of(new MacEntry(sw14.macNormalizado(), "8085-4406-b4a5", 1, "Learned", "GE1/0/25")));
+        engine2.registrarEntradas(sw14.macNormalizado(), Compat.listOf(new MacEntry(sw14.macNormalizado(), "8085-4406-b4a5", 1, "Learned", "GE1/0/25")));
 
         String rel2 = RelatorioTopologia.gerarRelatorioTexto(engine2);
         String arvore2 = rel2.substring(rel2.indexOf("ÁRVORE DA TOPOLOGIA"));
-        String esperadoCenario2 = """
-                ÁRVORE DA TOPOLOGIA
-                ====================================================================================================
-
-                └─ S2328G-PA (10.0.0.10)
-                   └─ GE1/0/1 <-> GE0/2 ─ S3028G-B (10.0.0.11)
-                      ├─ GE0/9 <-> GE1/0/7 ─ S2328G-PB (10.0.0.12)
-                      └─ GE0/16 <-> GE1/0/15 ─ S2352G-PB (10.0.0.13)
-                         └─ GE1/0/24 <-> GE1/0/25 ─ S2352G-A (10.0.0.14)
-                """;
+        String esperadoCenario2 = "ÁRVORE DA TOPOLOGIA\n" +
+                "====================================================================================================\n" +
+                "\n" +
+                "└─ S2328G-PA (10.0.0.10)\n" +
+                "   └─ GE1/0/1 <-> GE0/2 ─ S3028G-B (10.0.0.11)\n" +
+                "      ├─ GE0/9 <-> GE1/0/7 ─ S2328G-PB (10.0.0.12)\n" +
+                "      └─ GE0/16 <-> GE1/0/15 ─ S2352G-PB (10.0.0.13)\n" +
+                "         └─ GE1/0/24 <-> GE1/0/25 ─ S2352G-A (10.0.0.14)\n";
         assertTrue(arvore2.contains(esperadoCenario2));
 
         // 3) Cenário 6 (Estrela sem gateway: linha do topo vazia e desce em └─ S2328G-PA (10.0.0.10))
         TopologyEngine engine6 = new TopologyEngine();
-        List.of(sw10, sw11, sw12, sw13, sw14).forEach(engine6::registrarSwitch);
-        engine6.registrarEntradas(sw11.macNormalizado(), List.of(
+        Compat.listOf(sw10, sw11, sw12, sw13, sw14).forEach(engine6::registrarSwitch);
+        engine6.registrarEntradas(sw11.macNormalizado(), Compat.listOf(
                 new MacEntry(sw11.macNormalizado(), "30e1-f1fc-90c7", 1, "DYNAMIC", "GE0/1"),
                 new MacEntry(sw11.macNormalizado(), "8085-4406-b4a5", 1, "DYNAMIC", "GE0/10"),
                 new MacEntry(sw11.macNormalizado(), "8085-4405-71c5", 1, "DYNAMIC", "GE0/13"),
                 new MacEntry(sw11.macNormalizado(), "8085-4403-c045", 1, "DYNAMIC", "GE0/23")
         ));
-        engine6.registrarEntradas(sw10.macNormalizado(), List.of(new MacEntry(sw10.macNormalizado(), "d836-5f9a-49bd", 1, "Learned", "GE1/0/2")));
-        engine6.registrarEntradas(sw13.macNormalizado(), List.of(new MacEntry(sw13.macNormalizado(), "d836-5f9a-49bd", 1, "Learned", "GE1/0/5")));
-        engine6.registrarEntradas(sw14.macNormalizado(), List.of(new MacEntry(sw14.macNormalizado(), "d836-5f9a-49bd", 1, "Learned", "GE1/0/12")));
-        engine6.registrarEntradas(sw12.macNormalizado(), List.of(new MacEntry(sw12.macNormalizado(), "d836-5f9a-49bd", 1, "Learned", "GE1/0/23")));
+        engine6.registrarEntradas(sw10.macNormalizado(), Compat.listOf(new MacEntry(sw10.macNormalizado(), "d836-5f9a-49bd", 1, "Learned", "GE1/0/2")));
+        engine6.registrarEntradas(sw13.macNormalizado(), Compat.listOf(new MacEntry(sw13.macNormalizado(), "d836-5f9a-49bd", 1, "Learned", "GE1/0/5")));
+        engine6.registrarEntradas(sw14.macNormalizado(), Compat.listOf(new MacEntry(sw14.macNormalizado(), "d836-5f9a-49bd", 1, "Learned", "GE1/0/12")));
+        engine6.registrarEntradas(sw12.macNormalizado(), Compat.listOf(new MacEntry(sw12.macNormalizado(), "d836-5f9a-49bd", 1, "Learned", "GE1/0/23")));
 
         String rel6 = RelatorioTopologia.gerarRelatorioTexto(engine6);
         String arvore6 = rel6.substring(rel6.indexOf("ÁRVORE DA TOPOLOGIA"));
-        String esperadoCenario6 = """
-                ÁRVORE DA TOPOLOGIA
-                ====================================================================================================
-
-                └─ S2328G-PA (10.0.0.10)
-                   └─ GE1/0/2 <-> GE0/1 ─ S3028G-B (10.0.0.11)
-                      ├─ GE0/10 <-> GE1/0/5 ─ S2352G-PB (10.0.0.13)
-                      ├─ GE0/13 <-> GE1/0/12 ─ S2352G-A (10.0.0.14)
-                      └─ GE0/23 <-> GE1/0/23 ─ S2328G-PB (10.0.0.12)
-                """;
+        String esperadoCenario6 = "ÁRVORE DA TOPOLOGIA\n" +
+                "====================================================================================================\n" +
+                "\n" +
+                "└─ S2328G-PA (10.0.0.10)\n" +
+                "   └─ GE1/0/2 <-> GE0/1 ─ S3028G-B (10.0.0.11)\n" +
+                "      ├─ GE0/10 <-> GE1/0/5 ─ S2352G-PB (10.0.0.13)\n" +
+                "      ├─ GE0/13 <-> GE1/0/12 ─ S2352G-A (10.0.0.14)\n" +
+                "      └─ GE0/23 <-> GE1/0/23 ─ S2328G-PB (10.0.0.12)\n";
         assertTrue(arvore6.contains(esperadoCenario6));
     }
 
@@ -646,10 +613,10 @@ class AppTest {
         SwitchIdentity sw130 = new SwitchIdentity("S3028G-PB Max", "H3TK3900068UN", "D836-5F42-5C7B", "S3028G-PB Max", "10.1.40.130");
         SwitchIdentity sw240 = new SwitchIdentity("S3052G-B", "356K39000773P", "D836-5F9A-54C1", "S3054G-B", "10.1.40.240");
 
-        List.of(sw203, sw204, sw129, sw130, sw240).forEach(engine::registrarSwitch);
+        Compat.listOf(sw203, sw204, sw129, sw130, sw240).forEach(engine::registrarSwitch);
 
         // .203 vê .240 na GE1/0/16, .129 sozinho na GE1/0/22, .130 na BAGG2 (GE1/0/19) e Fortinet + .204 na GE1/0/23
-        engine.registrarEntradas(sw203.macNormalizado(), List.of(
+        engine.registrarEntradas(sw203.macNormalizado(), Compat.listOf(
                 new MacEntry(sw203.macNormalizado(), "d836-5f9a-54c1", 1, "Learned", "GE1/0/16"),
                 new MacEntry(sw203.macNormalizado(), "d836-5f9a-4c3d", 1, "Learned", "GE1/0/22"),
                 new MacEntry(sw203.macNormalizado(), "0009-0f09-1e0a", 1, "Learned", "GE1/0/23"),
@@ -659,7 +626,7 @@ class AppTest {
         ));
 
         // .204 vê Fortinet + .203 + switches atrás de .203 na GE1/0/20, e OLT/hosts nas portas locais
-        engine.registrarEntradas(sw204.macNormalizado(), List.of(
+        engine.registrarEntradas(sw204.macNormalizado(), Compat.listOf(
                 new MacEntry(sw204.macNormalizado(), "0009-0f09-1e0a", 1, "Learned", "GE1/0/20"),
                 new MacEntry(sw204.macNormalizado(), "30e1-f1ff-661f", 1, "Learned", "GE1/0/20"),
                 new MacEntry(sw204.macNormalizado(), "d836-5f9a-4c3d", 1, "Learned", "GE1/0/20"),
@@ -669,17 +636,17 @@ class AppTest {
         ));
 
         // .129 veio com 0 entradas na tabela MAC L2, mas possui rota padrão e ARP do Fortinet na porta GE0/2
-        engine.registrarEntradas(sw129.macNormalizado(), List.of());
+        engine.registrarEntradas(sw129.macNormalizado(), Compat.listOf());
 
         // .130 e .240 são switches de ponta ligados ao .203
-        engine.registrarEntradas(sw130.macNormalizado(), List.of(
+        engine.registrarEntradas(sw130.macNormalizado(), Compat.listOf(
                 new MacEntry(sw130.macNormalizado(), "0009-0f09-1e0a", 1, "DYNAMIC", "GE1/0/2"),
                 new MacEntry(sw130.macNormalizado(), "30e1-f1ff-661f", 1, "DYNAMIC", "GE1/0/2"),
                 new MacEntry(sw130.macNormalizado(), "8085-4401-e384", 1, "DYNAMIC", "GE1/0/2"),
                 new MacEntry(sw130.macNormalizado(), "d836-5f9a-4c3d", 1, "DYNAMIC", "GE1/0/2"),
                 new MacEntry(sw130.macNormalizado(), "d836-5f9a-54c1", 1, "DYNAMIC", "GE1/0/2")
         ));
-        engine.registrarEntradas(sw240.macNormalizado(), List.of(
+        engine.registrarEntradas(sw240.macNormalizado(), Compat.listOf(
                 new MacEntry(sw240.macNormalizado(), "0009-0f09-1e0a", 1, "DYNAMIC", "GE0/11"),
                 new MacEntry(sw240.macNormalizado(), "30e1-f1ff-661f", 1, "DYNAMIC", "GE0/11"),
                 new MacEntry(sw240.macNormalizado(), "8085-4401-e384", 1, "DYNAMIC", "GE0/11"),
@@ -687,14 +654,14 @@ class AppTest {
                 new MacEntry(sw240.macNormalizado(), "d836-5f42-5c7b", 1, "DYNAMIC", "GE0/11")
         ));
 
-        for (SwitchIdentity sw : List.of(sw203, sw204, sw129, sw130, sw240)) {
+        for (SwitchIdentity sw : Compat.listOf(sw203, sw204, sw129, sw130, sw240)) {
             engine.registrarRotaPadrao(sw.macNormalizado(), "10.1.40.1");
         }
-        engine.registrarEntradasArp(sw203.macNormalizado(), List.of(new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE1/0/23")));
-        engine.registrarEntradasArp(sw204.macNormalizado(), List.of(new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE1/0/20")));
-        engine.registrarEntradasArp(sw129.macNormalizado(), List.of(new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE0/2")));
-        engine.registrarEntradasArp(sw130.macNormalizado(), List.of(new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE1/0/2")));
-        engine.registrarEntradasArp(sw240.macNormalizado(), List.of(new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE0/11")));
+        engine.registrarEntradasArp(sw203.macNormalizado(), Compat.listOf(new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE1/0/23")));
+        engine.registrarEntradasArp(sw204.macNormalizado(), Compat.listOf(new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE1/0/20")));
+        engine.registrarEntradasArp(sw129.macNormalizado(), Compat.listOf(new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE0/2")));
+        engine.registrarEntradasArp(sw130.macNormalizado(), Compat.listOf(new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE1/0/2")));
+        engine.registrarEntradasArp(sw240.macNormalizado(), Compat.listOf(new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE0/11")));
 
         String relatorio = RelatorioTopologia.gerarRelatorioTexto(engine);
 
@@ -705,26 +672,22 @@ class AppTest {
 
         // Tanto .203 (GE1/0/23) quanto .204 (GE1/0/20) sobem para o segmento do Fortinet (sem duplicar GE1/0/23)
         String secaoArvore = relatorio.substring(relatorio.indexOf("ÁRVORE DA TOPOLOGIA"));
-        String arvoreEsperada = """
-                Roteador/Gateway 10.1.40.1 [0009-0f09-1e0a (Fortinet)]
-                ├─ <-> GE1/0/23 ─ S2328G-B (10.1.40.203)
-                │  ├─ GE1/0/16 <-> GE0/11 ─ S3052G-B (10.1.40.240)
-                │  ├─ GE1/0/22 <-> GE0/2 ─ S3028G-PB Max (10.1.40.129)
-                │  └─ BAGG2 (GE1/0/19) <-> GE1/0/2 ─ S3028G-PB Max (10.1.40.130)
-                └─ <-> GE1/0/20 ─ S2328G-A (10.1.40.204)
-                """;
+        String arvoreEsperada = "Roteador/Gateway 10.1.40.1 [0009-0f09-1e0a (Fortinet)]\n" +
+                "├─ <-> GE1/0/23 ─ S2328G-B (10.1.40.203)\n" +
+                "│  ├─ GE1/0/16 <-> GE0/11 ─ S3052G-B (10.1.40.240)\n" +
+                "│  ├─ GE1/0/22 <-> GE0/2 ─ S3028G-PB Max (10.1.40.129)\n" +
+                "│  └─ BAGG2 (GE1/0/19) <-> GE1/0/2 ─ S3028G-PB Max (10.1.40.130)\n" +
+                "└─ <-> GE1/0/20 ─ S2328G-A (10.1.40.204)\n";
         assertTrue(secaoArvore.contains(arvoreEsperada), "Árvore esperada não encontrada:\n" + secaoArvore);
     }
 
     @Test
     void testSenhasComPontoEVirgulaESemSenhaEmDiscoEMascara(@TempDir Path tempDir) throws IOException {
         Path arq = tempDir.resolve("switches.txt");
-        Files.writeString(arq, """
-                10.1.40.203;admin;Senh@;Com;PontoEVirgula
-                10.1.40.204;admin;
-                10.1.40.205;admin
-                ;admin;SenhaQueNaoPodeVazar
-                """);
+        Compat.writeString(arq, "10.1.40.203;admin;Senh@;Com;PontoEVirgula\n" +
+                "10.1.40.204;admin;\n" +
+                "10.1.40.205;admin\n" +
+                ";admin;SenhaQueNaoPodeVazar\n");
 
         java.io.ByteArrayOutputStream errBuf = new java.io.ByteArrayOutputStream();
         java.io.PrintStream errOriginal = System.err;
@@ -755,12 +718,10 @@ class AppTest {
     @Test
     void testSemColisaoNemNpeQuandoMultiplosSwitchesSemMacBase() {
         ComwareParser comwareParser = new ComwareParser();
-        SwitchIdentity swComwareSemMac = comwareParser.parseDeviceManuInfo("10.0.0.13", """
-                DEVICE_NAME          : S2328G-B
-                DEVICE_SERIAL_NUMBER : SN13
-                MAC_ADDRESS          : NONE
-                PRODUCT_ID           : LS-2328G-B
-                """);
+        SwitchIdentity swComwareSemMac = comwareParser.parseDeviceManuInfo("10.0.0.13", "DEVICE_NAME          : S2328G-B\n" +
+                "DEVICE_SERIAL_NUMBER : SN13\n" +
+                "MAC_ADDRESS          : NONE\n" +
+                "PRODUCT_ID           : LS-2328G-B\n");
         assertEquals(null, swComwareSemMac.macAddress());
         assertFalse(swComwareSemMac.possuiMacValido());
         assertEquals("sem-mac@10.0.0.13", swComwareSemMac.macNormalizado());
@@ -778,10 +739,10 @@ class AppTest {
 
         assertEquals(3, engine.switchesRegistrados().size(), "Switches sem MAC não devem colidir nem sobrescrever um ao outro");
 
-        engine.registrarEntradas(swSemMac1.macNormalizado(), List.of(
+        engine.registrarEntradas(swSemMac1.macNormalizado(), Compat.listOf(
                 new MacEntry(swSemMac1.macNormalizado(), "30e1-f1fc-90c7", 1, "DYNAMIC", "GE0/2")
         ));
-        engine.registrarEntradas(swSemMac2.macNormalizado(), List.of(
+        engine.registrarEntradas(swSemMac2.macNormalizado(), Compat.listOf(
                 new MacEntry(swSemMac2.macNormalizado(), "30e1-f1fc-90c7", 1, "DYNAMIC", "GE0/5")
         ));
 
@@ -794,10 +755,8 @@ class AppTest {
     void testApParserComSaidaRealAp3000AxETopologiaOndeApEstaConectado(@TempDir Path tempDir) throws IOException {
         // 1) Valida suporte a porta customizada ip:porta no switches.txt
         Path arq = tempDir.resolve("switches_ap.txt");
-        Files.writeString(arq, """
-                10.1.40.203;admin;Admin@1234
-                10.1.31.19:65019;admin;Admin@1234
-                """);
+        Compat.writeString(arq, "10.1.40.203;admin;Admin@1234\n" +
+                "10.1.31.19:65019;admin;Admin@1234\n");
         List<SwitchTarget> alvos = AlvosLoader.carregarDeArquivo(arq);
         assertEquals(2, alvos.size());
         assertEquals(null, alvos.get(0).portaCustomizada());
@@ -808,40 +767,32 @@ class AppTest {
 
         // 2) Valida ApParser com as saídas reais capturadas do AP 3000 AX (10.1.31.19:65019)
         ApParser apParser = new ApParser();
-        String bannerAp = """
-                -----------------------------------------------------------------
-                  _____ _   _ _______ ______ _      ____  _____             _____
-                  Fri Nov  6 14:40:08 BRT 2026
-                # 
-                """;
+        String bannerAp = "-----------------------------------------------------------------\n" +
+                "  _____ _   _ _______ ______ _      ____  _____             _____\n" +
+                "  Fri Nov  6 14:40:08 BRT 2026\n" +
+                "#\n";
         assertTrue(apParser.ehBannerOuPromptDeAp(bannerAp));
 
-        String ubusBoard = """
-                {
-                	"kernel": "4.4.60",
-                	"hostname": "teste",
-                	"system": "ARMv7 Processor rev 4 (v7l)",
-                	"model": "AP 3000 AX",
-                	"board_name": "ap-mp03.3",
-                	"board_version": "1.0"
-                }
-                """;
-        String ifconfig = """
-                ath0      Link encap:Ethernet  HWaddr 30:E1:F1:1F:E9:3D  
-                br-lan    Link encap:Ethernet  HWaddr 30:E1:F1:1F:E9:3B  
-                          inet addr:192.168.0.70  Bcast:192.168.0.255  Mask:255.255.255.0
-                devdh1    Link encap:Ethernet  HWaddr FE:FF:FF:FF:FF:FF  
-                eth0      Link encap:Ethernet  HWaddr 30:E1:F1:1F:E9:3B  
-                """;
-        String brctlShow = """
-                bridge name\tbridge id\t\tSTP enabled\tinterfaces
-                br-lan\t\t7fff.30e1f11fe93b\tno\t\tdevdh1
-                \t\t\t\t\t\t\teth0
-                \t\t\t\t\t\t\tath0
-                br-vlan2dff82f\t\t7fff.30e1f11fe93b\tno\t\tdevdh2
-                \t\t\t\t\t\t\teth0.4071
-                \t\t\t\t\t\t\tath1
-                """;
+        String ubusBoard = "{\n" +
+                "	\"kernel\": \"4.4.60\",\n" +
+                "	\"hostname\": \"teste\",\n" +
+                "	\"system\": \"ARMv7 Processor rev 4 (v7l)\",\n" +
+                "	\"model\": \"AP 3000 AX\",\n" +
+                "	\"board_name\": \"ap-mp03.3\",\n" +
+                "	\"board_version\": \"1.0\"\n" +
+                "}\n";
+        String ifconfig = "ath0      Link encap:Ethernet  HWaddr 30:E1:F1:1F:E9:3D\n" +
+                "br-lan    Link encap:Ethernet  HWaddr 30:E1:F1:1F:E9:3B\n" +
+                "          inet addr:192.168.0.70  Bcast:192.168.0.255  Mask:255.255.255.0\n" +
+                "devdh1    Link encap:Ethernet  HWaddr FE:FF:FF:FF:FF:FF\n" +
+                "eth0      Link encap:Ethernet  HWaddr 30:E1:F1:1F:E9:3B\n";
+        String brctlShow = "bridge name\tbridge id\t\tSTP enabled\tinterfaces\n" +
+                "br-lan\t\t7fff.30e1f11fe93b\tno\t\tdevdh1\n" +
+                "\t\t\t\t\t\t\teth0\n" +
+                "\t\t\t\t\t\t\tath0\n" +
+                "br-vlan2dff82f\t\t7fff.30e1f11fe93b\tno\t\tdevdh2\n" +
+                "\t\t\t\t\t\t\teth0.4071\n" +
+                "\t\t\t\t\t\t\tath1\n";
 
         assertTrue(apParser.ehDispositivoAp(ubusBoard, brctlShow, ifconfig));
         SwitchIdentity apId = apParser.parseDeviceInfo("10.1.31.19:65019", ubusBoard, ifconfig, brctlShow);
@@ -853,20 +804,16 @@ class AppTest {
         assertEquals(1, bridges.get("br-lan"));
         assertEquals(4071, bridges.get("br-vlan2dff82f"));
 
-        String brctlShowmacsLan = """
-                interface\tport no\tmac addr\t\tis local?\tageing timer
-                eth0        \t  2\t30:e1:f1:1f:e9:3b\tyes\t\t   0.00
-                ath0        \t  3\t30:e1:f1:1f:e9:3d\tyes\t\t   0.00
-                eth0        \t  2\t00:09:0f:09:1e:0a\tno\t\t   0.01
-                eth0        \t  2\t30:e1:f1:ff:66:1f\tno\t\t   1.39
-                eth0        \t  2\td8:36:5f:42:5c:7b\tno\t\t   5.78
-                devdh1      \t  1\tfe:ff:ff:ff:ff:ff\tyes\t\t   0.00
-                """;
-        String brctlShowmacsVlan = """
-                interface\tport no\tmac addr\t\tis local?\tageing timer
-                eth0.4071   \t  2\t30:e1:f1:1f:e9:3b\tyes\t\t   0.00
-                eth0.4071   \t  2\td8:36:5f:42:5c:7b\tno\t\t   2.10
-                """;
+        String brctlShowmacsLan = "interface\tport no\tmac addr\t\tis local?\tageing timer\n" +
+                "eth0        \t  2\t30:e1:f1:1f:e9:3b\tyes\t\t   0.00\n" +
+                "ath0        \t  3\t30:e1:f1:1f:e9:3d\tyes\t\t   0.00\n" +
+                "eth0        \t  2\t00:09:0f:09:1e:0a\tno\t\t   0.01\n" +
+                "eth0        \t  2\t30:e1:f1:ff:66:1f\tno\t\t   1.39\n" +
+                "eth0        \t  2\td8:36:5f:42:5c:7b\tno\t\t   5.78\n" +
+                "devdh1      \t  1\tfe:ff:ff:ff:ff:ff\tyes\t\t   0.00\n";
+        String brctlShowmacsVlan = "interface\tport no\tmac addr\t\tis local?\tageing timer\n" +
+                "eth0.4071   \t  2\t30:e1:f1:1f:e9:3b\tyes\t\t   0.00\n" +
+                "eth0.4071   \t  2\td8:36:5f:42:5c:7b\tno\t\t   2.10\n";
 
         List<MacEntry> macsLan = apParser.parseBridgeMacs(apId.macNormalizado(), 1, brctlShowmacsLan);
         assertEquals(3, macsLan.size());
@@ -880,7 +827,7 @@ class AppTest {
 
         String ipRoute = "default via 10.1.40.1 dev br-lan  proto static  src 10.1.40.180";
         String ipNeigh = "10.1.40.1 dev br-lan lladdr 00:09:0f:09:1e:0a DELAY";
-        assertEquals("10.1.40.1", apParser.parseDefaultGatewayIp(ipRoute).orElseThrow());
+        assertEquals("10.1.40.1", apParser.parseDefaultGatewayIp(ipRoute).get());
         List<ArpEntry> arpsAp = apParser.parseArpTable(ipNeigh, macsLan);
         assertEquals(1, arpsAp.size());
         assertEquals("ETH0", arpsAp.get(0).port());
@@ -890,16 +837,16 @@ class AppTest {
         SwitchIdentity swCore = new SwitchIdentity("S2328G-B", "SN203", "30E1-F1FF-661F", "LS-2328G-B", "10.1.40.203");
         SwitchIdentity swAcesso = new SwitchIdentity("S3028G-PB Max", "SN130", "D836-5F42-5C7B", "S3028G-PB Max", "10.1.40.130");
 
-        List.of(swCore, swAcesso, apId).forEach(engine::registrarSwitch);
+        Compat.listOf(swCore, swAcesso, apId).forEach(engine::registrarSwitch);
 
         // Core vê Fortinet na GE1/0/23 e vê S3028G-PB Max + AP atrás da GE1/0/19
-        engine.registrarEntradas(swCore.macNormalizado(), List.of(
+        engine.registrarEntradas(swCore.macNormalizado(), Compat.listOf(
                 new MacEntry(swCore.macNormalizado(), "0009-0f09-1e0a", 1, "Learned", "GE1/0/23"),
                 new MacEntry(swCore.macNormalizado(), "d836-5f42-5c7b", 1, "Learned", "GE1/0/19"),
                 new MacEntry(swCore.macNormalizado(), "30e1-f11f-e93b", 1, "Learned", "GE1/0/19")
         ));
         // Switch de Acesso vê Core + Fortinet no uplink GE1/0/2, e vê o AP espetado na porta GE1/0/10!
-        engine.registrarEntradas(swAcesso.macNormalizado(), List.of(
+        engine.registrarEntradas(swAcesso.macNormalizado(), Compat.listOf(
                 new MacEntry(swAcesso.macNormalizado(), "0009-0f09-1e0a", 1, "DYNAMIC", "GE1/0/2"),
                 new MacEntry(swAcesso.macNormalizado(), "30e1-f1ff-661f", 1, "DYNAMIC", "GE1/0/2"),
                 new MacEntry(swAcesso.macNormalizado(), "30e1-f11f-e93b", 1, "DYNAMIC", "GE1/0/10")
@@ -908,7 +855,7 @@ class AppTest {
         engine.registrarEntradas(apId.macNormalizado(), macsVlan);
 
         engine.registrarRotaPadrao(swCore.macNormalizado(), "10.1.40.1");
-        engine.registrarEntradasArp(swCore.macNormalizado(), List.of(new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE1/0/23")));
+        engine.registrarEntradasArp(swCore.macNormalizado(), Compat.listOf(new ArpEntry("10.1.40.1", "0009-0f09-1e0a", "GE1/0/23")));
         engine.registrarRotaPadrao(apId.macNormalizado(), "10.1.40.1");
         engine.registrarEntradasArp(apId.macNormalizado(), arpsAp);
 
@@ -917,12 +864,10 @@ class AppTest {
         assertTrue(relatorio.contains("S3028G-PB Max (10.1.40.130) [GE1/0/10]                 <-> [ETH0]     AP 3000 AX - teste (10.1.31.19:65019)"),
                 "Enlace direto do AP não encontrado:\n" + relatorio);
 
-        String arvoreEsperada = """
-                Roteador/Gateway 10.1.40.1 [0009-0f09-1e0a (Fortinet)]
-                └─ <-> GE1/0/23 ─ S2328G-B (10.1.40.203)
-                   └─ GE1/0/19 <-> GE1/0/2 ─ S3028G-PB Max (10.1.40.130)
-                      └─ GE1/0/10 <-> ETH0 ─ AP 3000 AX - teste (10.1.31.19:65019)
-                """;
+        String arvoreEsperada = "Roteador/Gateway 10.1.40.1 [0009-0f09-1e0a (Fortinet)]\n" +
+                "└─ <-> GE1/0/23 ─ S2328G-B (10.1.40.203)\n" +
+                "   └─ GE1/0/19 <-> GE1/0/2 ─ S3028G-PB Max (10.1.40.130)\n" +
+                "      └─ GE1/0/10 <-> ETH0 ─ AP 3000 AX - teste (10.1.31.19:65019)\n";
         assertTrue(relatorio.contains(arvoreEsperada), "Árvore esperada com AP não encontrada:\n" + relatorio);
     }
 
@@ -938,15 +883,15 @@ class AppTest {
         engine.registrarSwitch(swAcesso);
         engine.registrarSwitch(ap);
 
-        engine.registrarEntradas(swCore.macNormalizado(), List.of(
+        engine.registrarEntradas(swCore.macNormalizado(), Compat.listOf(
                 new MacEntry(swCore.macNormalizado(), "0009-0f09-1e0a", 1, "Learned", "GE1/0/23"),
                 new MacEntry(swCore.macNormalizado(), "d836-5f42-5c7b", 1, "Learned", "GE1/0/1")
         ));
-        engine.registrarEntradas(swAcesso.macNormalizado(), List.of(
+        engine.registrarEntradas(swAcesso.macNormalizado(), Compat.listOf(
                 new MacEntry(swAcesso.macNormalizado(), "30e1-f1ff-661f", 1, "DYNAMIC", "GE1/0/1"),
                 new MacEntry(swAcesso.macNormalizado(), "30e1-f11f-e93b", 1, "DYNAMIC", "GE1/0/10")
         ));
-        engine.registrarEntradas(ap.macNormalizado(), List.of(
+        engine.registrarEntradas(ap.macNormalizado(), Compat.listOf(
                 new MacEntry(ap.macNormalizado(), "d836-5f42-5c7b", 1, "DYNAMIC", "ETH0")
         ));
 

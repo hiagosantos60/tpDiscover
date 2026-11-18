@@ -12,12 +12,48 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Resolve alvos de varredura de rede a partir de especificação CIDR (ex: {@code 10.1.40.0/24}),
  * faixa de IPs (ex: {@code 10.1.40.80-250} ou {@code 10.1.40.80-10.1.40.250}), IP único ou {@code auto}
  * (detectando as sub-redes IPv4 locais ativas).
  */
-public record NetworkScanTarget(String especificacao, List<String> ips) {
+public final class NetworkScanTarget {
+    private final String especificacao;
+    private final List<String> ips;
+
+    public NetworkScanTarget(String especificacao, List<String> ips) {
+        ips = ips != null ? Compat.listCopyOf(ips) : Compat.listOf();
+        this.especificacao = especificacao;
+        this.ips = ips;
+    }
+
+    public String especificacao() {
+        return especificacao;
+    }
+
+    public List<String> ips() {
+        return ips;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (!(obj instanceof NetworkScanTarget)) return false;
+        NetworkScanTarget o = (NetworkScanTarget) obj;
+        return java.util.Objects.equals(especificacao, o.especificacao)
+                && java.util.Objects.equals(ips, o.ips);
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(especificacao, ips);
+    }
+
+    @Override
+    public String toString() {
+        return "NetworkScanTarget[especificacao=" + especificacao + ", ips=" + ips + "]";
+    }
 
     public static final int PREFIXO_MINIMO_PERMITIDO = 22;
     public static final int MAX_HOSTS_POR_ESPECIFICACAO = 1024;
@@ -35,16 +71,12 @@ public record NetworkScanTarget(String especificacao, List<String> ips) {
             "^(\\d+\\.\\d+\\.\\d+\\.\\d+)-(\\d+\\.\\d+\\.\\d+\\.\\d+)$"
     );
 
-    public NetworkScanTarget {
-        ips = ips != null ? List.copyOf(ips) : List.of();
-    }
-
     /**
      * Expande uma ou mais especificações separadas por vírgula/ponto e vírgula em blocos e retorna todos os IPs únicos.
      */
     public static List<NetworkScanTarget> interpretarEspecificacoes(String specs) {
-        if (specs == null || specs.isBlank()) {
-            return List.of();
+        if (specs == null || Compat.isBlank(specs)) {
+            return Compat.listOf();
         }
         List<NetworkScanTarget> resultados = new ArrayList<>();
         for (String parte : specs.split("[,;\\s]+")) {
@@ -104,7 +136,7 @@ public record NetworkScanTarget(String especificacao, List<String> ips) {
         }
 
         if (ehIpv4Valido(limpa)) {
-            return new NetworkScanTarget(limpa, List.of(limpa));
+            return new NetworkScanTarget(limpa, Compat.listOf(limpa));
         }
 
         throw new IllegalArgumentException(
@@ -163,7 +195,7 @@ public record NetworkScanTarget(String especificacao, List<String> ips) {
         }
         long ip = ipv4ParaLong(ipStr);
         if (prefix == 32) {
-            return List.of(longParaIpv4(ip));
+            return Compat.listOf(longParaIpv4(ip));
         }
         long mask = (0xFFFFFFFFL << (32 - prefix)) & 0xFFFFFFFFL;
         long net = ip & mask;

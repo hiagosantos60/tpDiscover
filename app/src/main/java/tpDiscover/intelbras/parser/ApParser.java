@@ -16,6 +16,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Parser para Access Points corporativos da linha legado/ZeusOS/OpenWrt da Intelbras
  * (ex: AP 3000 AX, AP 1800 AX, AP 1350 AC-S, AP 1210 AC, AP 360, AP 310).
@@ -84,7 +85,7 @@ public class ApParser {
      * prompt típico de AP Intelbras Linux/klish ("#" puro, "user@host:~#", ou banner OpenWrt/BusyBox).
      */
     public boolean ehBannerOuPromptDeAp(String bannerInicial) {
-        if (bannerInicial == null || bannerInicial.isBlank()) {
+        if (bannerInicial == null || Compat.isBlank(bannerInicial)) {
             return false;
         }
         String lower = bannerInicial.toLowerCase();
@@ -120,9 +121,9 @@ public class ApParser {
         if (model != null) {
             model = model.replaceFirst("(?i)^intelbras\\s+", "").trim();
         }
-        if (model == null || model.isBlank()) {
+        if (model == null || Compat.isBlank(model)) {
             String boardName = extrairCampoJson(ubusBoard, "board_name");
-            model = (boardName != null && !boardName.isBlank()) ? ("AP (" + boardName + ")") : "AP Intelbras";
+            model = (boardName != null && !Compat.isBlank(boardName)) ? ("AP (" + boardName + ")") : "AP Intelbras";
         }
 
         String hostname = extrairCampoJson(ubusBoard, "hostname");
@@ -134,7 +135,7 @@ public class ApParser {
     }
 
     private static String montarNomeExibicaoAp(String model, String hostname) {
-        if (hostname == null || hostname.isBlank()
+        if (hostname == null || Compat.isBlank(hostname)
                 || hostname.equalsIgnoreCase("Intelbras")
                 || hostname.equalsIgnoreCase("OpenWrt")
                 || hostname.equalsIgnoreCase("AP")) {
@@ -153,7 +154,7 @@ public class ApParser {
     }
 
     private static String extrairMelhorMacAp(String ifconfig, String brctlShow) {
-        if (ifconfig != null && !ifconfig.isBlank()) {
+        if (ifconfig != null && !Compat.isBlank(ifconfig)) {
             Map<String, String> macPorIface = new LinkedHashMap<>();
             Matcher m = IFCONFIG_HWADDR.matcher(ifconfig);
             while (m.find()) {
@@ -163,7 +164,7 @@ public class ApParser {
                     macPorIface.put(iface, fmt);
                 }
             }
-            for (String preferida : List.of("br-lan", "br0", "eth0", "eth1")) {
+            for (String preferida : Compat.listOf("br-lan", "br0", "eth0", "eth1")) {
                 if (macPorIface.containsKey(preferida)) {
                     return macPorIface.get(preferida);
                 }
@@ -175,7 +176,7 @@ public class ApParser {
             }
         }
 
-        if (brctlShow != null && !brctlShow.isBlank()) {
+        if (brctlShow != null && !Compat.isBlank(brctlShow)) {
             for (String line : brctlShow.split("\\R")) {
                 Matcher m = BRCTL_SHOW_FIRST_LINE.matcher(line.trim());
                 if (m.matches()) {
@@ -195,14 +196,14 @@ public class ApParser {
      */
     public Map<String, Integer> parseBridgesEVlans(String brctlShowOutput) {
         Map<String, List<String>> ifacesPorBridge = new LinkedHashMap<>();
-        if (brctlShowOutput == null || brctlShowOutput.isBlank()) {
-            return Map.of();
+        if (brctlShowOutput == null || Compat.isBlank(brctlShowOutput)) {
+            return Compat.mapOf();
         }
 
         String bridgeAtual = null;
         for (String line : brctlShowOutput.split("\\R")) {
-            if (line.isBlank()) continue;
-            String trimmed = line.strip();
+            if (Compat.isBlank(line)) continue;
+            String trimmed = Compat.strip(line);
             if (trimmed.toLowerCase().startsWith("bridge name") || trimmed.startsWith("#")) {
                 continue;
             }
@@ -211,7 +212,7 @@ public class ApParser {
             if (mFirst.matches()) {
                 bridgeAtual = mFirst.group(1).trim();
                 List<String> ifaces = ifacesPorBridge.computeIfAbsent(bridgeAtual, k -> new ArrayList<>());
-                if (mFirst.group(3) != null && !mFirst.group(3).isBlank()) {
+                if (mFirst.group(3) != null && !Compat.isBlank(mFirst.group(3))) {
                     ifaces.add(mFirst.group(3).trim());
                 }
                 continue;
@@ -255,13 +256,13 @@ public class ApParser {
      */
     public List<MacEntry> parseBridgeMacs(String switchId, int defaultVlan, String brctlShowmacsOutput) {
         List<MacEntry> entries = new ArrayList<>();
-        if (brctlShowmacsOutput == null || brctlShowmacsOutput.isBlank()) {
+        if (brctlShowmacsOutput == null || Compat.isBlank(brctlShowmacsOutput)) {
             return entries;
         }
 
         Set<String> chavesUnicas = new LinkedHashSet<>();
         for (String line : brctlShowmacsOutput.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
 
             Matcher m5 = BRCTL_MAC_5_COLS.matcher(trimmed);
@@ -320,11 +321,11 @@ public class ApParser {
      * Extrai o IP do gateway padrão a partir de "ip route" ou "route".
      */
     public Optional<String> parseDefaultGatewayIp(String rawIpRoute) {
-        if (rawIpRoute == null || rawIpRoute.isBlank()) {
+        if (rawIpRoute == null || Compat.isBlank(rawIpRoute)) {
             return Optional.empty();
         }
         for (String line : rawIpRoute.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
             Matcher m = DEFAULT_ROUTE_LINE.matcher(trimmed);
             if (m.find()) {
@@ -342,7 +343,7 @@ public class ApParser {
      */
     public List<ArpEntry> parseArpTable(String rawIpNeigh, List<MacEntry> entradasMacBridge) {
         List<ArpEntry> entries = new ArrayList<>();
-        if (rawIpNeigh == null || rawIpNeigh.isBlank()) {
+        if (rawIpNeigh == null || Compat.isBlank(rawIpNeigh)) {
             return entries;
         }
 
@@ -354,7 +355,7 @@ public class ApParser {
         }
 
         for (String line : rawIpNeigh.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
 
             Matcher m = IP_NEIGH_LINE.matcher(trimmed);
@@ -407,7 +408,7 @@ public class ApParser {
     }
 
     private static boolean ehInterfaceInternaIgnorada(String iface) {
-        if (iface == null || iface.isBlank()) return true;
+        if (iface == null || Compat.isBlank(iface)) return true;
         String lower = iface.trim().toLowerCase();
         return lower.equals("lo")
                 || lower.equals("cpu")
@@ -424,7 +425,7 @@ public class ApParser {
     }
 
     private static String extrairCampoJson(String json, String chave) {
-        if (json == null || json.isBlank()) return null;
+        if (json == null || Compat.isBlank(json)) return null;
         Pattern p = Pattern.compile("\"" + Pattern.quote(chave) + "\"\\s*:\\s*\"([^\"]*)\"");
         Matcher m = p.matcher(json);
         return m.find() ? m.group(1).trim() : null;
@@ -434,7 +435,7 @@ public class ApParser {
         if (texto == null) return "";
         String[] linhas = texto.split("\\R");
         for (int i = linhas.length - 1; i >= 0; i--) {
-            if (!linhas[i].isBlank()) {
+            if (!Compat.isBlank(linhas[i])) {
                 return linhas[i];
             }
         }
@@ -446,12 +447,12 @@ public class ApParser {
      * ou {@code lldpctl}. Retorna lista vazia caso {@code lldpd} não esteja instalado ou sem vizinhos.
      */
     public static List<LldpNeighbor> parseLldpNeighbors(String switchId, String rawOutput) {
-        if (rawOutput == null || rawOutput.isBlank()) {
-            return List.of();
+        if (rawOutput == null || Compat.isBlank(rawOutput)) {
+            return Compat.listOf();
         }
         String lower = rawOutput.toLowerCase();
         if (lower.contains("not found") || lower.contains("no such file") || lower.contains("unable to connect")) {
-            return List.of();
+            return Compat.listOf();
         }
 
         List<LldpNeighbor> neighbors = new ArrayList<>();
@@ -465,11 +466,11 @@ public class ApParser {
         java.util.Set<String> capabilities = new java.util.LinkedHashSet<>();
 
         for (String line : rawOutput.split("\\R")) {
-            String trimmed = line.strip();
+            String trimmed = Compat.strip(line);
             if (trimmed.isEmpty()) continue;
 
             if (trimmed.startsWith("Interface:")) {
-                if (currentIface != null && ((chassisRaw != null && !chassisRaw.isBlank()) || (sysName != null && !sysName.isBlank()))) {
+                if (currentIface != null && ((chassisRaw != null && !Compat.isBlank(chassisRaw)) || (sysName != null && !Compat.isBlank(sysName)))) {
                     neighbors.add(criarLldpNeighborAp(switchId, currentIface, chassisRaw, portId, portDescr, sysName, sysDescr, mgmtIp, capabilities));
                 }
                 String resto = trimmed.substring("Interface:".length()).trim();
@@ -496,7 +497,7 @@ public class ApParser {
                 sysDescr = trimmed.substring("SysDescr:".length()).trim();
             } else if (trimmed.startsWith("MgmtIP:")) {
                 String ipCandidato = trimmed.substring("MgmtIP:".length()).trim();
-                if (ipCandidato.matches("\\d+\\.\\d+\\.\\d+\\.\\d+") && (mgmtIp == null || mgmtIp.isBlank())) {
+                if (ipCandidato.matches("\\d+\\.\\d+\\.\\d+\\.\\d+") && (mgmtIp == null || Compat.isBlank(mgmtIp))) {
                     mgmtIp = ipCandidato;
                 }
             } else if (trimmed.startsWith("PortID:")) {
@@ -509,14 +510,14 @@ public class ApParser {
                 String lowerVal = val.toLowerCase();
                 if (!lowerVal.endsWith(", off")) {
                     String cap = val.replaceFirst("(?i),\\s*on$", "").trim();
-                    if (!cap.isBlank()) {
+                    if (!Compat.isBlank(cap)) {
                         capabilities.add(cap);
                     }
                 }
             }
         }
 
-        if (currentIface != null && ((chassisRaw != null && !chassisRaw.isBlank()) || (sysName != null && !sysName.isBlank()))) {
+        if (currentIface != null && ((chassisRaw != null && !Compat.isBlank(chassisRaw)) || (sysName != null && !Compat.isBlank(sysName)))) {
             neighbors.add(criarLldpNeighborAp(switchId, currentIface, chassisRaw, portId, portDescr, sysName, sysDescr, mgmtIp, capabilities));
         }
 
@@ -545,7 +546,7 @@ public class ApParser {
                 sysName != null ? sysName : "",
                 sysDescr != null ? sysDescr : "",
                 mgmtIp != null ? mgmtIp : "",
-                java.util.Set.copyOf(capabilities)
+                Compat.setCopyOf(capabilities)
         );
     }
 }

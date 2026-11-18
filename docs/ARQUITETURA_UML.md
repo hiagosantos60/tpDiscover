@@ -1,6 +1,23 @@
 # Arquitetura e Diagramas UML — `tpDiscover`
 
-Documentação arquitetural do projeto **`tpDiscover.intelbras`** (Java 25 CLI / Gradle), refletindo a versão atual com suporte a Switches Comware, Switches Série 3000, OLTs GPON/EPON e Access Points corporativos Intelbras (linha legado / ZeusOS / OpenWrt).
+Documentação arquitetural do projeto **`tpDiscover.intelbras`** (Java 8 desktop/CLI / Gradle), refletindo a versão atual com suporte a Switches Comware, Switches Série 3000, OLTs GPON/EPON e Access Points corporativos Intelbras (linha legado / ZeusOS / OpenWrt).
+
+---
+
+## Runtime: Java 8 (único alvo)
+
+O tpDiscover roda em **Java 8 (JRE 8)** no Windows 7, 8, 10 e 11. Não existe mais versão para Java 25.
+
+| Item | Como está garantido |
+|---|---|
+| Código | Compilado com `options.release = 8`. Usar qualquer API do Java 9+ quebra a compilação. Records, switch com `->`, text blocks, `var` e virtual threads foram convertidos. |
+| Equivalentes de API | `tpDiscover.intelbras.util.Compat` (`List.of`, `isBlank`, `Files.readString`, executor no lugar das virtual threads etc.). |
+| Testes | `gradlew test` roda **sempre no Java 8** e falha se não houver Java 8. O build acha o JRE/JDK 8 em `C:/Program Files/Java` e pastas semelhantes, ou usa `-Pjava8Home=<pasta>` / `JAVA8_HOME`. O `AmbienteJava8Test` confere o runtime e o bytecode. |
+| SSH no Java 8 | O JDK 8 não tem Ed25519/X25519. O Bouncy Castle (`bcprov-jdk18on`) fornece `ssh-ed25519` e `curve25519` ao JSch. O `SshSwitchClientJava8Test` conecta num servidor SSH real (Apache MINA) com os perfis moderno (ECDSA/ECDH), legado (RSA/DH14/CBC), ed25519 e curve25519. |
+| Distribuição | `gradlew distribuicaoWindows` gera `app/build/distribuicao/tpDiscover.jar` (JAR único, só bytecode 52) e `tpDiscover.bat`. |
+| PDF | Usa o Edge ou o Chrome instalado. No Windows 7/8 a última versão é a 109; o build passa os dois nomes do flag de cabeçalho/rodapé. |
+
+Para compilar é preciso um JDK 17+ (o Gradle 9 exige). O bytecode gerado é Java 8 do mesmo jeito.
 
 ---
 

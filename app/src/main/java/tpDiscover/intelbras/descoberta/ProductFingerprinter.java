@@ -25,11 +25,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import tpDiscover.intelbras.util.Compat;
+import java.util.concurrent.ExecutorService;
 /**
  * Executa fingerprinting passivo/somente-leitura via TCP (SSH banner, HTTP GET /, Telnet banner)
  * e SNMPv2c ({@code sysDescr}/{@code sysName}) para identificar switches, OLTs, APs e roteadores
@@ -37,7 +38,7 @@ import java.util.regex.Pattern;
  */
 public final class ProductFingerprinter {
 
-    public static final List<Integer> PORTAS_PADRAO = List.of(22, 23, 80, 443);
+    public static final List<Integer> PORTAS_PADRAO = Compat.listOf(22, 23, 80, 443);
 
     private static final int MAX_HTTP_BYTES = 4096;
     private static final int[] OID_SYS_DESCR = {1, 3, 6, 1, 2, 1, 1, 1, 0};
@@ -53,20 +54,70 @@ public final class ProductFingerprinter {
     );
     private static final Pattern ANSI_CSI_PATTERN = Pattern.compile("\\u001B\\[[0-9;?]*[A-Za-z]");
 
-    public record ProbeConfig(
-            int tcpTimeoutMillis,
-            int bannerTimeoutMillis,
-            boolean usarSnmp,
-            List<String> comunidadesSnmp,
-            boolean sondarTelnet
-    ) {
+    public static final class ProbeConfig {
+        private final int tcpTimeoutMillis;
+        private final int bannerTimeoutMillis;
+        private final boolean usarSnmp;
+        private final List<String> comunidadesSnmp;
+        private final boolean sondarTelnet;
+
+        public ProbeConfig(int tcpTimeoutMillis, int bannerTimeoutMillis, boolean usarSnmp, List<String> comunidadesSnmp, boolean sondarTelnet) {
+            this.tcpTimeoutMillis = tcpTimeoutMillis;
+            this.bannerTimeoutMillis = bannerTimeoutMillis;
+            this.usarSnmp = usarSnmp;
+            this.comunidadesSnmp = comunidadesSnmp;
+            this.sondarTelnet = sondarTelnet;
+        }
+
+        public int tcpTimeoutMillis() {
+            return tcpTimeoutMillis;
+        }
+
+        public int bannerTimeoutMillis() {
+            return bannerTimeoutMillis;
+        }
+
+        public boolean usarSnmp() {
+            return usarSnmp;
+        }
+
+        public List<String> comunidadesSnmp() {
+            return comunidadesSnmp;
+        }
+
+        public boolean sondarTelnet() {
+            return sondarTelnet;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof ProbeConfig)) return false;
+            ProbeConfig o = (ProbeConfig) obj;
+            return tcpTimeoutMillis == o.tcpTimeoutMillis
+                    && bannerTimeoutMillis == o.bannerTimeoutMillis
+                    && usarSnmp == o.usarSnmp
+                    && java.util.Objects.equals(comunidadesSnmp, o.comunidadesSnmp)
+                    && sondarTelnet == o.sondarTelnet;
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(tcpTimeoutMillis, bannerTimeoutMillis, usarSnmp, comunidadesSnmp, sondarTelnet);
+        }
+
+        @Override
+        public String toString() {
+            return "ProbeConfig[tcpTimeoutMillis=" + tcpTimeoutMillis + ", bannerTimeoutMillis=" + bannerTimeoutMillis + ", usarSnmp=" + usarSnmp + ", comunidadesSnmp=" + comunidadesSnmp + ", sondarTelnet=" + sondarTelnet + "]";
+        }
+
         /** Construtor retrocompatível: com sonda de banner Telnet habilitada. */
         public ProbeConfig(int tcpTimeoutMillis, int bannerTimeoutMillis, boolean usarSnmp, List<String> comunidadesSnmp) {
             this(tcpTimeoutMillis, bannerTimeoutMillis, usarSnmp, comunidadesSnmp, true);
         }
 
         public static ProbeConfig padrao() {
-            return new ProbeConfig(500, 900, true, List.of("public"));
+            return new ProbeConfig(500, 900, true, Compat.listOf("public"));
         }
 
         /**
@@ -74,11 +125,46 @@ public final class ProductFingerprinter {
          * para não ocupar o VTY único de switches SG antigos.
          */
         public static ProbeConfig preColeta() {
-            return new ProbeConfig(450, 700, true, List.of("public"), false);
+            return new ProbeConfig(450, 700, true, Compat.listOf("public"), false);
         }
     }
 
-    public record SnmpSystemInfo(String sysDescr, String sysName) {}
+    public static final class SnmpSystemInfo {
+        private final String sysDescr;
+        private final String sysName;
+
+        public SnmpSystemInfo(String sysDescr, String sysName) {
+            this.sysDescr = sysDescr;
+            this.sysName = sysName;
+        }
+
+        public String sysDescr() {
+            return sysDescr;
+        }
+
+        public String sysName() {
+            return sysName;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof SnmpSystemInfo)) return false;
+            SnmpSystemInfo o = (SnmpSystemInfo) obj;
+            return java.util.Objects.equals(sysDescr, o.sysDescr)
+                    && java.util.Objects.equals(sysName, o.sysName);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(sysDescr, sysName);
+        }
+
+        @Override
+        public String toString() {
+            return "SnmpSystemInfo[sysDescr=" + sysDescr + ", sysName=" + sysName + "]";
+        }
+    }
 
     private ProductFingerprinter() {}
 
@@ -86,13 +172,13 @@ public final class ProductFingerprinter {
      * Sondagem completa de um IP único: verifica portas abertas e coleta banners/SNMP somente se ativo.
      */
     public static Optional<DiscoveredProduct> sondarHost(String ip, String macArp, ProbeConfig config) {
-        if (ip == null || ip.isBlank()) {
+        if (ip == null || Compat.isBlank(ip)) {
             return Optional.empty();
         }
         ProbeConfig cfg = config != null ? config : ProbeConfig.padrao();
         List<Integer> portasAbertas = sondarPortasTcp(ip, PORTAS_PADRAO, cfg.tcpTimeoutMillis());
 
-        boolean ouiIntelbras = macArp != null && !macArp.isBlank() && OuiLookup.ehIntelbras(macArp);
+        boolean ouiIntelbras = macArp != null && !Compat.isBlank(macArp) && OuiLookup.ehIntelbras(macArp);
         if (portasAbertas.isEmpty() && !ouiIntelbras) {
             return Optional.empty();
         }
@@ -114,10 +200,10 @@ public final class ProductFingerprinter {
 
         boolean sshConhecido = sshBanner.toLowerCase().contains("ssh-2.0-os-")
                 || sshBanner.toLowerCase().contains("ipssh");
-        boolean httpVazioOuGenerico = httpSnippet.isBlank() || !httpIdentificaFamiliaConhecida(httpSnippet);
+        boolean httpVazioOuGenerico = Compat.isBlank(httpSnippet) || !httpIdentificaFamiliaConhecida(httpSnippet);
         String telnetBanner = "";
         if (cfg.sondarTelnet() && portasAbertas.contains(23) && !sshConhecido && httpVazioOuGenerico
-                && snmp.sysDescr().isBlank() && snmp.sysName().isBlank()) {
+                && Compat.isBlank(snmp.sysDescr()) && Compat.isBlank(snmp.sysName())) {
             telnetBanner = lerBannerTcp(ip, 23, cfg.tcpTimeoutMillis(),
                     Math.max(450, Math.min(750, cfg.bannerTimeoutMillis())), true);
         }
@@ -148,7 +234,7 @@ public final class ProductFingerprinter {
             String snmpSysName,
             String macArp
     ) {
-        List<Integer> portas = portasAbertas != null ? portasAbertas : List.of();
+        List<Integer> portas = portasAbertas != null ? portasAbertas : Compat.listOf();
         String ssh = sshBanner != null ? sshBanner.trim() : "";
         String http = httpSnippet != null ? httpSnippet : "";
         String telnet = telnetBanner != null ? telnetBanner.trim() : "";
@@ -156,7 +242,7 @@ public final class ProductFingerprinter {
         String sysName = snmpSysName != null ? snmpSysName.trim() : "";
         String macNorm = macArp != null ? MacUtils.normalizar(macArp) : "";
         String fabricanteOui = MacUtils.ehMacValido(macNorm) ? OuiLookup.identificarFabricante(macNorm).orElse("") : "";
-        boolean ouiIntelbras = !macNorm.isBlank() && OuiLookup.ehIntelbras(macNorm);
+        boolean ouiIntelbras = !Compat.isBlank(macNorm) && OuiLookup.ehIntelbras(macNorm);
 
         String sshLower = ssh.toLowerCase();
         String httpLower = http.toLowerCase();
@@ -168,20 +254,20 @@ public final class ProductFingerprinter {
         String modelo = "";
 
         // 1. Sinais SNMP são os mais específicos quando disponíveis
-        if (!snmpLower.isBlank()) {
+        if (!Compat.isBlank(snmpLower)) {
             familia = inferirFamiliaPorTexto(snmpLower);
             modelo = extrairModeloIntelbras(sysDescr);
-            if (modelo.isBlank()) {
+            if (Compat.isBlank(modelo)) {
                 modelo = extrairModeloIntelbras(sysName);
             }
-            if (modelo.isBlank() && !sysName.isBlank() && familia != null
+            if (Compat.isBlank(modelo) && !Compat.isBlank(sysName) && familia != null
                     && !sysName.equalsIgnoreCase("ID do Equipamento")) {
                 modelo = sysName;
             }
         }
 
         // 2. Assinaturas HTTP dos firmwares reais Intelbras / OpenWrt
-        if (familia == null && !httpLower.isBlank()) {
+        if (familia == null && !Compat.isBlank(httpLower)) {
             if (httpLower.contains("httpd_gw")) {
                 familia = FamiliaProduto.ROTEADOR_GATEWAY;
                 modelo = "Roteador Intelbras";
@@ -204,13 +290,13 @@ public final class ProductFingerprinter {
             } else if (httpLower.contains("olt") && httpLower.contains("intelbras")) {
                 familia = FamiliaProduto.OLT;
             }
-            if (modelo.isBlank()) {
+            if (Compat.isBlank(modelo)) {
                 modelo = extrairModeloIntelbras(http);
             }
         }
 
         // 3. Assinaturas de banner SSH
-        if (familia == null && !sshLower.isBlank()) {
+        if (familia == null && !Compat.isBlank(sshLower)) {
             if (sshLower.contains("ssh-2.0-os-")) {
                 familia = FamiliaProduto.SWITCH_COMWARE;
             } else if (sshLower.contains("ssh-2.0-ipssh_5")) {
@@ -230,21 +316,21 @@ public final class ProductFingerprinter {
         }
 
         // 4. Banner Telnet ou fallback por OUI Intelbras com portas de gerenciamento abertas
-        if (familia == null && !telnetLower.isBlank()) {
+        if (familia == null && !Compat.isBlank(telnetLower)) {
             FamiliaProduto porTelnet = inferirFamiliaPorTexto(telnetLower);
             if (porTelnet != null) {
                 familia = porTelnet;
             } else if (telnetLower.contains("intelbras") || (ouiIntelbras && (telnetLower.contains("user") || telnetLower.contains("login")))) {
                 familia = FamiliaProduto.SWITCH_S30;
             }
-            if (modelo.isBlank()) {
+            if (Compat.isBlank(modelo)) {
                 modelo = extrairModeloIntelbras(telnet);
             }
         }
 
-        if (familia == FamiliaProduto.OLT && modelo.isBlank()) {
+        if (familia == FamiliaProduto.OLT && Compat.isBlank(modelo)) {
             modelo = extrairModeloIntelbras(telnet);
-            if (modelo.isBlank()) {
+            if (Compat.isBlank(modelo)) {
                 if (telnetLower.contains("zzzzzzzzzzzz")) {
                     modelo = "OLT AN6000/AN6001";
                 } else if (telnetLower.contains("username(1-64 chars)") || sshLower.contains("ssh-2.0-private")) {
@@ -354,35 +440,40 @@ public final class ProductFingerprinter {
     }
 
     private static Integer determinarPortaPreferida(String protocolo, List<Integer> portas) {
-        return switch (protocolo) {
-            case "SSH" -> portas.contains(22) ? 22 : null;
-            case "TELNET" -> portas.contains(23) ? 23 : null;
-            case "HTTP" -> portas.contains(80) ? 80 : null;
-            case "HTTPS" -> portas.contains(443) ? 443 : null;
-            default -> null;
-        };
+        switch (protocolo) {
+            case "SSH":
+                return portas.contains(22) ? 22 : null;
+            case "TELNET":
+                return portas.contains(23) ? 23 : null;
+            case "HTTP":
+                return portas.contains(80) ? 80 : null;
+            case "HTTPS":
+                return portas.contains(443) ? 443 : null;
+            default:
+                return null;
+        }
     }
 
     private static String resumirSinais(String ssh, String http, String sysDescr, String sysName, String telnet) {
         List<String> partes = new ArrayList<>();
-        if (!sysDescr.isBlank()) {
+        if (!Compat.isBlank(sysDescr)) {
             partes.add("SNMP=" + limitar(sysDescr, 48));
-        } else if (!sysName.isBlank()) {
+        } else if (!Compat.isBlank(sysName)) {
             partes.add("SNMP=" + limitar(sysName, 40));
         }
-        if (!ssh.isBlank()) {
+        if (!Compat.isBlank(ssh)) {
             partes.add("SSH=" + limitar(ssh, 40));
         }
-        if (!http.isBlank()) {
+        if (!Compat.isBlank(http)) {
             String titulo = extrairGrupo(TITLE_PATTERN, http);
             String server = extrairGrupo(SERVER_HEADER_PATTERN, http);
-            if (!titulo.isBlank()) {
+            if (!Compat.isBlank(titulo)) {
                 partes.add("HTTP='" + limitar(titulo, 36) + "'");
-            } else if (!server.isBlank()) {
+            } else if (!Compat.isBlank(server)) {
                 partes.add("HTTP=" + limitar(server, 36));
             }
         }
-        if (partes.isEmpty() && !telnet.isBlank()) {
+        if (partes.isEmpty() && !Compat.isBlank(telnet)) {
             String telnetResumo = telnet.replaceAll("(?i)(?:z\\s*){5,}", "[AN Banner] ").replaceAll("\\s+", " ").trim();
             partes.add("Telnet=" + limitar(telnetResumo, 40));
         }
@@ -390,7 +481,7 @@ public final class ProductFingerprinter {
     }
 
     private static String extrairModeloIntelbras(String texto) {
-        if (texto == null || texto.isBlank()) return "";
+        if (texto == null || Compat.isBlank(texto)) return "";
         Matcher m = MODELO_INTELBRAS_PATTERN.matcher(texto);
         while (m.find()) {
             String cand = m.group(1).replaceAll("\\s+", " ").trim();
@@ -418,7 +509,8 @@ public final class ProductFingerprinter {
 
     public static List<Integer> sondarPortasTcp(String ip, List<Integer> portas, int timeoutMillis) {
         List<Integer> abertas = new ArrayList<>();
-        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+        ExecutorService executor = Compat.novoExecutor("sonda-tcp", Math.max(1, portas.size()));
+        try {
             List<Future<Integer>> futures = new ArrayList<>(portas.size());
             for (int porta : portas) {
                 futures.add(executor.submit(() -> portaAbertaTcp(ip, porta, timeoutMillis) ? porta : -1));
@@ -430,6 +522,8 @@ public final class ProductFingerprinter {
                 } catch (Exception ignored) {
                 }
             }
+        } finally {
+            Compat.encerrarEAguardar(executor);
         }
         abertas.sort(Integer::compareTo);
         return abertas;
@@ -445,7 +539,7 @@ public final class ProductFingerprinter {
     }
 
     private static boolean httpIdentificaFamiliaConhecida(String httpSnippet) {
-        if (httpSnippet == null || httpSnippet.isBlank()) return false;
+        if (httpSnippet == null || Compat.isBlank(httpSnippet)) return false;
         String lower = httpSnippet.toLowerCase();
         return lower.contains("httpd_gw")
                 || lower.contains("web managerment home")
@@ -504,7 +598,7 @@ public final class ProductFingerprinter {
             if (enviarCrlf) {
                 return textoLimpo.replaceAll("[\\r\\n]+", " ").replaceAll("\\s+", " ").trim();
             }
-            return textoLimpo.lines().findFirst().orElse("").trim();
+            return Compat.lines(textoLimpo).findFirst().orElse("").trim();
         } catch (Exception e) {
             return "";
         }
@@ -574,10 +668,10 @@ public final class ProductFingerprinter {
         String currentPath = "/";
         for (int hop = 0; hop <= 3; hop++) {
             String resp = lerHttpPath(ip, porta, currentPath, ssl, connectTimeoutMs, readTimeoutMs);
-            if (resp.isBlank()) {
+            if (Compat.isBlank(resp)) {
                 break;
             }
-            if (!acumulado.isEmpty()) {
+            if (acumulado.length() > 0) {
                 acumulado.append('\n');
             }
             acumulado.append(resp);
@@ -599,7 +693,7 @@ public final class ProductFingerprinter {
     }
 
     private static String extrairCaminhoRedirectMesmoHost(String ipEsperado, String location) {
-        if (location == null || location.isBlank()) return null;
+        if (location == null || Compat.isBlank(location)) return null;
         String loc = location.trim();
         if (loc.startsWith("/")) {
             return loc;
@@ -610,7 +704,7 @@ public final class ProductFingerprinter {
                 return null;
             }
             String path = uri.getRawPath();
-            if (path == null || path.isBlank()) path = "/";
+            if (path == null || Compat.isBlank(path)) path = "/";
             if (uri.getRawQuery() != null) path += "?" + uri.getRawQuery();
             return path;
         } catch (Exception e) {
@@ -640,12 +734,12 @@ public final class ProductFingerprinter {
                 if (lido <= 0) break;
                 int aproveitar = Math.min(lido, MAX_HTTP_BYTES - baos.size());
                 baos.write(buf, 0, aproveitar);
-                String parcial = baos.toString(StandardCharsets.ISO_8859_1);
+                String parcial = new String(baos.toByteArray(), StandardCharsets.ISO_8859_1);
                 if (parcial.toLowerCase().contains("</title>")) {
                     break;
                 }
             }
-            return baos.toString(StandardCharsets.UTF_8);
+            return new String(baos.toByteArray(), StandardCharsets.UTF_8);
         } catch (Exception e) {
             return "";
         }
@@ -678,7 +772,7 @@ public final class ProductFingerprinter {
      * Consulta SNMPv2c UDP/161 em Java puro para {@code sysDescr} (1.3.6.1.2.1.1.1.0) e {@code sysName} (1.3.6.1.2.1.1.5.0).
      */
     public static SnmpSystemInfo consultarSnmpBasico(String ip, int timeoutMs, List<String> comunidades) {
-        List<String> comms = (comunidades != null && !comunidades.isEmpty()) ? comunidades : List.of("public");
+        List<String> comms = (comunidades != null && !comunidades.isEmpty()) ? comunidades : Compat.listOf("public");
         for (String comm : comms) {
             try (DatagramSocket ds = new DatagramSocket()) {
                 ds.setSoTimeout(timeoutMs);
@@ -691,7 +785,7 @@ public final class ProductFingerprinter {
                 Map<String, String> valores = decodificarSnmpResponse(respPacket.getData(), respPacket.getLength());
                 String sysDescr = valores.getOrDefault("1.3.6.1.2.1.1.1.0", "");
                 String sysName = valores.getOrDefault("1.3.6.1.2.1.1.5.0", "");
-                if (!sysDescr.isBlank() || !sysName.isBlank()) {
+                if (!Compat.isBlank(sysDescr) || !Compat.isBlank(sysName)) {
                     return new SnmpSystemInfo(sysDescr, sysName);
                 }
             } catch (Exception ignored) {
@@ -708,7 +802,7 @@ public final class ProductFingerprinter {
             byte[] encodedOid = tlv(0x06, encodeOid(oid));
             byte[] nullVal = new byte[]{0x05, 0x00};
             byte[] varBind = tlv(0x30, concat(encodedOid, nullVal));
-            varBinds.writeBytes(varBind);
+            varBinds.write(varBind, 0, varBind.length);
         }
         byte[] varBindList = tlv(0x30, varBinds.toByteArray());
         byte[] reqId = tlv(0x02, encodeInt(requestId));
@@ -858,16 +952,16 @@ public final class ProductFingerprinter {
         } else {
             byte[] lenBytes = encodeInt(content.length);
             out.write(0x80 | lenBytes.length);
-            out.writeBytes(lenBytes);
+            out.write(lenBytes, 0, lenBytes.length);
         }
-        out.writeBytes(content);
+        out.write(content, 0, content.length);
         return out.toByteArray();
     }
 
     private static byte[] concat(byte[]... parts) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         for (byte[] p : parts) {
-            out.writeBytes(p);
+            out.write(p, 0, p.length);
         }
         return out.toByteArray();
     }

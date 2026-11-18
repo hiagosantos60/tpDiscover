@@ -33,6 +33,8 @@ import java.nio.file.Path;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 
+import java.nio.file.Paths;
+import tpDiscover.intelbras.util.Compat;
 /**
  * Aba principal "Coleta": formulário em 3 passos (onde procurar, acesso, onde salvar),
  * um único botão de ação principal (que vira "Cancelar" durante a execução),
@@ -156,7 +158,7 @@ public class ColetaViewPanel extends JPanel {
         a.gridx = 3; a.weightx = 0.65; a.insets = new Insets(0, 0, 0, 0);
         acesso.add(txtSenha, a);
         adicionarPasso(passos, 1, "2", "Acesso", acesso,
-                SwingThemeHelper.criarTextoAjuda("Usada em todos os equipamentos. Senhas diferentes podem ser ajustadas na aba Equipamentos."));
+                SwingThemeHelper.criarTextoAjuda("Usada em todos os equipamentos (pode ficar em branco se pedirem só o usuário). Senhas diferentes: aba Equipamentos."));
 
         // Passo 3: onde salvar
         SwingThemeHelper.estilizarBotaoCompacto(btnEscolherPasta);
@@ -349,7 +351,7 @@ public class ColetaViewPanel extends JPanel {
         txtLog.setFont(SwingThemeHelper.fonteMonoespacada());
         txtLog.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
         txtLog.setText("[" + LocalTime.now().format(HORA_FMT)
-                + "] Pronto. Informe a senha e clique em 'Iniciar coleta' (ou pressione Enter).\n");
+                + "] Pronto. Informe usuário e senha (a senha pode ficar em branco) e clique em 'Iniciar coleta'.\n");
 
         JScrollPane scrollLog = new JScrollPane(txtLog);
         scrollLog.setBorder(BorderFactory.createLineBorder(SwingThemeHelper.BORDER_SUBTLE, 1, true));
@@ -365,11 +367,20 @@ public class ColetaViewPanel extends JPanel {
     public void atualizarModoOrigem() {
         ModoOrigem modo = getModoOrigem();
         txtScanCidr.setVisible(modo == ModoOrigem.FAIXA_CIDR);
-        lblDicaOrigem.setText(switch (modo) {
-            case SCAN_AUTOMATICO -> "Detecta sua sub-rede automaticamente e mostra só produtos Intelbras.";
-            case FAIXA_CIDR -> "Use CIDR (10.1.40.0/24), intervalo (10.1.40.80-250) ou vários separados por vírgula.";
-            case SOMENTE_LISTA -> "Não faz varredura: usa apenas os equipamentos marcados na aba Equipamentos.";
-        });
+        String dica;
+        switch (modo) {
+            case FAIXA_CIDR:
+                dica = "Use CIDR (10.1.40.0/24), intervalo (10.1.40.80-250) ou vários separados por vírgula.";
+                break;
+            case SOMENTE_LISTA:
+                dica = "Não faz varredura: usa apenas os equipamentos marcados na aba Equipamentos.";
+                break;
+            case SCAN_AUTOMATICO:
+            default:
+                dica = "Detecta sua sub-rede automaticamente e mostra só produtos Intelbras.";
+                break;
+        }
+        lblDicaOrigem.setText(dica);
         btnApenasEscanear.setVisible(modo != ModoOrigem.SOMENTE_LISTA && !btnCancelar.isVisible());
         btnExecutarTudo.setText(modo == ModoOrigem.SOMENTE_LISTA ? "Coletar lista" : "Iniciar coleta");
         revalidate();
@@ -387,12 +398,12 @@ public class ColetaViewPanel extends JPanel {
 
     public ModoOrigem getModoOrigem() {
         Object sel = cmbOrigem.getSelectedItem();
-        return sel instanceof ModoOrigem m ? m : ModoOrigem.SCAN_AUTOMATICO;
+        return sel instanceof ModoOrigem ? (ModoOrigem) sel : ModoOrigem.SCAN_AUTOMATICO;
     }
 
     public void selecionarModoOrigem(ModoOrigem modo, String spec) {
         cmbOrigem.setSelectedItem(modo);
-        if (spec != null && !spec.isBlank()) {
+        if (spec != null && !Compat.isBlank(spec)) {
             txtScanCidr.setText(spec);
         }
         atualizarModoOrigem();
@@ -420,7 +431,7 @@ public class ColetaViewPanel extends JPanel {
 
     public Path getPastaSaida() {
         String txt = txtPastaPdf.getText().trim();
-        return Path.of(txt.isEmpty() ? "." : txt).toAbsolutePath().normalize();
+        return Paths.get(txt.isEmpty() ? "." : txt).toAbsolutePath().normalize();
     }
 
     public JButton getBtnExecutarTudo() {

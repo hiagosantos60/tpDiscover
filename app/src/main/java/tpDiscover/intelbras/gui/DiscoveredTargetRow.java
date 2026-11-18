@@ -1,5 +1,7 @@
 package tpDiscover.intelbras.gui;
 
+import tpDiscover.intelbras.util.Compat;
+
 /**
  * Linha editável na tabela de equipamentos da GUI.
  * Quando usuário ou senha específicos ficam vazios, herdam a credencial padrão informada no topo da tela.
@@ -119,7 +121,7 @@ public class DiscoveredTargetRow {
     }
 
     public void setCategoriaInferida(String categoriaInferida) {
-        this.categoriaInferida = (categoriaInferida != null && !categoriaInferida.isBlank())
+        this.categoriaInferida = (categoriaInferida != null && !Compat.isBlank(categoriaInferida))
                 ? categoriaInferida.trim() : "SWITCH";
     }
 

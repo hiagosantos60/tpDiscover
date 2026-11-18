@@ -11,6 +11,7 @@ import javax.swing.JTable;
 import javax.swing.table.TableCellRenderer;
 import java.util.List;
 
+import tpDiscover.intelbras.util.Compat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -25,19 +26,19 @@ class TargetTableModelTest {
         model.adicionarManual("10.1.40.120", "suporte", "SenhaEsp!");
 
         DiscoveredProduct gw = new DiscoveredProduct(
-                "10.1.40.1", List.of(80), FamiliaProduto.ROTEADOR_GATEWAY,
+                "10.1.40.1", Compat.listOf(80), FamiliaProduto.ROTEADOR_GATEWAY,
                 "FortiGate", "", "", "", false, "", null
         );
         DiscoveredProduct swEditado = new DiscoveredProduct(
-                "10.1.40.120", List.of(22), FamiliaProduto.SWITCH_SG_MR,
+                "10.1.40.120", Compat.listOf(22), FamiliaProduto.SWITCH_SG_MR,
                 "SG 2404 MR", "", "", "", true, "SSH", 22
         );
         DiscoveredProduct swPadrao = new DiscoveredProduct(
-                "10.1.40.203", List.of(22), FamiliaProduto.SWITCH_COMWARE,
+                "10.1.40.203", Compat.listOf(22), FamiliaProduto.SWITCH_COMWARE,
                 "S2328G-B", "", "", "", true, "SSH", 22
         );
 
-        model.mesclarProdutosDescobertos(List.of(gw, swEditado, swPadrao));
+        model.mesclarProdutosDescobertos(Compat.listOf(gw, swEditado, swPadrao));
 
         assertEquals(3, model.getRowCount());
         // Linha 0: 10.1.40.120 (adicionada antes) preservou usuário e senha customizados
@@ -59,12 +60,16 @@ class TargetTableModelTest {
     }
 
     @Test
-    void deveValidarPortaCustomizadaESenhaObrigatoriaESelecionarApenasFalhos() {
+    void deveValidarPortaCustomizadaPermitirSenhaEmBrancoESelecionarApenasFalhos() {
         TargetTableModel model = new TargetTableModel();
         model.adicionarManual("10.1.31.19:65019", "", "");
         model.adicionarManual("10.1.40.111", "", "admin");
 
-        assertThrows(IllegalArgumentException.class, () -> model.extrairAlvosParaColeta("admin", "", true));
+        // Senha em branco é aceita (equipamentos que pedem só o usuário): segue vazia para o login
+        List<SwitchTarget> semSenha = model.extrairAlvosParaColeta("admin", "", true);
+        assertEquals("", semSenha.get(0).senha());
+        assertEquals("admin", semSenha.get(0).usuario());
+        assertEquals("admin", semSenha.get(1).senha());
         assertThrows(IllegalArgumentException.class, () -> model.adicionarManual("999.1.1.1", "admin", "123"));
         assertThrows(IllegalArgumentException.class, () -> model.adicionarManual("10.1.40.1:70000", "admin", "123"));
 
@@ -96,7 +101,7 @@ class TargetTableModelTest {
         TargetTableModel model = new TargetTableModel();
         model.adicionarManual("10.1.40.203", "ops", "Segredo1");
 
-        model.garantirAlvosNaTabela(List.of(
+        model.garantirAlvosNaTabela(Compat.listOf(
                 new SwitchTarget("10.1.40.203", "admin", "OutraSenha"),
                 new SwitchTarget("10.1.40.204", "admin", "OutraSenha")
         ), "Descoberto via LLDP");

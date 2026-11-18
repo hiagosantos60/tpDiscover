@@ -10,6 +10,7 @@ import java.util.Collection;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Filtra vizinhos LLDP para reter somente os dispositivos de interesse da topologia:
  *  1) Equipamentos já coletados (switches, OLTs, APs) para confirmação exata de enlaces;
@@ -64,7 +65,7 @@ public final class LldpInterestFilter {
         }
 
         // 2) Match por Management IP
-        if (vizinho.managementIp() != null && !vizinho.managementIp().isBlank()) {
+        if (vizinho.managementIp() != null && !Compat.isBlank(vizinho.managementIp())) {
             String mgmtIp = vizinho.managementIp().trim();
             for (SwitchIdentity sw : switchesColetados) {
                 if (mgmtIp.equals(extrairIpSemPorta(sw.ip()))) {
@@ -74,7 +75,7 @@ public final class LldpInterestFilter {
         }
 
         // 3) Match por System Name único e não-genérico
-        if (vizinho.systemName() != null && !vizinho.systemName().isBlank()) {
+        if (vizinho.systemName() != null && !Compat.isBlank(vizinho.systemName())) {
             String sysName = vizinho.systemName().trim();
             if (!ehNomeGenerico(sysName)) {
                 SwitchIdentity unico = null;
@@ -156,7 +157,7 @@ public final class LldpInterestFilter {
                     && MacUtils.pertenceAoSwitch(gw.macNormalizado(), vizinho.chassisMacNormalizado())) {
                 return true;
             }
-            if (gw.ip() != null && !gw.ip().isBlank()
+            if (gw.ip() != null && !Compat.isBlank(gw.ip())
                     && gw.ip().equals(vizinho.managementIp())) {
                 return true;
             }

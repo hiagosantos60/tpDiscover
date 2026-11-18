@@ -36,6 +36,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 
+import tpDiscover.intelbras.util.Compat;
 /**
  * Tema visual do tpDiscover: FlatLaf Dark com paleta própria (grafite + azul),
  * tipografia levemente maior, ícones vetoriais Java2D e utilitários de estilo
@@ -233,7 +234,7 @@ public final class SwingThemeHelper {
         JPanel header = new JPanel(new java.awt.BorderLayout(0, 4));
         header.setOpaque(false);
         header.add(criarTituloSecao(titulo), java.awt.BorderLayout.NORTH);
-        if (subtitulo != null && !subtitulo.isBlank()) {
+        if (subtitulo != null && !Compat.isBlank(subtitulo)) {
             header.add(criarTextoAjuda(subtitulo), java.awt.BorderLayout.SOUTH);
         }
         return header;
@@ -276,13 +277,18 @@ public final class SwingThemeHelper {
 
     /** {fundo, texto, borda} para cada estado. */
     public static Color[] coresStatus(TipoStatus tipo) {
-        return switch (tipo) {
-            case RUN -> new Color[]{STATUS_RUN_BG, STATUS_RUN_FG, STATUS_RUN_BORDER};
-            case OK -> new Color[]{STATUS_OK_BG, STATUS_OK_FG, STATUS_OK_BORDER};
-            case WARN -> new Color[]{STATUS_WARN_BG, STATUS_WARN_FG, STATUS_WARN_BORDER};
-            case ERR -> new Color[]{STATUS_ERR_BG, STATUS_ERR_FG, STATUS_ERR_BORDER};
-            default -> new Color[]{STATUS_IDLE_BG, STATUS_IDLE_FG, STATUS_IDLE_BORDER};
-        };
+        switch (tipo) {
+            case RUN:
+                return new Color[]{STATUS_RUN_BG, STATUS_RUN_FG, STATUS_RUN_BORDER};
+            case OK:
+                return new Color[]{STATUS_OK_BG, STATUS_OK_FG, STATUS_OK_BORDER};
+            case WARN:
+                return new Color[]{STATUS_WARN_BG, STATUS_WARN_FG, STATUS_WARN_BORDER};
+            case ERR:
+                return new Color[]{STATUS_ERR_BG, STATUS_ERR_FG, STATUS_ERR_BORDER};
+            default:
+                return new Color[]{STATUS_IDLE_BG, STATUS_IDLE_FG, STATUS_IDLE_BORDER};
+        }
     }
 
     /** Badge arredondado do cabeçalho, colorido conforme o estado. */
@@ -372,7 +378,7 @@ public final class SwingThemeHelper {
 
     public static void configurarCampoSenhaComOlho(JPasswordField field, String placeholder) {
         field.putClientProperty(FlatClientProperties.STYLE, "showRevealButton: true");
-        if (placeholder != null && !placeholder.isBlank()) {
+        if (placeholder != null && !Compat.isBlank(placeholder)) {
             field.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, placeholder);
         }
     }
@@ -453,7 +459,35 @@ public final class SwingThemeHelper {
 
     // ------------------------------------------------------------------ Ícones
 
-    private record DotIcon(Color color) implements Icon {
+    private static final class DotIcon implements Icon {
+        private final Color color;
+
+        private DotIcon(Color color) {
+            this.color = color;
+        }
+
+        public Color color() {
+            return color;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof DotIcon)) return false;
+            DotIcon o = (DotIcon) obj;
+            return java.util.Objects.equals(color, o.color);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(color);
+        }
+
+        @Override
+        public String toString() {
+            return "DotIcon[color=" + color + "]";
+        }
+
         @Override public int getIconWidth() { return 8; }
         @Override public int getIconHeight() { return 8; }
 
@@ -467,7 +501,49 @@ public final class SwingThemeHelper {
         }
     }
 
-    private record VectorIcon(IconKind kind, Color color, int size) implements Icon {
+    private static final class VectorIcon implements Icon {
+        private final IconKind kind;
+        private final Color color;
+        private final int size;
+
+        private VectorIcon(IconKind kind, Color color, int size) {
+            this.kind = kind;
+            this.color = color;
+            this.size = size;
+        }
+
+        public IconKind kind() {
+            return kind;
+        }
+
+        public Color color() {
+            return color;
+        }
+
+        public int size() {
+            return size;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof VectorIcon)) return false;
+            VectorIcon o = (VectorIcon) obj;
+            return java.util.Objects.equals(kind, o.kind)
+                    && java.util.Objects.equals(color, o.color)
+                    && size == o.size;
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(kind, color, size);
+        }
+
+        @Override
+        public String toString() {
+            return "VectorIcon[kind=" + kind + ", color=" + color + ", size=" + size + "]";
+        }
+
 
         @Override
         public int getIconWidth() {
@@ -493,25 +569,30 @@ public final class SwingThemeHelper {
                 g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
 
                 switch (kind) {
-                    case SEARCH -> {
+                    case SEARCH: {
                         g2.drawOval(2, 2, 7, 7);
                         g2.drawLine(8, 8, 12, 12);
+                        break;
                     }
-                    case PLAY -> {
+                    case PLAY: {
                         Path2D tri = new Path2D.Double();
                         tri.moveTo(3.5, 2);
                         tri.lineTo(12, 7);
                         tri.lineTo(3.5, 12);
                         tri.closePath();
                         g2.fill(tri);
+                        break;
                     }
-                    case STOP -> g2.fillRoundRect(3, 3, 8, 8, 3, 3);
-                    case REFRESH -> {
+                    case STOP:
+                        g2.fillRoundRect(3, 3, 8, 8, 3, 3);
+                        break;
+                    case REFRESH: {
                         g2.drawArc(2, 2, 10, 10, 40, 280);
                         g2.drawLine(10, 2, 12, 5);
                         g2.drawLine(12, 5, 9, 5);
+                        break;
                     }
-                    case PDF, FILE -> {
+                    case PDF: case FILE: {
                         Path2D p = new Path2D.Double();
                         p.moveTo(3, 1.5);
                         p.lineTo(8.5, 1.5);
@@ -522,8 +603,9 @@ public final class SwingThemeHelper {
                         g2.draw(p);
                         g2.drawLine(5, 7, 9, 7);
                         g2.drawLine(5, 10, 9, 10);
+                        break;
                     }
-                    case FOLDER -> {
+                    case FOLDER: {
                         Path2D p = new Path2D.Double();
                         p.moveTo(1.5, 3);
                         p.lineTo(5, 3);
@@ -533,17 +615,22 @@ public final class SwingThemeHelper {
                         p.lineTo(1.5, 11.5);
                         p.closePath();
                         g2.draw(p);
+                        break;
                     }
-                    case PLUS -> {
+                    case PLUS: {
                         g2.drawLine(7, 2, 7, 12);
                         g2.drawLine(2, 7, 12, 7);
+                        break;
                     }
-                    case MINUS -> g2.drawLine(2, 7, 12, 7);
-                    case CHECK -> {
+                    case MINUS:
+                        g2.drawLine(2, 7, 12, 7);
+                        break;
+                    case CHECK: {
                         g2.drawLine(2, 7, 5, 11);
                         g2.drawLine(5, 11, 12, 3);
+                        break;
                     }
-                    case ALERT -> {
+                    case ALERT: {
                         Path2D tri = new Path2D.Double();
                         tri.moveTo(7, 1.5);
                         tri.lineTo(13, 12.5);
@@ -552,12 +639,14 @@ public final class SwingThemeHelper {
                         g2.draw(tri);
                         g2.drawLine(7, 5, 7, 8);
                         g2.fillOval(6, 10, 2, 2);
+                        break;
                     }
-                    case CLEAR -> {
+                    case CLEAR: {
                         g2.drawLine(3, 3, 11, 11);
                         g2.drawLine(11, 3, 3, 11);
+                        break;
                     }
-                    case NETWORK -> {
+                    case NETWORK: {
                         g2.drawRoundRect(5, 1, 4, 4, 1, 1);
                         g2.drawRoundRect(1, 9, 4, 4, 1, 1);
                         g2.drawRoundRect(9, 9, 4, 4, 1, 1);
@@ -565,36 +654,42 @@ public final class SwingThemeHelper {
                         g2.drawLine(3, 7, 11, 7);
                         g2.drawLine(3, 7, 3, 9);
                         g2.drawLine(11, 7, 11, 9);
+                        break;
                     }
-                    case LIST -> {
+                    case LIST: {
                         g2.drawLine(5, 3, 12, 3);
                         g2.drawLine(5, 7, 12, 7);
                         g2.drawLine(5, 11, 12, 11);
                         g2.fillOval(1, 2, 2, 2);
                         g2.fillOval(1, 6, 2, 2);
                         g2.fillOval(1, 10, 2, 2);
+                        break;
                     }
-                    case SLIDERS -> {
+                    case SLIDERS: {
                         g2.drawLine(2, 4, 12, 4);
                         g2.drawLine(2, 10, 12, 10);
                         g2.fillOval(3, 2, 4, 4);
                         g2.fillOval(8, 8, 4, 4);
+                        break;
                     }
-                    case COPY -> {
+                    case COPY: {
                         g2.drawRoundRect(4, 4, 8, 8, 2, 2);
                         g2.drawLine(2, 9, 2, 3);
                         g2.drawLine(2, 2, 9, 2);
+                        break;
                     }
-                    case KEY -> {
+                    case KEY: {
                         g2.drawOval(1, 4, 6, 6);
                         g2.drawLine(7, 7, 13, 7);
                         g2.drawLine(11, 7, 11, 10);
                         g2.drawLine(13, 7, 13, 9);
+                        break;
                     }
-                    case CHECKBOX -> {
+                    case CHECKBOX: {
                         g2.drawRoundRect(1, 1, 12, 12, 3, 3);
                         g2.drawLine(4, 7, 6, 10);
                         g2.drawLine(6, 10, 10, 4);
+                        break;
                     }
                 }
             } finally {
