@@ -52,6 +52,7 @@ public class EquipamentosViewPanel extends JPanel {
     private final JMenuItem miExportarTxt = new JMenuItem("Exportar lista (.txt)...");
     private final JButton btnArquivo;
     private final JButton btnColetarSelecionados = new JButton("Coletar marcados");
+    private final JButton btnRecoletarFalhas = new JButton("Recoletar falhas");
     private final JLabel lblResumo = SwingThemeHelper.criarTextoAjuda(" ");
 
     private boolean modoIncrementalAtivo;
@@ -117,10 +118,23 @@ public class EquipamentosViewPanel extends JPanel {
         btnColetarSelecionados.setIcon(SwingThemeHelper.criarIcone(IconKind.PLAY, Color.WHITE));
         btnColetarSelecionados.setEnabled(false);
 
+        SwingThemeHelper.estilizarBotaoSecundario(btnRecoletarFalhas);
+        btnRecoletarFalhas.setIcon(SwingThemeHelper.criarIcone(IconKind.REFRESH, SwingThemeHelper.STATUS_WARN_FG));
+        btnRecoletarFalhas.setToolTipText("Marca só os equipamentos que falharam e coleta de novo (depois de corrigir as senhas)");
+        btnRecoletarFalhas.setVisible(false);
+        btnRecoletarFalhas.addActionListener(e -> {
+            tableModel.selecionarApenasFalhos();
+            btnColetarSelecionados.doClick();
+        });
+        JPanel direita = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        direita.setOpaque(false);
+        direita.add(btnRecoletarFalhas);
+        direita.add(btnColetarSelecionados);
+
         JPanel toolbar = new JPanel(new BorderLayout(8, 0));
         toolbar.setOpaque(false);
         toolbar.add(esquerda, BorderLayout.CENTER);
-        toolbar.add(btnColetarSelecionados, BorderLayout.EAST);
+        toolbar.add(direita, BorderLayout.EAST);
         topo.add(toolbar, BorderLayout.SOUTH);
         card.add(topo, BorderLayout.NORTH);
 
@@ -209,6 +223,10 @@ public class EquipamentosViewPanel extends JPanel {
         btnDefinirSenha.setEnabled(!executando && temLinhas);
         btnArquivo.setEnabled(!executando);
         miExportarTxt.setEnabled(temLinhas);
+        int falhas = tableModel.contarPorEstado(EstadoColeta.FALHA);
+        btnRecoletarFalhas.setText("Recoletar falhas (" + falhas + ")");
+        btnRecoletarFalhas.setVisible(falhas > 0);
+        btnRecoletarFalhas.setEnabled(!executando);
         if (executando) {
             btnColetarSelecionados.setEnabled(false);
         } else {

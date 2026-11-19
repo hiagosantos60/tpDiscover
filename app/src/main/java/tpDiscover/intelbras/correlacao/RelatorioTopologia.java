@@ -362,7 +362,7 @@ public class RelatorioTopologia {
         GatewayInfo gw = plano.gateway();
         if (gw != null) {
             for (TopologyEngine.ConexaoGateway cg : plano.conexoesDiretas()) {
-                enlacesResumo.add(new EnlaceResumo(gw.rotuloVisual(), "-", cg.porta(), rotuloVisualSwitch(cg.switchCore())));
+                enlacesResumo.add(new EnlaceResumo(gw.rotuloCurto(), "-", cg.porta(), rotuloVisualSwitch(cg.switchCore())));
             }
             for (TopologyEngine.ConexaoLldpUpstream u : plano.conexoesViaLldpExterno()) {
                 enlacesResumo.add(new EnlaceResumo(

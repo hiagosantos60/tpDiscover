@@ -445,16 +445,76 @@ public class TargetTableModel extends AbstractTableModel {
     }
 
     public void atualizarStatusPorEndereco(String enderecoExibicao, EstadoColeta estado, String mensagem) {
+        atualizarStatusPorEndereco(enderecoExibicao, estado, mensagem, null);
+    }
+
+    public void atualizarStatusPorEndereco(String enderecoExibicao, EstadoColeta estado, String mensagem, String detalhe) {
         String ipAlvo = extrairIpBase(enderecoExibicao);
         for (int i = 0; i < linhas.size(); i++) {
             DiscoveredTargetRow r = linhas.get(i);
             if (r.getIpPorta().equalsIgnoreCase(enderecoExibicao)
                     || extrairIpBase(r.getIpPorta()).equals(ipAlvo)) {
                 r.setEstado(estado);
-                r.setStatus(mensagem);
+                r.setStatus(mensagem, detalhe);
                 fireTableRowsUpdated(i, i);
                 return;
             }
+        }
+    }
+
+    /**
+     * Traduz o erro técnico da conexão para um motivo curto, que cabe na coluna Situação.
+     * A mensagem completa continua disponível ao passar o mouse.
+     */
+    public static String motivoCurto(String erro) {
+        String e = erro == null ? "" : erro.toLowerCase(java.util.Locale.ROOT);
+        if (e.contains("usuário ou senha") || e.contains("usuario ou senha") || e.contains("auth fail")
+                || e.contains("falha_autenticacao") || e.contains("login incorrect")) {
+            return "Senha incorreta";
+        }
+        if (e.contains("sessão de gerência") || e.contains("sessao de gerencia") || e.contains("encerrada por")
+                || e.contains("closed by foreign host") || e.contains("connection reset")) {
+            return "Sessão ocupada/recusada";
+        }
+        if (e.contains("algorithm negotiation")) {
+            return "SSH incompatível";
+        }
+        if (e.contains("connection refused") || e.contains("recusad")) {
+            return "Telnet/SSH desativado";
+        }
+        if (e.contains("inalcan") || e.contains("no route") || e.contains("unreachable")) {
+            return "Equipamento inalcançável";
+        }
+        if (e.contains("timeout") || e.contains("tempo esgotado") || e.contains("timed out")) {
+            return "Sem resposta";
+        }
+        if (e.contains("cancelad")) {
+            return "Cancelado";
+        }
+        String t = erro == null ? "" : erro.trim();
+        return t.length() > 60 ? t.substring(0, 59) + "…" : t;
+    }
+
+    /** Coloca os equipamentos com falha no topo (o restante segue por IP), para corrigir primeiro. */
+    public void ordenarFalhasPrimeiro() {
+        java.util.List<DiscoveredTargetRow> ordem = new ArrayList<>(linhas);
+        ordem.sort((a, b) -> {
+            int fa = a.getEstado() == EstadoColeta.FALHA ? 0 : 1;
+            int fb = b.getEstado() == EstadoColeta.FALHA ? 0 : 1;
+            if (fa != fb) return Integer.compare(fa, fb);
+            return Long.compare(ipNumerico(a.getIpPorta()), ipNumerico(b.getIpPorta()));
+        });
+        linhas.clear();
+        linhas.addAll(ordem);
+        fireTableDataChanged();
+    }
+
+    private static long ipNumerico(String ipPorta) {
+        String ip = extrairIpBase(ipPorta);
+        try {
+            return NetworkScanTarget.ipv4ParaLong(ip);
+        } catch (RuntimeException e) {
+            return Long.MAX_VALUE;
         }
     }
 
@@ -527,10 +587,10 @@ public class TargetTableModel extends AbstractTableModel {
         cm.getColumn(COL_SELECIONADO).setMaxWidth(84);
         cm.getColumn(COL_SELECIONADO).setMinWidth(76);
         cm.getColumn(COL_IP_PORTA).setPreferredWidth(130);
-        cm.getColumn(COL_MODELO).setPreferredWidth(290);
-        cm.getColumn(COL_USUARIO).setPreferredWidth(100);
-        cm.getColumn(COL_SENHA).setPreferredWidth(115);
-        cm.getColumn(COL_STATUS).setPreferredWidth(240);
+        cm.getColumn(COL_MODELO).setPreferredWidth(240);
+        cm.getColumn(COL_USUARIO).setPreferredWidth(95);
+        cm.getColumn(COL_SENHA).setPreferredWidth(95);
+        cm.getColumn(COL_STATUS).setPreferredWidth(330);
 
         cm.getColumn(COL_USUARIO).setCellRenderer(new DefaultPlaceholderRenderer("(padrão)"));
         cm.getColumn(COL_SENHA).setCellRenderer(new PasswordCellRenderer());
@@ -548,9 +608,6 @@ public class TargetTableModel extends AbstractTableModel {
         String base = p.familia().rotulo();
         if (!Compat.isBlank(p.modeloInferido()) && !base.contains(p.modeloInferido())) {
             base += " (" + p.modeloInferido() + ")";
-        }
-        if (!Compat.isBlank(p.protocoloPreferido())) {
-            base += " [" + p.protocoloPreferido() + "]";
         }
         return base;
     }
@@ -663,6 +720,15 @@ public class TargetTableModel extends AbstractTableModel {
             JLabel lbl = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
             String texto = value != null ? value.toString() : "";
             lbl.setToolTipText(Compat.isBlank(texto) ? null : texto);
+            if (table.getModel() instanceof TargetTableModel) {
+                DiscoveredTargetRow linha = ((TargetTableModel) table.getModel()).getLinhas()
+                        .get(table.convertRowIndexToModel(row));
+                if (!Compat.isBlank(linha.getDetalhe())) {
+                    String det = linha.getDetalhe().replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+                    lbl.setToolTipText("<html><div style='width:420px'><b>" + texto.replace("<", "&lt;")
+                            + "</b><br><br>" + det + "</div></html>");
+                }
+            }
             lbl.setBorder(new EmptyBorder(2, 10, 2, 10));
             lbl.setHorizontalAlignment(SwingConstants.LEFT);
             lbl.setIconTextGap(8);

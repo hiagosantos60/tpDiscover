@@ -33,6 +33,9 @@ import java.util.stream.Collectors;
 import tpDiscover.intelbras.util.Compat;
 public class App {
 
+    /** Versão exibida em Avançado > Sobre. */
+    public static final String VERSAO = "2.0";
+
     public static final class CliOptions {
         private final String arquivoAlvos;
         private final boolean arquivoExplicitamenteInformado;

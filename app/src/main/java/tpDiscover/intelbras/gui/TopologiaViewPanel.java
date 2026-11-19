@@ -48,6 +48,11 @@ public class TopologiaViewPanel extends JPanel {
     private final DefaultTableModel loopsModel;
     private final TopologiaMapaPanel mapaPanel = new TopologiaMapaPanel();
 
+    private static final String GRAVIDADE_SEM_ACESSO = "Sem acesso";
+    /** id (MAC normalizado) do equipamento de origem de cada linha da aba Problemas, para ir até ele no mapa. */
+    private final java.util.List<String> idsOrigemProblemas = new java.util.ArrayList<>();
+    private final Runnable aoSolicitarCorrigirPendencias;
+
     private Path ultimoPdfGerado;
     private Path pastaSaidaAtual;
     private TipoStatus tipoStatus = TipoStatus.IDLE;
@@ -58,6 +63,7 @@ public class TopologiaViewPanel extends JPanel {
 
     public TopologiaViewPanel(Path pastaInicial, Runnable aoSolicitarCorrigirPendencias) {
         this.pastaSaidaAtual = pastaInicial;
+        this.aoSolicitarCorrigirPendencias = aoSolicitarCorrigirPendencias;
         setLayout(new BorderLayout(0, 14));
         setOpaque(false);
 
@@ -123,10 +129,32 @@ public class TopologiaViewPanel extends JPanel {
                 return false;
             }
         };
-        JTable tblLoops = criarTabela(loopsModel);
+        JTable tblLoops = criarTabela(loopsModel,
+                "Nenhum problema encontrado",
+                "Sem loops, sem portas bloqueadas pelo STP e todos os equipamentos foram acessados.");
+        tblLoops.setToolTipText(null);
+        tblLoops.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (e.getClickCount() != 2) return;
+                int linha = tblLoops.rowAtPoint(e.getPoint());
+                if (linha < 0) return;
+                int m = tblLoops.convertRowIndexToModel(linha);
+                Object gravidade = loopsModel.getValueAt(m, 0);
+                if (GRAVIDADE_SEM_ACESSO.equals(gravidade)) {
+                    if (aoSolicitarCorrigirPendencias != null) aoSolicitarCorrigirPendencias.run();
+                } else if (m < idsOrigemProblemas.size() && idsOrigemProblemas.get(m) != null) {
+                    abas.setSelectedIndex(ABA_MAPA);
+                    mapaPanel.selecionarPorId("dev-" + idsOrigemProblemas.get(m));
+                }
+            }
+        });
         tblLoops.getColumnModel().getColumn(0).setCellRenderer(new GravidadeRenderer());
-        tblLoops.getColumnModel().getColumn(0).setPreferredWidth(110);
-        tblLoops.getColumnModel().getColumn(0).setMaxWidth(140);
+        int[] larguras = {125, 130, 230, 90, 170, 330};
+        for (int i = 0; i < larguras.length; i++) {
+            tblLoops.getColumnModel().getColumn(i).setPreferredWidth(larguras[i]);
+        }
+        tblLoops.getColumnModel().getColumn(0).setMinWidth(120);
 
         enlacesModel = new DefaultTableModel(new String[]{"Equipamento", "Porta", "Porta remota", "Ligado em"}, 0) {
             @Override
@@ -134,7 +162,9 @@ public class TopologiaViewPanel extends JPanel {
                 return false;
             }
         };
-        JTable tblEnlaces = criarTabela(enlacesModel);
+        JTable tblEnlaces = criarTabela(enlacesModel,
+                "Nenhuma conexão mapeada",
+                "Faça uma coleta para ver aqui quem está ligado em qual porta.");
 
         mapaPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
         abas.addTab("Mapa", mapaPanel);
@@ -144,8 +174,29 @@ public class TopologiaViewPanel extends JPanel {
         add(conteudoCard, BorderLayout.CENTER);
     }
 
-    private static JTable criarTabela(DefaultTableModel model) {
-        JTable t = new JTable(model);
+    private static JTable criarTabela(DefaultTableModel model, String vazio1, String vazio2) {
+        JTable t = new JTable(model) {
+            @Override
+            protected void paintComponent(java.awt.Graphics g) {
+                super.paintComponent(g);
+                if (getRowCount() == 0) {
+                    java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+                    g2.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,
+                            java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                    Font base = getFont();
+                    g2.setFont(base.deriveFont(Font.BOLD, base.getSize2D() + 1.5f));
+                    java.awt.FontMetrics f1 = g2.getFontMetrics();
+                    int cy = Math.max(60, getVisibleRect().height / 2 - 10);
+                    g2.setColor(SwingThemeHelper.TEXT_SECONDARY);
+                    g2.drawString(vazio1, (getWidth() - f1.stringWidth(vazio1)) / 2, cy);
+                    g2.setFont(base);
+                    java.awt.FontMetrics f2 = g2.getFontMetrics();
+                    g2.setColor(SwingThemeHelper.TEXT_MUTED);
+                    g2.drawString(vazio2, (getWidth() - f2.stringWidth(vazio2)) / 2, cy + f1.getHeight() + 2);
+                    g2.dispose();
+                }
+            }
+        };
         t.setRowHeight(34);
         t.setFillsViewportHeight(true);
         t.setShowHorizontalLines(true);
@@ -161,6 +212,12 @@ public class TopologiaViewPanel extends JPanel {
         s.setBorder(BorderFactory.createLineBorder(SwingThemeHelper.BORDER_SUBTLE, 1, true));
         s.getViewport().setBackground(fundo);
         return s;
+    }
+
+    /** Atalho Ctrl+F: abre o mapa e põe o cursor na busca. */
+    public void focarBuscaMapa() {
+        abas.setSelectedIndex(ABA_MAPA);
+        mapaPanel.focarBusca();
     }
 
     public JButton getBtnGerarPdf() {
@@ -208,6 +265,7 @@ public class TopologiaViewPanel extends JPanel {
         abas.setTitleAt(ABA_CONEXOES, "Conexões (" + relatorio.enlaces().size() + ")");
 
         loopsModel.setRowCount(0);
+        idsOrigemProblemas.clear();
         int criticos = 0;
         int avisos = 0;
         for (LoopDiagnostic d : relatorio.loops()) {
@@ -220,8 +278,24 @@ public class TopologiaViewPanel extends JPanel {
             loopsModel.addRow(new Object[]{
                     d.severidade(), d.tipo(), orig, dest, d.evidencia(), d.acaoRecomendada()
             });
+            idsOrigemProblemas.add(d.switchOrigemId());
         }
-        abas.setTitleAt(ABA_PROBLEMAS, "Problemas (" + relatorio.loops().size() + ")");
+        // Equipamentos sem acesso também são problemas a resolver no atendimento
+        for (tpDiscover.intelbras.correlacao.TopologyEngine.EquipamentoSemAcesso eq : relatorio.pendenciasAcesso()) {
+            loopsModel.addRow(new Object[]{
+                    GRAVIDADE_SEM_ACESSO,
+                    eq.ehFalhaAutenticacao() ? "Senha incorreta" : "Sem acesso CLI",
+                    eq.ipBase() + (Compat.isBlank(eq.rotuloModelo()) ? "" : "  " + eq.rotuloModelo()),
+                    "-",
+                    eq.descricaoMotivo(),
+                    eq.ehFalhaAutenticacao()
+                            ? "Informe a senha certa em Equipamentos e use 'Recoletar falhas' (duplo clique aqui)"
+                            : "Verifique se o acesso Telnet/SSH está liberado e a sessão livre; depois recolete"
+            });
+            idsOrigemProblemas.add(null);
+        }
+        int totalProblemas = relatorio.loops().size() + relatorio.pendenciasAcesso().size();
+        abas.setTitleAt(ABA_PROBLEMAS, "Problemas (" + totalProblemas + ")");
         abas.setSelectedIndex(ABA_MAPA);
 
         atualizarBannerLoop(criticos, avisos, relatorio.topologiaParcial(), relatorio.pendenciasAcesso().size(),
@@ -253,8 +327,8 @@ public class TopologiaViewPanel extends JPanel {
             aplicarBanner(TipoStatus.WARN, IconKind.ALERT,
                     "Topologia parcial",
                     qtdPendencias > 0
-                            ? qtdPendencias + " equipamento(s) sem acesso (senha incorreta ou sem CLI). Ligações incertas aparecem tracejadas."
-                            : "Há um trecho da rede sem acesso até o gateway. Ligações incertas aparecem tracejadas.");
+                            ? qtdPendencias + " sem acesso (veja a aba Problemas). Ligações incertas ficam tracejadas."
+                            : "Há um trecho sem acesso até o gateway. Ligações incertas ficam tracejadas.");
         } else if (avisos > 0) {
             aplicarBanner(TipoStatus.WARN, IconKind.ALERT,
                     avisos + " porta(s) bloqueada(s) pelo STP",
@@ -298,11 +372,13 @@ public class TopologiaViewPanel extends JPanel {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
                                                        boolean hasFocus, int row, int column) {
+            boolean semAcesso = GRAVIDADE_SEM_ACESSO.equals(value);
             boolean critico = value == LoopDiagnostic.Severidade.CRITICO;
-            String texto = critico ? "Crítico" : "Aviso";
+            String texto = semAcesso ? GRAVIDADE_SEM_ACESSO : (critico ? "Crítico" : "Aviso");
             JLabel l = (JLabel) super.getTableCellRendererComponent(table, texto, isSelected, hasFocus, row, column);
-            Color cor = critico ? SwingThemeHelper.STATUS_ERR_FG : SwingThemeHelper.STATUS_WARN_FG;
-            l.setIcon(SwingThemeHelper.criarIcone(IconKind.ALERT, cor, 13));
+            Color cor = critico ? SwingThemeHelper.STATUS_ERR_FG
+                    : (semAcesso ? SwingThemeHelper.TEXT_SECONDARY : SwingThemeHelper.STATUS_WARN_FG);
+            l.setIcon(SwingThemeHelper.criarIcone(semAcesso ? IconKind.KEY : IconKind.ALERT, cor, 13));
             l.setIconTextGap(8);
             l.setFont(l.getFont().deriveFont(Font.BOLD));
             if (!isSelected) l.setForeground(cor);

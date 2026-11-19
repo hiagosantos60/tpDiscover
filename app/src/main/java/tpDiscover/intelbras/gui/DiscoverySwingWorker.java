@@ -79,7 +79,7 @@ public class DiscoverySwingWorker extends SwingWorker<DiscoverySessionResult, Vo
             public void onScanIniciado(int totalIps, List<String> specs) {
                 encontradosScan.set(0);
                 SwingUtilities.invokeLater(() -> {
-                    coletaPanel.prepararNovaExecucao("Escaneando " + totalIps + " IP(s) " + specs + "...", false);
+                    coletaPanel.prepararNovaExecucao("Procurando equipamentos em " + String.join(", ", specs), false);
                     notificarBadge("Escaneando " + totalIps + " IPs...");
                 });
             }
@@ -94,7 +94,7 @@ public class DiscoverySwingWorker extends SwingWorker<DiscoverySessionResult, Vo
                     SwingUtilities.invokeLater(() -> coletaPanel.atualizarProgresso(
                             processados,
                             totalIps,
-                            "Scan em andamento: " + processados + "/" + totalIps + " IPs (" + achados + " produto(s) Intelbras)"
+                            "Procurando equipamentos  ·  " + achados + (achados == 1 ? " encontrado" : " encontrados")
                     ));
                 }
             }
@@ -121,7 +121,7 @@ public class DiscoverySwingWorker extends SwingWorker<DiscoverySessionResult, Vo
                     tableModel.garantirAlvosNaTabela(alvosConsolidados, "Alvo consolidado");
                     tableModel.marcarAguardandoParaSelecionados();
                     coletaPanel.prepararNovaExecucao(
-                            "Coletando " + alvosConsolidados.size() + " equipamento(s) em paralelo...",
+                            "Coletando equipamentos",
                             false
                     );
                     notificarBadge("Coletando 0/" + alvosConsolidados.size());
@@ -141,13 +141,10 @@ public class DiscoverySwingWorker extends SwingWorker<DiscoverySessionResult, Vo
                     tableModel.atualizarStatusPorEndereco(
                             alvo.enderecoExibicao(),
                             sucesso ? EstadoColeta.OK : EstadoColeta.FALHA,
-                            sucesso ? ("OK • " + resumoOuErro) : ("Falha: " + resumoOuErro)
+                            sucesso ? ("OK · " + resumoOuErro) : ("Falha: " + TargetTableModel.motivoCurto(resumoOuErro)),
+                            sucesso ? null : resumoOuErro
                     );
-                    coletaPanel.atualizarProgresso(
-                            concluidos,
-                            total,
-                            "Coletando equipamentos: " + concluidos + "/" + total + " concluído(s)"
-                    );
+                    coletaPanel.atualizarProgresso(concluidos, total, "Coletando equipamentos");
                     notificarBadge("Coletando " + concluidos + "/" + total);
                 });
             }
@@ -184,12 +181,13 @@ public class DiscoverySwingWorker extends SwingWorker<DiscoverySessionResult, Vo
                 int falhas = res.resultadoColeta().falhas().size();
                 int totalRodada = res.resultadoColeta().total();
                 String msg = totalRodada > 0
-                        ? String.format(Locale.US,
-                                "Coleta concluída em %.2fs: %d OK, %d falha(s) nesta etapa (total consolidado: %d).",
-                                res.duracaoColetaMs() / 1000.0, okRodada, falhas, okConsolidado)
-                        : String.format(Locale.US,
-                                "Topologia atualizada com %d equipamento(s) preservado(s) e %d pendência(s)/passivo(s).",
-                                okConsolidado, request.equipamentosSemAcessoInformados().size());
+                        ? "Coleta concluída em " + duracaoLegivel(res.duracaoColetaMs()) + ": "
+                                + okConsolidado + (okConsolidado == 1 ? " equipamento coletado" : " equipamentos coletados")
+                                + (falhas > 0 ? ", " + falhas + " sem acesso" : "") + "."
+                        : "Topologia atualizada: " + okConsolidado + " equipamento(s) coletado(s)"
+                                + (request.equipamentosSemAcessoInformados().isEmpty() ? "."
+                                : " e " + request.equipamentosSemAcessoInformados().size() + " sem acesso.");
+                tableModel.ordenarFalhasPrimeiro();
                 coletaPanel.definirStatusFinal(msg, 100, okConsolidado + " OK" + (falhas > 0 ? " • " + falhas + " falha" : ""));
                 notificarBadge(okConsolidado + " OK" + (falhas > 0 ? " • " + falhas + " falha(s)" : ""));
 
@@ -218,8 +216,8 @@ public class DiscoverySwingWorker extends SwingWorker<DiscoverySessionResult, Vo
                                 + " enlace(s). Terminou os testes? Clique em 'Finalizar e gerar PDF'.";
                     }
                     if (!request.gerarArquivoRelatorio()) {
-                        coletaPanel.appendLog("Prévia da topologia atualizada (nenhum PDF gravado). "
-                                + "Use 'Finalizar e gerar PDF' quando concluir os testes de acesso.");
+                        coletaPanel.appendLog("Topologia atualizada na aba Topologia. O PDF só é gravado em "
+                                + "'Finalizar e gerar PDF' (assim você pode corrigir senhas e recoletar antes).");
                     }
                     boolean finalPdf = request.gerarArquivoRelatorio();
                     coletaPanel.exibirResumoConclusao(
@@ -257,5 +255,12 @@ public class DiscoverySwingWorker extends SwingWorker<DiscoverySessionResult, Vo
         if (statusBadgeCallback != null) {
             statusBadgeCallback.accept(texto);
         }
+    }
+
+    /** "34 s", "1 min 05 s": tempo de execução sem casas decimais nem ponto à moda americana. */
+    static String duracaoLegivel(long millis) {
+        long seg = Math.max(0, Math.round(millis / 1000.0));
+        if (seg < 60) return seg + " s";
+        return (seg / 60) + " min " + String.format("%02d", seg % 60) + " s";
     }
 }

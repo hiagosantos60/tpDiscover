@@ -90,14 +90,20 @@ public class AvancadoViewPanel extends JPanel {
         g.anchor = GridBagConstraints.WEST;
         g.fill = GridBagConstraints.HORIZONTAL;
         g.insets = new Insets(0, 0, 8, 12);
+        // IP e MAC lado a lado, com largura fixa (não ocupam a tela toda)
+        g.fill = GridBagConstraints.NONE;
         g.gridx = 0; g.gridy = 0;
         gw.add(rotulo("IP"), g);
-        g.gridx = 1; g.weightx = 1;
+        g.gridx = 1;
+        txtGatewayIp.setPreferredSize(new Dimension(170, txtGatewayIp.getPreferredSize().height));
         gw.add(txtGatewayIp, g);
-        g.gridx = 0; g.gridy = 1; g.weightx = 0;
+        g.gridx = 2; g.insets = new Insets(0, 12, 8, 12);
         gw.add(rotulo("MAC"), g);
-        g.gridx = 1; g.weightx = 1;
+        g.gridx = 3; g.insets = new Insets(0, 0, 8, 12);
+        txtGatewayMac.setPreferredSize(new Dimension(190, txtGatewayMac.getPreferredSize().height));
         gw.add(txtGatewayMac, g);
+        g.gridx = 4; g.weightx = 1;
+        gw.add(javax.swing.Box.createHorizontalGlue(), g);
         coluna.add(criarSecao("Gateway (opcional)",
                 "Normalmente detectado sozinho. Preencha só se a topologia não mostrar o roteador correto.",
                 gw, null));
@@ -108,7 +114,10 @@ public class AvancadoViewPanel extends JPanel {
                 "<html><div style='width:620px'>Ferramenta de mapeamento de topologia e diagnóstico de loops para redes Intelbras. "
                         + "Suporta Comware, Série 3000/Max, S2050G-A / S30-Lite / PoE Max, SG MR / MR L2+ / S-Series, "
                         + "OLTs (G08/G16/4840E, AN6000/6001/5516, 8820I/G) e APs/Rádios.<br><br>"
-                        + "<b>Somente leitura:</b> nenhuma configuração de switch ou porta é alterada.</div></html>");
+                        + "<b>Somente leitura:</b> nenhuma configuração de switch ou porta é alterada.<br><br>"
+                        + "Versão " + tpDiscover.intelbras.App.VERSAO + " · Java " + System.getProperty("java.version")
+                        + "<br>Atalhos: Ctrl+1 a Ctrl+4 trocam de aba · F5 inicia a coleta · Ctrl+F busca no mapa · "
+                        + "Ctrl+P gera o PDF</div></html>");
         sobreTxt.setForeground(SwingThemeHelper.TEXT_MUTED);
         coluna.add(criarSecao("Sobre o tpDiscover", null, sobreTxt, null));
 
@@ -196,6 +205,18 @@ public class AvancadoViewPanel extends JPanel {
 
     public boolean isSnmpAtivo() {
         return chkSnmp.isSelected();
+    }
+
+    public void setConcorrencia(int valor) {
+        spnConcorrencia.setValue(Math.max(1, Math.min(64, valor)));
+    }
+
+    public void setLldpAtivo(boolean ativo) {
+        chkLldp.setSelected(ativo);
+    }
+
+    public void setSnmpAtivo(boolean ativo) {
+        chkSnmp.setSelected(ativo);
     }
 
     public String getGatewayIp() {

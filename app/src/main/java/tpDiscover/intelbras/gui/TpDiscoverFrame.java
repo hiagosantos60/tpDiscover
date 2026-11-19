@@ -90,7 +90,113 @@ public class TpDiscoverFrame extends JFrame {
 
         inicializarLayout();
         registrarEventos();
+        registrarAtalhos();
+        carregarPreferencias();
         atualizarEstadoExecucao(false);
+    }
+
+    // ------------------------------------------------------------ Preferências
+
+    /** Preferências do usuário (registro do Windows). Senhas nunca são gravadas. */
+    private static java.util.prefs.Preferences preferencias() {
+        return java.util.prefs.Preferences.userRoot().node("intelbras/tpdiscover");
+    }
+
+    private void carregarPreferencias() {
+        try {
+            java.util.prefs.Preferences p = preferencias();
+            coletaPanel.setUsuarioPadrao(p.get("usuario", "admin"));
+            coletaPanel.setPastaSaida(p.get("pastaRelatorio", null));
+            String modo = p.get("modoOrigem", null);
+            if (modo != null) {
+                try {
+                    coletaPanel.selecionarModoOrigem(ColetaViewPanel.ModoOrigem.valueOf(modo), p.get("faixa", ""));
+                } catch (IllegalArgumentException ignorado) {
+                    // valor antigo/inválido: mantém o padrão
+                }
+            }
+            avancadoPanel.setLldpAtivo(p.getBoolean("lldp", true));
+            avancadoPanel.setSnmpAtivo(p.getBoolean("snmp", true));
+            avancadoPanel.setConcorrencia(p.getInt("concorrencia", avancadoPanel.getConcorrencia()));
+            avancadoPanel.setGatewayIp(p.get("gatewayIp", ""));
+            avancadoPanel.setGatewayMac(p.get("gatewayMac", ""));
+            int w = p.getInt("janelaLargura", 0);
+            int h = p.getInt("janelaAltura", 0);
+            if (w >= getMinimumSize().width && h >= getMinimumSize().height) {
+                setSize(w, h);
+                setLocationRelativeTo(null);
+            }
+            if (p.getBoolean("janelaMaximizada", false)) {
+                setExtendedState(getExtendedState() | MAXIMIZED_BOTH);
+            }
+        } catch (RuntimeException e) {
+            // sem acesso às preferências: segue com os valores padrão
+        }
+    }
+
+    private void salvarPreferencias() {
+        try {
+            java.util.prefs.Preferences p = preferencias();
+            p.put("usuario", coletaPanel.getUsuarioPadrao());
+            p.put("pastaRelatorio", coletaPanel.getPastaSaida().toString());
+            p.put("modoOrigem", coletaPanel.getModoOrigem().name());
+            p.put("faixa", coletaPanel.getScanCidr());
+            p.putBoolean("lldp", avancadoPanel.isLldpAtivo());
+            p.putBoolean("snmp", avancadoPanel.isSnmpAtivo());
+            p.putInt("concorrencia", avancadoPanel.getConcorrencia());
+            p.put("gatewayIp", avancadoPanel.getGatewayIp());
+            p.put("gatewayMac", avancadoPanel.getGatewayMac());
+            boolean maximizada = (getExtendedState() & MAXIMIZED_BOTH) == MAXIMIZED_BOTH;
+            p.putBoolean("janelaMaximizada", maximizada);
+            if (!maximizada) {
+                p.putInt("janelaLargura", getWidth());
+                p.putInt("janelaAltura", getHeight());
+            }
+            p.flush();
+        } catch (Exception e) {
+            // preferências são conveniência: falha aqui não atrapalha o uso
+        }
+    }
+
+    // ---------------------------------------------------------------- Atalhos
+
+    private void registrarAtalhos() {
+        javax.swing.JRootPane raiz = getRootPane();
+        javax.swing.InputMap im = raiz.getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW);
+        javax.swing.ActionMap am = raiz.getActionMap();
+        atalho(im, am, "ctrl 1", "abaColeta", () -> navColeta.doClick());
+        atalho(im, am, "ctrl 2", "abaEquipamentos", () -> navEquipamentos.doClick());
+        atalho(im, am, "ctrl 3", "abaTopologia", () -> navTopologia.doClick());
+        atalho(im, am, "ctrl 4", "abaAvancado", () -> navAvancado.doClick());
+        atalho(im, am, "F5", "iniciarColeta", () -> {
+            javax.swing.JButton b = coletaPanel.getBtnExecutarTudo();
+            if (b.isVisible() && b.isEnabled()) {
+                navColeta.doClick();
+                b.doClick();
+            }
+        });
+        atalho(im, am, "ctrl F", "buscarMapa", () -> {
+            navTopologia.doClick();
+            topologiaPanel.focarBuscaMapa();
+        });
+        atalho(im, am, "ctrl P", "gerarPdf", () -> {
+            javax.swing.JButton b = topologiaPanel.getBtnGerarPdf();
+            if (b.isVisible() && b.isEnabled()) b.doClick();
+        });
+        navColeta.setToolTipText("Coleta (Ctrl+1)");
+        navEquipamentos.setToolTipText("Equipamentos (Ctrl+2)");
+        navTopologia.setToolTipText("Topologia (Ctrl+3)");
+        navAvancado.setToolTipText("Avançado (Ctrl+4)");
+    }
+
+    private static void atalho(javax.swing.InputMap im, javax.swing.ActionMap am, String tecla, String nome, Runnable acao) {
+        im.put(javax.swing.KeyStroke.getKeyStroke(tecla), nome);
+        am.put(nome, new javax.swing.AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                acao.run();
+            }
+        });
     }
 
     public static void exibir() {
@@ -293,6 +399,7 @@ public class TpDiscoverFrame extends JFrame {
                         fecharAoTerminar = false;
                     }
                 }
+                salvarPreferencias();
                 dispose();
             }
         });
@@ -327,6 +434,7 @@ public class TpDiscoverFrame extends JFrame {
     }
 
     private void iniciarExecucao(boolean apenasScan, boolean somenteTabela) {
+        salvarPreferencias();
         if (emExecucao()) return;
         equipamentosPanel.finalizarEdicaoTabela();
 

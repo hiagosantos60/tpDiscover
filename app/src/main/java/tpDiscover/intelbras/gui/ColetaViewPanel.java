@@ -76,6 +76,14 @@ public class ColetaViewPanel extends JPanel {
     private final JButton btnCancelar = new JButton("Cancelar");
 
     private final JLabel lblStatusExecucao = new JLabel("Pronto para começar");
+
+    // Formulário recolhível: durante/depois da coleta vira uma linha só, e o registro ganha espaço
+    private JComponent cabecalhoFormulario;
+    private JComponent passosFormulario;
+    private JComponent separadorFormulario;
+    private final JLabel lblResumoParametros = new JLabel();
+    private final JButton btnAlterarParametros = new JButton("Alterar");
+    private boolean formularioRecolhido;
     private final JLabel lblProgresso = SwingThemeHelper.criarTextoAjuda("");
     private final JProgressBar progressBar = new JProgressBar(0, 100);
 
@@ -128,9 +136,10 @@ public class ColetaViewPanel extends JPanel {
         JPanel card = SwingThemeHelper.criarCardArredondado();
         card.setLayout(new BorderLayout(0, 16));
 
-        card.add(SwingThemeHelper.criarCabecalho(
+        cabecalhoFormulario = SwingThemeHelper.criarCabecalho(
                 "Nova coleta",
-                "Somente leitura: nenhuma configuração dos equipamentos é alterada."), BorderLayout.NORTH);
+                "Somente leitura: nenhuma configuração dos equipamentos é alterada.");
+        card.add(cabecalhoFormulario, BorderLayout.NORTH);
 
         JPanel passos = new JPanel(new GridBagLayout());
         passos.setOpaque(false);
@@ -171,6 +180,7 @@ public class ColetaViewPanel extends JPanel {
         adicionarPasso(passos, 2, "3", "Salvar relatório em", pasta, null);
 
         card.add(passos, BorderLayout.CENTER);
+        passosFormulario = passos;
 
         // Ações
         SwingThemeHelper.estilizarBotaoPrimario(btnExecutarTudo);
@@ -195,12 +205,60 @@ public class ColetaViewPanel extends JPanel {
         rodape.setOpaque(false);
         JSeparator sep = new JSeparator();
         sep.setForeground(SwingThemeHelper.BORDER_SUBTLE);
+        separadorFormulario = sep;
         rodape.add(sep, BorderLayout.NORTH);
         rodape.add(acoes, BorderLayout.CENTER);
+
+        lblResumoParametros.setForeground(SwingThemeHelper.TEXT_SECONDARY);
+        SwingThemeHelper.estilizarBotaoCompacto(btnAlterarParametros);
+        btnAlterarParametros.setIcon(SwingThemeHelper.criarIcone(IconKind.SLIDERS, SwingThemeHelper.TEXT_SECONDARY));
+        btnAlterarParametros.setToolTipText("Mostra de novo faixa de IPs, usuário/senha e pasta do relatório");
+        btnAlterarParametros.addActionListener(e -> setFormularioRecolhido(false));
+        JPanel resumo = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        resumo.setOpaque(false);
+        resumo.add(btnAlterarParametros);
+        resumo.add(lblResumoParametros);
+        resumo.setVisible(false);
+        rodape.add(resumo, BorderLayout.WEST);
+        resumoParametros = resumo;
         card.add(rodape, BorderLayout.SOUTH);
 
         cmbOrigem.addActionListener(e -> atualizarModoOrigem());
         return card;
+    }
+
+    private JComponent resumoParametros;
+
+    /**
+     * Recolhe o formulário numa linha ("10.1.40.0/24 · admin · relatório em ...") durante e depois da
+     * coleta, para o registro de atividade e o resultado ganharem espaço. "Alterar" mostra tudo de novo.
+     */
+    public void setFormularioRecolhido(boolean recolher) {
+        formularioRecolhido = recolher;
+        if (recolher) {
+            String origem;
+            switch (getModoOrigem()) {
+                case FAIXA_CIDR: origem = getScanCidr().isEmpty() ? "faixa de IPs" : getScanCidr(); break;
+                case SOMENTE_LISTA: origem = "lista da aba Equipamentos"; break;
+                default: origem = "rede local (automático)"; break;
+            }
+            String usuario = getUsuarioPadrao().isEmpty() ? "admin" : getUsuarioPadrao();
+            String pasta = txtPastaPdf.getText().trim();
+            String pastaCurta = pasta.length() > 48 ? "…" + pasta.substring(pasta.length() - 47) : pasta;
+            lblResumoParametros.setText(origem + "  ·  " + usuario + "  ·  relatório em " + pastaCurta);
+            lblResumoParametros.setToolTipText("Pasta do relatório: " + pasta);
+        }
+        cabecalhoFormulario.setVisible(!recolher);
+        passosFormulario.setVisible(!recolher);
+        separadorFormulario.setVisible(!recolher);
+        resumoParametros.setVisible(recolher);
+        btnApenasEscanear.setVisible(!recolher && !btnCancelar.isVisible() && getModoOrigem() != ModoOrigem.SOMENTE_LISTA);
+        revalidate();
+        repaint();
+    }
+
+    public boolean isFormularioRecolhido() {
+        return formularioRecolhido;
     }
 
     private void adicionarPasso(JPanel grid, int linha, String numero, String titulo, JComponent controle, JComponent ajuda) {
@@ -429,6 +487,10 @@ public class ColetaViewPanel extends JPanel {
         if (senha != null) txtSenha.setText(senha);
     }
 
+    public void setPastaSaida(String pasta) {
+        if (pasta != null && !Compat.isBlank(pasta)) txtPastaPdf.setText(pasta);
+    }
+
     public Path getPastaSaida() {
         String txt = txtPastaPdf.getText().trim();
         return Paths.get(txt.isEmpty() ? "." : txt).toAbsolutePath().normalize();
@@ -472,7 +534,8 @@ public class ColetaViewPanel extends JPanel {
 
         btnExecutarTudo.setVisible(!executando);
         btnExecutarTudo.setEnabled(!executando);
-        btnApenasEscanear.setVisible(!executando && getModoOrigem() != ModoOrigem.SOMENTE_LISTA);
+        // Com o formulário recolhido a linha fica só com "Alterar" + "Iniciar coleta" (cabe em 940 px)
+        btnApenasEscanear.setVisible(!executando && !formularioRecolhido && getModoOrigem() != ModoOrigem.SOMENTE_LISTA);
         btnApenasEscanear.setEnabled(!executando);
         btnCancelar.setVisible(executando);
         btnCancelar.setEnabled(executando);
@@ -493,6 +556,7 @@ public class ColetaViewPanel extends JPanel {
 
     public void prepararNovaExecucao(String tituloEtapa, boolean indeterminado) {
         this.ultimoPdfGerado = null;
+        if (!formularioRecolhido) setFormularioRecolhido(true);
         faixaConclusao.setVisible(false);
         lblStatusExecucao.setText(tituloEtapa);
         lblProgresso.setText(indeterminado ? "" : "0%");

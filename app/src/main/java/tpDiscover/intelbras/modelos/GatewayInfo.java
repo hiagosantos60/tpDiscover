@@ -49,6 +49,13 @@ public final class GatewayInfo {
      * Formata o rótulo completo do roteador/gateway com identificação de fabricante (OUI), ex:
      * "Roteador/Gateway 10.1.40.1 [0009-0f09-1e0a (Fortinet)]"
      */
+    /** Rótulo curto para tabelas: "Gateway 10.1.40.1 (Fortinet)". */
+    public String rotuloCurto() {
+        String fabricante = mac != null ? OuiLookup.identificarFabricante(mac).orElse("") : "";
+        String base = (ip != null && !Compat.isBlank(ip)) ? "Gateway " + ip : "Gateway";
+        return Compat.isBlank(fabricante) ? base : base + " (" + fabricante + ")";
+    }
+
     public String rotuloVisual() {
         String macExibicao = mac != null ? OuiLookup.formatar(mac.toLowerCase()) : "N/D";
         if (ip != null && !Compat.isBlank(ip)) {

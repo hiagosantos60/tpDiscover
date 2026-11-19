@@ -141,6 +141,11 @@ public class TopologiaMapaPanel extends JPanel {
         canvas.repaint();
     }
 
+    public void focarBusca() {
+        txtBusca.requestFocusInWindow();
+        txtBusca.selectAll();
+    }
+
     public MapaTopologia getMapa() {
         return mapa;
     }
@@ -153,7 +158,8 @@ public class TopologiaMapaPanel extends JPanel {
 
         JPanel esquerda = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         esquerda.setOpaque(false);
-        txtBusca.putClientProperty("JTextField.placeholderText", "Buscar por nome, IP ou MAC");
+        txtBusca.setColumns(16);
+        txtBusca.putClientProperty("JTextField.placeholderText", "Buscar nome, IP ou MAC (Ctrl+F)");
         txtBusca.putClientProperty("JTextField.leadingIcon", SwingThemeHelper.criarIcone(IconKind.SEARCH, SwingThemeHelper.TEXT_MUTED, 14));
         txtBusca.putClientProperty("JTextField.showClearButton", true);
         txtBusca.setToolTipText("Destaca e centraliza o equipamento encontrado (Enter vai para o próximo)");
@@ -173,27 +179,17 @@ public class TopologiaMapaPanel extends JPanel {
         });
         btnAjustar.setText("Ajustar");
         JButton btnSalvar = botaoFerramenta(IconKind.FILE, "Salvar o mapa como imagem PNG", this::salvarImagem);
-        btnSalvar.setText("Salvar imagem");
+        btnSalvar.setText("Imagem");
         JButton btnPlanejador = botaoFerramenta(IconKind.NETWORK,
                 "Salva o projeto (.json) do Planejador de Rede na pasta do relatório, para editar a topologia", this::exportarPlanejador);
-        btnPlanejador.setText("Exportar p/ Planejador");
+        btnPlanejador.setText("Planejador");
         esquerda.add(btnMenos);
         esquerda.add(btnMais);
         esquerda.add(btnAjustar);
         esquerda.add(btnSalvar);
         esquerda.add(btnPlanejador);
-        lblResumo.setForeground(SwingThemeHelper.TEXT_MUTED);
-        lblResumo.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 0));
-        esquerda.add(lblResumo);
         barra.add(esquerda, BorderLayout.CENTER);
-
-        JPanel legenda = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
-        legenda.setOpaque(false);
-        legenda.add(itemLegenda("Cobre", COR_COBRE, false));
-        legenda.add(itemLegenda("Fibra", COR_FIBRA, false));
-        legenda.add(itemLegenda("Incerto / STP", COR_ATENCAO, true));
-        legenda.add(itemLegenda("Loop", COR_LOOP, false));
-        barra.add(legenda, BorderLayout.EAST);
+        // Resumo e legenda ficam desenhados dentro do mapa (cantos), para a barra caber em 940 px
         return barra;
     }
 
@@ -214,16 +210,20 @@ public class TopologiaMapaPanel extends JPanel {
     }
 
     private void atualizarResumo() {
-        if (mapa.estaVazio()) {
-            lblResumo.setText(" ");
-            return;
-        }
-        int alertas = 0;
+        lblResumo.setText(textoResumo());
+    }
+
+    String textoResumo() {
+        if (mapa.estaVazio()) return "";
+        int loops = 0;
+        int semAcesso = 0;
         for (No n : mapa.nos()) {
-            if (n.alerta() == Alerta.LOOP || n.alerta() == Alerta.AUTH_ERRO) alertas++;
+            if (n.alerta() == Alerta.LOOP) loops++;
+            if (n.alerta() == Alerta.AUTH_ERRO || n.alerta() == Alerta.SEM_ACESSO) semAcesso++;
         }
-        lblResumo.setText(mapa.nos().size() + " equipamento(s) • " + mapa.enlaces().size() + " cabo(s)"
-                + (alertas > 0 ? " • " + alertas + " com alerta" : ""));
+        return mapa.nos().size() + " equipamentos · " + mapa.enlaces().size() + " cabos"
+                + (loops > 0 ? " · " + loops + " com loop" : "")
+                + (semAcesso > 0 ? " · " + semAcesso + " sem acesso" : "");
     }
 
     // ------------------------------------------------------------------ Busca
@@ -729,11 +729,38 @@ public class TopologiaMapaPanel extends JPanel {
             }
             Rectangle2D b = limitesMundo();
             double margem = 24;
-            escala = Math.min((w - 2 * margem) / b.getWidth(), (h - 2 * margem) / b.getHeight());
-            escala = Math.max(0.15, Math.min(escala, 1.6));
-            offX = (w - b.getWidth() * escala) / 2.0 - b.getX() * escala;
-            offY = (h - b.getHeight() * escala) / 2.0 - b.getY() * escala;
+            double caber = Math.min((w - 2 * margem) / b.getWidth(), (h - 2 * margem - 30) / b.getHeight());
+            if (caber >= ESCALA_LEGIVEL) {
+                escala = Math.min(caber, 1.6);
+                offX = (w - b.getWidth() * escala) / 2.0 - b.getX() * escala;
+                offY = (h - b.getHeight() * escala) / 2.0 - b.getY() * escala;
+            } else {
+                // Rede grande: não encolhe até virar pontinhos. Mantém um tamanho legível, com o topo
+                // (gateway/core) visível e centralizado; o resto se vê arrastando ou com a roda do mouse.
+                escala = ESCALA_LEGIVEL;
+                No raiz = noRaiz();
+                double cx = raiz != null ? raiz.centroX() : b.getCenterX();
+                double largura = b.getWidth() * escala;
+                offX = largura <= w - 2 * margem
+                        ? (w - largura) / 2.0 - b.getX() * escala
+                        : w / 2.0 - cx * escala;
+                offY = margem + 30 - b.getY() * escala;
+            }
             repaint();
+        }
+
+        /** Escala mínima do "Ajustar": abaixo disso nomes e IPs ficam ilegíveis. */
+        private static final double ESCALA_LEGIVEL = 0.62;
+
+        private No noRaiz() {
+            for (No n : mapa.nos()) if ("router".equals(n.tipo())) return n;
+            No melhor = null;
+            int grau = -1;
+            for (No n : mapa.nos()) {
+                int gr = enlacesDe(n).size();
+                if (gr > grau) { grau = gr; melhor = n; }
+            }
+            return melhor;
         }
 
         void zoomCentro(double fator) {
@@ -942,10 +969,47 @@ public class TopologiaMapaPanel extends JPanel {
                 AffineTransform t = new AffineTransform();
                 t.translate(offX, offY);
                 t.scale(escala, escala);
+                AffineTransform original = g.getTransform();
                 g.transform(t);
                 desenharMapa(g, escala, true);
+                g.setTransform(original);
+                desenharSobreposicoes(g);
             } finally {
                 g.dispose();
+            }
+        }
+
+        /** Resumo (canto superior esquerdo) e legenda (canto inferior esquerdo), fixos na tela. */
+        private void desenharSobreposicoes(Graphics2D g) {
+            g.setFont(getFont().deriveFont(Font.PLAIN, 11.5f));
+            FontMetrics fm = g.getFontMetrics();
+            String resumo = textoResumo();
+            int pad = 8;
+            int wRes = fm.stringWidth(resumo) + pad * 2;
+            g.setColor(new Color(15, 19, 26, 215));
+            g.fillRoundRect(10, 10, wRes, fm.getHeight() + 8, 10, 10);
+            g.setColor(SwingThemeHelper.TEXT_SECONDARY);
+            g.drawString(resumo, 10 + pad, 10 + 4 + fm.getAscent());
+
+            String[] nomes = {"Cobre", "Fibra", "Incerto / STP", "Loop"};
+            Color[] cores = {COR_COBRE, COR_FIBRA, COR_ATENCAO, COR_LOOP};
+            int larg = pad;
+            for (String nm : nomes) larg += 22 + fm.stringWidth(nm) + 14;
+            int alt = fm.getHeight() + 10;
+            int y0 = getHeight() - alt - 10;
+            g.setColor(new Color(15, 19, 26, 215));
+            g.fillRoundRect(10, y0, larg, alt, 10, 10);
+            int x = 10 + pad;
+            int yLinha = y0 + alt / 2;
+            for (int i = 0; i < nomes.length; i++) {
+                g.setColor(cores[i]);
+                g.setStroke(i == 2
+                        ? new BasicStroke(2.4f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 10f, new float[]{4f, 3f}, 0f)
+                        : new BasicStroke(2.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                g.drawLine(x, yLinha, x + 16, yLinha);
+                g.setColor(SwingThemeHelper.TEXT_SECONDARY);
+                g.drawString(nomes[i], x + 22, yLinha + fm.getAscent() / 2 - 1);
+                x += 22 + fm.stringWidth(nomes[i]) + 14;
             }
         }
 
@@ -1004,7 +1068,16 @@ public class TopologiaMapaPanel extends JPanel {
             }
         }
 
+        /** Escala do desenho atual (tela ou imagem), para manter textos com tamanho mínimo legível. */
+        private double escalaDesenho = 1.0;
+
+        /** Tamanho de fonte (em unidades do mapa) que garante pelo menos {@code minTela} px na tela. */
+        private float fonte(float base, float minTela) {
+            return (float) Math.max(base, minTela / Math.max(0.05, escalaDesenho));
+        }
+
         private void desenharMapa(Graphics2D g, double escalaAtual, boolean interativo) {
+            escalaDesenho = escalaAtual;
             Map<Enlace, Line2D> linhas = calcularLinhas();
             String idFoco = interativo && selecionado != null ? selecionado.id() : null;
 
@@ -1030,7 +1103,7 @@ public class TopologiaMapaPanel extends JPanel {
             // na dica do cabo e no painel de detalhes).
             boolean mostrarPortas = escalaAtual >= 0.5;
             if (mostrarPortas) {
-                Font fPorta = getFont().deriveFont(Font.BOLD, 9.5f);
+                Font fPorta = getFont().deriveFont(Font.BOLD, fonte(9.5f, 8.5f));
                 g.setFont(fPorta);
                 List<Rectangle2D> ocupadas = new ArrayList<>();
                 List<Rectangle2D> etiquetas = new ArrayList<>();
@@ -1164,17 +1237,18 @@ public class TopologiaMapaPanel extends JPanel {
 
             // Nome e IP abaixo do ícone (como no Planejador)
             Font base = getFont();
-            g.setFont(base.deriveFont(Font.BOLD, 12f));
+            g.setFont(base.deriveFont(Font.BOLD, fonte(12f, 10.5f)));
             FontMetrics fm = g.getFontMetrics();
-            String nome = encurtar(valorOu(n.nome(), "?"), 26);
+            String nome = caberNaLargura(valorOu(n.nome(), "?"), fm, 176);
             g.setColor(SwingThemeHelper.TEXT_PRIMARY);
             g.drawString(nome, (float) (cx - fm.stringWidth(nome) / 2.0), (float) (y + 62));
             if (!vazio(n.ip())) {
-                g.setFont(base.deriveFont(Font.PLAIN, 10.5f));
+                float yIp = (float) (y + 62 + fm.getHeight() * 0.95);
+                g.setFont(base.deriveFont(Font.PLAIN, fonte(10.5f, 9.5f)));
                 fm = g.getFontMetrics();
                 String ip = n.ip().trim();
                 g.setColor(COR_IP);
-                g.drawString(ip, (float) (cx - fm.stringWidth(ip) / 2.0), (float) (y + 76));
+                g.drawString(ip, (float) (cx - fm.stringWidth(ip) / 2.0), yIp);
             }
         }
 
@@ -1196,6 +1270,14 @@ public class TopologiaMapaPanel extends JPanel {
             g.fill(r);
             g.setColor(Color.WHITE);
             g.drawString(txt, (float) (cx - fm.stringWidth(txt) / 2.0), (float) (y - 14 + 10.5));
+        }
+
+        /** Abrevia o texto (com reticências) para não passar da largura do espaço do equipamento. */
+        private String caberNaLargura(String s, FontMetrics fm, double largura) {
+            if (fm.stringWidth(s) <= largura) return s;
+            String r = s;
+            while (r.length() > 3 && fm.stringWidth(r + "…") > largura) r = r.substring(0, r.length() - 1);
+            return r + "…";
         }
 
         private String encurtar(String s, int max) {

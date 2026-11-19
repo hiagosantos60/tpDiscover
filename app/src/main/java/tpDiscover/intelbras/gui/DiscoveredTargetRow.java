@@ -95,6 +95,19 @@ public class DiscoveredTargetRow {
 
     public void setStatus(String status) {
         this.status = status != null ? status : "";
+        this.detalhe = "";
+    }
+
+    /** Mensagem técnica completa (exibida ao passar o mouse na coluna Situação). */
+    private String detalhe = "";
+
+    public String getDetalhe() {
+        return detalhe;
+    }
+
+    public void setStatus(String status, String detalhe) {
+        setStatus(status);
+        this.detalhe = detalhe != null ? detalhe : "";
     }
 
     public EstadoColeta getEstado() {
