@@ -1,7 +1,7 @@
 package tpDiscover.intelbras.gui;
 
 import com.formdev.flatlaf.FlatClientProperties;
-import com.formdev.flatlaf.FlatDarkLaf;
+import com.formdev.flatlaf.FlatLightLaf;
 
 import javax.swing.BorderFactory;
 import javax.swing.Icon;
@@ -38,50 +38,87 @@ import java.util.Locale;
 
 import tpDiscover.intelbras.util.Compat;
 /**
- * Tema visual do tpDiscover: FlatLaf Dark com paleta própria (grafite + azul),
- * tipografia levemente maior, ícones vetoriais Java2D e utilitários de estilo
- * reutilizados por todas as abas (assim nenhuma tela define cores soltas).
+ * Tema visual do tpDiscover no padrão visual do STR (telas de produto Intelbras): fundo cinza-claro
+ * (canvas) com painéis brancos sem borda, navegação em ardósia e o verde da marca como ponto focal
+ * (item ativo, barra dos títulos de painel e botão primário). Âmbar só em pendente/atenção e
+ * vermelho só em erro, exclusão e cancelamento. Todas as telas usam estes tokens (nenhuma define
+ * cores soltas).
  */
 public final class SwingThemeHelper {
 
-    // ---- Superfícies ----
-    public static final Color BG_WINDOW = new Color(0x15171C);
-    public static final Color BG_HEADER = new Color(0x101216);
-    public static final Color BG_CARD = new Color(0x1D2027);
-    public static final Color BG_INPUT = new Color(0x14161B);
-    public static final Color BG_CONSOLE = new Color(0x0F1114);
-    public static final Color BG_TABLE_ALT = new Color(0x21252D);
-    public static final Color BG_HOVER = new Color(0x272B34);
-    public static final Color BORDER_SUBTLE = new Color(0x2B303A);
-    public static final Color BORDER_STRONG = new Color(0x3A404C);
+    // ---- Superfícies (tokens do STR) ----
+    /** --canvas: fundo da janela, visível só entre os painéis. */
+    public static final Color BG_WINDOW = new Color(0xEEF1F3);
+    /** --nav-bg: barra superior (navegação). */
+    public static final Color NAV_BG = new Color(0x3E5055);
+    public static final Color NAV_FG = Color.WHITE;
+    public static final Color NAV_FG2 = new Color(0xD3DCE0);
+    /** --nav-hover: branco a 8% sobre a ardósia. */
+    public static final Color NAV_HOVER = new Color(0x4D5E63);
+    /** Mantido por compatibilidade: a barra superior usa a cor da navegação. */
+    public static final Color BG_HEADER = NAV_BG;
+    /** --bg: painel, modal, campo, botão de contorno. */
+    public static final Color BG_CARD = Color.WHITE;
+    public static final Color BG_INPUT = Color.WHITE;
+    /** --bg3: cabeçalho de tabela, hover de linha, campo desabilitado. */
+    public static final Color BG_SUBTLE = new Color(0xF5F7F8);
+    public static final Color BG_CONSOLE = BG_SUBTLE;
+    public static final Color BG_TABLE_ALT = BG_SUBTLE;
+    public static final Color BG_HOVER = BG_SUBTLE;
+    /** --rule: divisórias de tabela, modal e abas. */
+    public static final Color BORDER_SUBTLE = new Color(0xE2E9ED);
+    /** --border2: contorno de campos e botões. */
+    public static final Color BORDER_STRONG = new Color(0xBBCAD2);
 
     // ---- Texto ----
-    public static final Color TEXT_PRIMARY = new Color(0xE8EBF1);
-    public static final Color TEXT_SECONDARY = new Color(0xB4BAC6);
-    public static final Color TEXT_MUTED = new Color(0x828A9A);
+    /** --ink / --text: texto principal e títulos (ardósia). */
+    public static final Color TEXT_PRIMARY = new Color(0x3E5055);
+    /** --text2: rótulos e legendas. */
+    public static final Color TEXT_SECONDARY = new Color(0x5E6D75);
+    /** --text3: placeholder e texto apagado. */
+    public static final Color TEXT_MUTED = new Color(0x5B6970);
 
-    // ---- Destaque ----
-    public static final Color ACCENT_PRIMARY = new Color(0x3B82F6);
-    public static final Color ACCENT_HOVER = new Color(0x5B96F8);
-    public static final Color ACCENT_PRESSED = new Color(0x2563EB);
+    // ---- Marca / destaque ----
+    /** --accent: botão primário, item ativo, links, foco (sempre este verde sob texto branco). */
+    public static final Color ACCENT_PRIMARY = new Color(0x00863F);
+    /** --accent-press: hover do primário (escurece, não clareia). */
+    public static final Color ACCENT_HOVER = new Color(0x006F34);
+    /** --brand-deep. */
+    public static final Color ACCENT_PRESSED = new Color(0x045C2F);
     public static final Color ACCENT_PRIMARY_TEXT = Color.WHITE;
+    /** --accent-dim (verde a 10% sobre branco). */
+    public static final Color ACCENT_DIM = new Color(0xE6F3EC);
+    /** --brand: preenchimentos sem texto (barra do título, progresso). */
+    public static final Color BRAND = new Color(0x00A335);
+    public static final Color BRAND_LIGHT = new Color(0x87C984);
+    /** --slate-dark: segundo indicador e filtro ativo. */
+    public static final Color SLATE_DARK = new Color(0x31586C);
+    public static final Color SLATE = new Color(0x50788A);
+    public static final Color SLATE_LIGHT = new Color(0x6990A7);
+    public static final Color SLATE_SOFT = new Color(0xE7EFF3);
 
-    // ---- Estados ----
-    public static final Color STATUS_OK_BG = new Color(0x15301F);
-    public static final Color STATUS_OK_FG = new Color(0x5EE08F);
-    public static final Color STATUS_OK_BORDER = new Color(0x255B3A);
-    public static final Color STATUS_WARN_BG = new Color(0x352A12);
-    public static final Color STATUS_WARN_FG = new Color(0xFBC75A);
-    public static final Color STATUS_WARN_BORDER = new Color(0x6B5321);
-    public static final Color STATUS_ERR_BG = new Color(0x3A1A1E);
-    public static final Color STATUS_ERR_FG = new Color(0xFF8A90);
-    public static final Color STATUS_ERR_BORDER = new Color(0x7A3239);
-    public static final Color STATUS_RUN_BG = new Color(0x172A47);
-    public static final Color STATUS_RUN_FG = new Color(0x82B6FF);
-    public static final Color STATUS_RUN_BORDER = new Color(0x2B4F85);
-    public static final Color STATUS_IDLE_BG = new Color(0x262A32);
-    public static final Color STATUS_IDLE_FG = new Color(0xA9B0BD);
-    public static final Color STATUS_IDLE_BORDER = new Color(0x363B46);
+    // ---- Estados (etiqueta: fundo translúcido da própria cor e texto na cor cheia) ----
+    public static final Color STATUS_OK_BG = ACCENT_DIM;
+    public static final Color STATUS_OK_FG = ACCENT_PRIMARY;
+    public static final Color STATUS_OK_BORDER = new Color(0xC7E4D5);
+    /** Âmbar: só pendente/atenção (--warn / --warn-dim). */
+    public static final Color STATUS_WARN_BG = new Color(0xF7EED8);
+    public static final Color STATUS_WARN_FG = new Color(0x765A0B);
+    public static final Color STATUS_WARN_BORDER = new Color(0xF0DFB4);
+    /** --warn-hi: preenchimento de pendente (sem texto). */
+    public static final Color WARN_HI = new Color(0xD4A327);
+    /** Vermelho: só erro, exclusão e cancelamento (--danger / --danger-dim). */
+    public static final Color STATUS_ERR_BG = new Color(0xFAEEEF);
+    public static final Color STATUS_ERR_FG = new Color(0xC62533);
+    public static final Color STATUS_ERR_BORDER = new Color(0xF4D3D6);
+    /** Em andamento: azul-ardósia (--slate-soft / --slate-dark). */
+    public static final Color STATUS_RUN_BG = SLATE_SOFT;
+    public static final Color STATUS_RUN_FG = SLATE_DARK;
+    public static final Color STATUS_RUN_BORDER = new Color(0xC9DCE6);
+    /** Neutro (--info-dim / --text2). */
+    public static final Color STATUS_IDLE_BG = new Color(0xEFF0F1);
+    public static final Color STATUS_IDLE_FG = TEXT_SECONDARY;
+    public static final Color STATUS_IDLE_BORDER = new Color(0xDDE3E6);
 
     public enum IconKind {
         SEARCH, PLAY, STOP, REFRESH, PDF, FOLDER, PLUS, MINUS, CHECK, ALERT, CLEAR, NETWORK, LIST, SLIDERS, COPY,
@@ -102,140 +139,232 @@ public final class SwingThemeHelper {
         if (os.contains("mac")) {
             System.setProperty("apple.awt.application.name", "tpDiscover");
             System.setProperty("apple.laf.useScreenMenuBar", "true");
-            System.setProperty("apple.awt.application.appearance", "NSAppearanceNameDarkAqua");
         }
         try {
-            FlatDarkLaf.setup();
+            FlatLightLaf.setup();
 
             Font base = UIManager.getFont("defaultFont");
             if (base != null) {
                 UIManager.put("defaultFont", base.deriveFont(Math.max(13.5f, base.getSize2D())));
             }
 
-            UIManager.put("Component.arc", 10);
-            UIManager.put("Button.arc", 10);
-            UIManager.put("TextComponent.arc", 10);
+            // Cantos do STR: 3px botão/etiqueta, 4px campo, 6px painel, 8px modal
+            UIManager.put("Component.arc", 4);
+            UIManager.put("Button.arc", 3);
+            UIManager.put("TextComponent.arc", 4);
             UIManager.put("ProgressBar.arc", 999);
-            UIManager.put("CheckBox.arc", 6);
-            UIManager.put("Component.focusWidth", 1);
+            UIManager.put("CheckBox.arc", 3);
+            // Foco: borda verde com halo de 3px a 10%
+            UIManager.put("Component.focusWidth", 3);
             UIManager.put("Component.innerFocusWidth", 0);
-            UIManager.put("Component.focusColor", ACCENT_PRIMARY);
+            UIManager.put("Component.focusColor", new Color(0, 134, 63, 26));
             UIManager.put("Component.focusedBorderColor", ACCENT_PRIMARY);
             UIManager.put("Component.borderColor", BORDER_STRONG);
             UIManager.put("Component.disabledBorderColor", BORDER_SUBTLE);
             UIManager.put("Component.accentColor", ACCENT_PRIMARY);
+            UIManager.put("Component.error.focusedBorderColor", STATUS_ERR_FG);
+            UIManager.put("Component.error.borderColor", STATUS_ERR_FG);
 
             UIManager.put("Panel.background", BG_WINDOW);
+            UIManager.put("Label.foreground", TEXT_PRIMARY);
             UIManager.put("TextField.background", BG_INPUT);
             UIManager.put("PasswordField.background", BG_INPUT);
             UIManager.put("FormattedTextField.background", BG_INPUT);
             UIManager.put("Spinner.background", BG_INPUT);
             UIManager.put("ComboBox.background", BG_INPUT);
             UIManager.put("ComboBox.buttonBackground", BG_INPUT);
+            UIManager.put("ComboBox.buttonEditableBackground", BG_INPUT);
+            UIManager.put("TextField.inactiveBackground", BG_SUBTLE);
+            UIManager.put("TextField.disabledBackground", BG_SUBTLE);
+            UIManager.put("PasswordField.disabledBackground", BG_SUBTLE);
+            UIManager.put("ComboBox.disabledBackground", BG_SUBTLE);
+            UIManager.put("Spinner.disabledBackground", BG_SUBTLE);
             UIManager.put("TextComponent.placeholderForeground", TEXT_MUTED);
-            UIManager.put("TextField.margin", new Insets(6, 10, 6, 10));
-            UIManager.put("PasswordField.margin", new Insets(6, 10, 6, 10));
-            UIManager.put("ComboBox.padding", new Insets(5, 8, 5, 8));
+            UIManager.put("TextField.foreground", TEXT_PRIMARY);
+            UIManager.put("TextArea.foreground", TEXT_PRIMARY);
+            UIManager.put("TextField.margin", new Insets(6, 12, 6, 12));
+            UIManager.put("PasswordField.margin", new Insets(6, 12, 6, 12));
+            UIManager.put("ComboBox.padding", new Insets(5, 10, 5, 10));
+            UIManager.put("TextField.selectionBackground", ACCENT_DIM);
+            UIManager.put("TextField.selectionForeground", TEXT_PRIMARY);
+            UIManager.put("PasswordField.selectionBackground", ACCENT_DIM);
+            UIManager.put("PasswordField.selectionForeground", TEXT_PRIMARY);
+            UIManager.put("TextArea.selectionBackground", ACCENT_DIM);
+            UIManager.put("TextArea.selectionForeground", TEXT_PRIMARY);
+            UIManager.put("ComboBox.selectionBackground", ACCENT_DIM);
+            UIManager.put("ComboBox.selectionForeground", TEXT_PRIMARY);
+            UIManager.put("List.selectionBackground", ACCENT_DIM);
+            UIManager.put("List.selectionForeground", TEXT_PRIMARY);
 
-            UIManager.put("Button.background", BG_HOVER);
+            UIManager.put("Button.background", BG_CARD);
+            UIManager.put("Button.foreground", TEXT_PRIMARY);
             UIManager.put("Button.borderColor", BORDER_STRONG);
+            UIManager.put("Button.hoverBorderColor", ACCENT_PRIMARY);
             UIManager.put("Button.default.background", ACCENT_PRIMARY);
             UIManager.put("Button.default.foreground", Color.WHITE);
+            UIManager.put("Button.default.hoverBackground", ACCENT_HOVER);
+            UIManager.put("Button.default.pressedBackground", ACCENT_PRESSED);
+            UIManager.put("Button.default.borderWidth", 0);
+            UIManager.put("CheckBox.icon.checkmarkColor", Color.WHITE);
+            UIManager.put("CheckBox.icon.selectedBackground", ACCENT_PRIMARY);
+            UIManager.put("CheckBox.icon.selectedBorderColor", ACCENT_PRIMARY);
+            UIManager.put("CheckBox.icon.borderColor", BORDER_STRONG);
+            UIManager.put("CheckBox.icon.focusedBorderColor", ACCENT_PRIMARY);
+            UIManager.put("CheckBox.icon.hoverBorderColor", ACCENT_PRIMARY);
 
-            UIManager.put("ProgressBar.foreground", ACCENT_PRIMARY);
-            UIManager.put("ProgressBar.background", BG_INPUT);
-            UIManager.put("ProgressBar.selectionForeground", Color.WHITE);
+            UIManager.put("ProgressBar.foreground", BRAND);
+            UIManager.put("ProgressBar.background", BORDER_SUBTLE);
+            UIManager.put("ProgressBar.selectionForeground", TEXT_PRIMARY);
             UIManager.put("ProgressBar.selectionBackground", TEXT_PRIMARY);
 
             UIManager.put("ScrollBar.width", 10);
             UIManager.put("ScrollBar.thumbArc", 999);
             UIManager.put("ScrollBar.thumbInsets", new Insets(2, 2, 2, 2));
             UIManager.put("ScrollBar.track", BG_CARD);
+            UIManager.put("ScrollBar.thumb", BORDER_STRONG);
+            UIManager.put("ScrollBar.hoverThumbColor", SLATE_LIGHT);
             UIManager.put("ScrollPane.background", BG_CARD);
 
+            // Tabela: cabeçalho --bg3 com texto --text2 em peso normal, divisória --rule
             UIManager.put("Table.background", BG_CARD);
             UIManager.put("Table.foreground", TEXT_PRIMARY);
             UIManager.put("Table.gridColor", BORDER_SUBTLE);
-            UIManager.put("Table.selectionBackground", new Color(0x23406E));
-            UIManager.put("Table.selectionForeground", Color.WHITE);
-            UIManager.put("Table.selectionInactiveBackground", new Color(0x2A3242));
-            UIManager.put("Table.cellMargins", new Insets(2, 10, 2, 10));
-            UIManager.put("TableHeader.background", BG_HEADER);
-            UIManager.put("TableHeader.foreground", TEXT_MUTED);
-            UIManager.put("TableHeader.separatorColor", BG_HEADER);
+            UIManager.put("Table.selectionBackground", ACCENT_DIM);
+            UIManager.put("Table.selectionForeground", TEXT_PRIMARY);
+            UIManager.put("Table.selectionInactiveBackground", BG_SUBTLE);
+            UIManager.put("Table.selectionInactiveForeground", TEXT_PRIMARY);
+            UIManager.put("Table.cellMargins", new Insets(2, 14, 2, 14));
+            UIManager.put("TableHeader.background", BG_SUBTLE);
+            UIManager.put("TableHeader.foreground", TEXT_SECONDARY);
+            UIManager.put("TableHeader.separatorColor", BG_SUBTLE);
             UIManager.put("TableHeader.bottomSeparatorColor", BORDER_SUBTLE);
-            UIManager.put("TableHeader.height", 34);
-            UIManager.put("TableHeader.cellMargins", new Insets(4, 10, 4, 10));
+            UIManager.put("TableHeader.height", 36);
+            UIManager.put("TableHeader.cellMargins", new Insets(4, 14, 4, 14));
 
+            // Abas internas: sublinhado verde, divisória --rule
             UIManager.put("TabbedPane.showTabSeparators", false);
             UIManager.put("TabbedPane.tabHeight", 38);
             UIManager.put("TabbedPane.underlineColor", ACCENT_PRIMARY);
             UIManager.put("TabbedPane.inactiveUnderlineColor", ACCENT_PRIMARY);
             UIManager.put("TabbedPane.tabSelectionHeight", 2);
             UIManager.put("TabbedPane.background", BG_CARD);
+            UIManager.put("TabbedPane.foreground", TEXT_SECONDARY);
+            UIManager.put("TabbedPane.selectedForeground", ACCENT_PRIMARY);
             UIManager.put("TabbedPane.selectedBackground", BG_CARD);
-            UIManager.put("TabbedPane.hoverColor", BG_HOVER);
+            UIManager.put("TabbedPane.hoverColor", BG_SUBTLE);
+            UIManager.put("TabbedPane.focusColor", BG_CARD);
             UIManager.put("TabbedPane.contentAreaColor", BORDER_SUBTLE);
 
             UIManager.put("PopupMenu.background", BG_CARD);
-            UIManager.put("PopupMenu.borderColor", BORDER_STRONG);
+            UIManager.put("PopupMenu.borderColor", BORDER_SUBTLE);
             UIManager.put("MenuItem.background", BG_CARD);
-            UIManager.put("MenuItem.selectionBackground", BG_HOVER);
+            UIManager.put("MenuItem.foreground", TEXT_PRIMARY);
+            UIManager.put("MenuItem.selectionBackground", ACCENT_DIM);
+            UIManager.put("MenuItem.selectionForeground", ACCENT_PRIMARY);
             UIManager.put("MenuItem.margin", new Insets(6, 10, 6, 14));
             UIManager.put("Separator.foreground", BORDER_SUBTLE);
-            UIManager.put("ToolTip.background", new Color(0x262A33));
-            UIManager.put("ToolTip.foreground", TEXT_PRIMARY);
+            UIManager.put("ToolTip.background", TEXT_PRIMARY);
+            UIManager.put("ToolTip.foreground", Color.WHITE);
             UIManager.put("OptionPane.background", BG_CARD);
+            UIManager.put("OptionPane.messageForeground", TEXT_PRIMARY);
             UIManager.put("RootPane.background", BG_WINDOW);
-            UIManager.put("TitlePane.background", BG_HEADER);
+            // Barra de título em ardósia, emendada com a navegação (sem o fundo "unificado" claro da janela)
+            UIManager.put("TitlePane.unifiedBackground", false);
+            UIManager.put("TitlePane.background", NAV_BG);
+            UIManager.put("TitlePane.foreground", NAV_FG);
+            UIManager.put("TitlePane.inactiveBackground", NAV_BG);
+            UIManager.put("TitlePane.inactiveForeground", NAV_FG2);
+            UIManager.put("TitlePane.embeddedForeground", NAV_FG2);
+            UIManager.put("TitlePane.buttonHoverBackground", NAV_HOVER);
+            UIManager.put("TitlePane.buttonPressedBackground", new Color(0x5B6B70));
+            UIManager.put("TitlePane.closeHoverBackground", STATUS_ERR_FG);
+            UIManager.put("TitlePane.closePressedBackground", new Color(0xA61E2A));
+            UIManager.put("TitlePane.closeHoverForeground", Color.WHITE);
+            UIManager.put("TitlePane.closePressedForeground", Color.WHITE);
             UIManager.put("Spinner.arrowButtonStyle", "chevron");
 
             // Reaplica o LaF para que a fonte base maior e os ajustes acima valham em todos os componentes.
-            FlatDarkLaf.setup();
+            FlatLightLaf.setup();
         } catch (Exception ignored) {
         }
     }
 
+    // ------------------------------------------------------------------ Fontes
+
+    /**
+     * Fonte de peso médio (Segoe UI Semibold no Windows) para títulos, item ativo, botões e etiquetas:
+     * o padrão STR não usa negrito 700. Sem a variante no sistema, cai para negrito.
+     */
+    public static Font fonteSemibold(float tamanho) {
+        Font f = UIManager.getFont("semibold.font");
+        if (f == null) {
+            Font d = UIManager.getFont("defaultFont");
+            return (d != null ? d : new Font(Font.SANS_SERIF, Font.PLAIN, 13)).deriveFont(Font.BOLD, tamanho);
+        }
+        return f.deriveFont(tamanho);
+    }
+
+    private static float tamanhoBase() {
+        Font d = UIManager.getFont("defaultFont");
+        return d != null ? d.getSize2D() : 13.5f;
+    }
+
     // ------------------------------------------------------------------ Cards e textos
 
+    /** Painel branco do STR: canto de 6px, 20px internos e sem borda (separado pelo tom do canvas). */
     public static JPanel criarCardArredondado() {
         JPanel p = new JPanel();
         p.setBackground(BG_CARD);
-        p.putClientProperty(FlatClientProperties.STYLE,
-                "arc: 14; background: " + hex(BG_CARD) + "; border: 1,1,1,1," + hex(BORDER_SUBTLE) + ",1,14");
-        p.setBorder(BorderFactory.createEmptyBorder(18, 20, 18, 20));
+        p.putClientProperty(FlatClientProperties.STYLE, "arc: 6; background: " + hex(BG_CARD));
+        p.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
         return p;
     }
 
+    /** Título de painel: peso médio, recuo de 12px e a barra vertical verde (--brand) de 3x18px. */
     public static JLabel criarTituloSecao(String texto) {
-        JLabel lbl = new JLabel(texto);
+        JLabel lbl = new JLabel(texto) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(BRAND);
+                int alt = Math.min(18, getHeight());
+                g2.fillRoundRect(0, (getHeight() - alt) / 2, 3, alt, 2, 2);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
         lbl.setForeground(TEXT_PRIMARY);
-        lbl.setFont(lbl.getFont().deriveFont(Font.BOLD, lbl.getFont().getSize2D() + 2.5f));
+        lbl.setFont(fonteSemibold(tamanhoBase() * 1.15f + 1f));
+        lbl.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 0));
         return lbl;
     }
 
+    /** Rótulo de campo: texto --text2, acima do campo. */
     public static JLabel criarRotuloCampo(String texto) {
         JLabel lbl = new JLabel(texto);
-        lbl.setForeground(TEXT_PRIMARY);
-        lbl.setFont(lbl.getFont().deriveFont(Font.BOLD));
+        lbl.setForeground(TEXT_SECONDARY);
+        lbl.setFont(fonteSemibold(tamanhoBase() - 0.5f));
         return lbl;
     }
 
     /** Texto auxiliar discreto (dicas abaixo de campos e subtítulos). */
     public static JLabel criarTextoAjuda(String texto) {
         JLabel l = new JLabel(texto);
-        l.setForeground(TEXT_MUTED);
+        l.setForeground(TEXT_SECONDARY);
         l.setFont(l.getFont().deriveFont(l.getFont().getSize2D() - 0.5f));
         return l;
     }
 
-    /** Cabeçalho padrão de card: título + subtítulo. */
+    /** Cabeçalho padrão de card: título (com a barra verde) + subtítulo alinhado ao texto do título. */
     public static JPanel criarCabecalho(String titulo, String subtitulo) {
         JPanel header = new JPanel(new java.awt.BorderLayout(0, 4));
         header.setOpaque(false);
         header.add(criarTituloSecao(titulo), java.awt.BorderLayout.NORTH);
         if (subtitulo != null && !Compat.isBlank(subtitulo)) {
-            header.add(criarTextoAjuda(subtitulo), java.awt.BorderLayout.SOUTH);
+            JLabel sub = criarTextoAjuda(subtitulo);
+            sub.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 0));
+            header.add(sub, java.awt.BorderLayout.SOUTH);
         }
         return header;
     }
@@ -247,17 +376,15 @@ public final class SwingThemeHelper {
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(new Color(0x1E3A66));
-                g2.fillOval(0, 0, getWidth() - 1, getHeight() - 1);
                 g2.setColor(ACCENT_PRIMARY);
-                g2.drawOval(0, 0, getWidth() - 1, getHeight() - 1);
+                g2.fillOval(0, 0, getWidth() - 1, getHeight() - 1);
                 g2.dispose();
                 super.paintComponent(g);
             }
         };
-        l.setForeground(STATUS_RUN_FG);
-        l.setFont(l.getFont().deriveFont(Font.BOLD, 12f));
-        Dimension d = new Dimension(26, 26);
+        l.setForeground(Color.WHITE);
+        l.setFont(fonteSemibold(12f));
+        Dimension d = new Dimension(24, 24);
         l.setPreferredSize(d);
         l.setMinimumSize(d);
         l.setMaximumSize(d);
@@ -267,8 +394,9 @@ public final class SwingThemeHelper {
     /** Pinta um painel/label como "faixa" de status (fundo + borda + cor do texto). */
     public static void estilizarFaixa(JComponent c, TipoStatus tipo, int arc) {
         Color[] cores = coresStatus(tipo);
+        int a = Math.min(arc, 6);
         c.putClientProperty(FlatClientProperties.STYLE,
-                "arc: " + arc + "; background: " + hex(cores[0]) + "; border: 1,1,1,1," + hex(cores[2]) + ",1," + arc);
+                "arc: " + a + "; background: " + hex(cores[0]) + "; border: 1,1,1,1," + hex(cores[2]) + ",1," + a);
     }
 
     public static Color corTexto(TipoStatus tipo) {
@@ -291,69 +419,93 @@ public final class SwingThemeHelper {
         }
     }
 
-    /** Badge arredondado do cabeçalho, colorido conforme o estado. */
+    /** Etiqueta de estado do cabeçalho (canto 3px, fundo translúcido da cor e texto na cor cheia). */
     public static void estilizarBadgeStatus(JLabel badge, TipoStatus tipo) {
         Color[] cores = coresStatus(tipo);
         badge.setOpaque(true);
         badge.putClientProperty(FlatClientProperties.STYLE,
-                "arc: 999; background: " + hex(cores[0]) + "; border: 5,14,5,14," + hex(cores[2]) + ",1,999");
+                "arc: 3; background: " + hex(cores[0]) + "; border: 4,10,4,10," + hex(cores[0]) + ",1,3");
         badge.setForeground(cores[1]);
+        badge.setFont(fonteSemibold(13f));
         badge.setIcon(new DotIcon(cores[1]));
-        badge.setIconTextGap(8);
+        badge.setIconTextGap(7);
     }
 
     // ------------------------------------------------------------------ Botões
 
+    private static final String DESABILITADO =
+            "disabledBackground: #F5F7F8; disabledText: #8A9BA3; disabledBorderColor: #E2E9ED; ";
+
+    /** Botão primário: fundo --accent, texto branco, hover --accent-press (escurece). */
     public static void estilizarBotaoPrimario(JButton btn) {
-        btn.setFont(btn.getFont().deriveFont(Font.BOLD));
+        btn.setFont(fonteSemibold(btn.getFont().getSize2D()));
         btn.putClientProperty(FlatClientProperties.STYLE,
-                "arc: 10; background: " + hex(ACCENT_PRIMARY) + "; foreground: #FFFFFF; borderWidth: 0; focusWidth: 0; "
+                "arc: 3; background: " + hex(ACCENT_PRIMARY) + "; foreground: #FFFFFF; borderWidth: 0; focusWidth: 0; "
                         + "hoverBackground: " + hex(ACCENT_HOVER) + "; pressedBackground: " + hex(ACCENT_PRESSED) + "; "
-                        + "disabledBackground: #263149; disabledText: #7D8799; margin: 8,18,8,18");
+                        + "disabledBackground: #C9D5DB; disabledText: #FFFFFF; margin: 8,16,8,16");
     }
 
+    private static String estiloContorno() {
+        return "arc: 3; background: #FFFFFF; foreground: " + hex(TEXT_PRIMARY) + "; "
+                + "borderColor: " + hex(BORDER_STRONG) + "; focusWidth: 0; "
+                + "hoverBackground: #FFFFFF; hoverBorderColor: " + hex(ACCENT_PRIMARY) + "; "
+                + "hoverForeground: " + hex(ACCENT_PRIMARY) + "; pressedBackground: " + hex(ACCENT_DIM) + "; "
+                + DESABILITADO;
+    }
+
+    /** Botão de contorno: fundo branco, borda --border2, texto ardósia; hover deixa borda e texto verdes. */
     public static void estilizarBotaoSecundario(JButton btn) {
-        btn.putClientProperty(FlatClientProperties.STYLE,
-                "arc: 10; background: " + hex(BG_HOVER) + "; foreground: " + hex(TEXT_PRIMARY) + "; "
-                        + "borderColor: " + hex(BORDER_STRONG) + "; focusWidth: 0; "
-                        + "hoverBackground: #303541; pressedBackground: #353B48; margin: 8,16,8,16");
+        btn.setFont(fonteSemibold(btn.getFont().getSize2D()));
+        btn.putClientProperty(FlatClientProperties.STYLE, estiloContorno() + "margin: 8,16,8,16");
     }
 
-    /** Botão secundário compacto (barras de ferramentas). */
+    /** Botão de contorno compacto (barras de ferramentas). */
     public static void estilizarBotaoCompacto(JButton btn) {
+        btn.putClientProperty(FlatClientProperties.STYLE, estiloContorno() + "margin: 5,12,5,12");
+    }
+
+    /** Filtro (botão de contorno que liga/desliga): ativo vira bloco --slate-dark com texto branco. */
+    public static void estilizarFiltro(JToggleButton btn) {
+        btn.setFocusPainted(false);
+        btn.putClientProperty(FlatClientProperties.STYLE, estiloContorno()
+                + "selectedBackground: " + hex(SLATE_DARK) + "; selectedForeground: #FFFFFF; "
+                + "margin: 5,12,5,12");
+    }
+
+    /** Botão de texto no verde de link, sem fundo nem borda. */
+    public static void estilizarBotaoLink(JButton btn) {
+        btn.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_TOOLBAR_BUTTON);
+        btn.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
         btn.putClientProperty(FlatClientProperties.STYLE,
-                "arc: 8; background: " + hex(BG_HOVER) + "; foreground: " + hex(TEXT_SECONDARY) + "; "
-                        + "borderColor: " + hex(BORDER_STRONG) + "; focusWidth: 0; "
-                        + "hoverBackground: #303541; pressedBackground: #353B48; "
-                        + "disabledBackground: " + hex(BG_CARD) + "; disabledText: #5C6370; disabledBorderColor: " + hex(BORDER_SUBTLE) + "; "
-                        + "margin: 5,11,5,11");
+                "arc: 3; foreground: " + hex(ACCENT_PRIMARY) + "; hoverBackground: " + hex(ACCENT_DIM) + "; margin: 1,6,1,6");
     }
 
     /** Botão "fantasma": sem fundo, só texto/ícone (ações discretas como Copiar/Limpar). */
     public static void estilizarBotaoFantasma(JButton btn) {
         btn.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_TOOLBAR_BUTTON);
         btn.putClientProperty(FlatClientProperties.STYLE,
-                "arc: 8; foreground: " + hex(TEXT_SECONDARY) + "; hoverBackground: " + hex(BG_HOVER) + "; margin: 4,8,4,8");
+                "arc: 3; foreground: " + hex(TEXT_SECONDARY) + "; hoverBackground: " + hex(ACCENT_DIM) + "; margin: 4,8,4,8");
     }
 
+    /** Ação de cancelar/excluir: vermelho só aqui (fundo --danger-dim, texto --danger). */
     public static void estilizarBotaoPerigo(JButton btn) {
-        btn.setFont(btn.getFont().deriveFont(Font.BOLD));
+        btn.setFont(fonteSemibold(btn.getFont().getSize2D()));
         btn.putClientProperty(FlatClientProperties.STYLE,
-                "arc: 10; background: " + hex(STATUS_ERR_BG) + "; foreground: " + hex(STATUS_ERR_FG) + "; "
+                "arc: 3; background: " + hex(STATUS_ERR_BG) + "; foreground: " + hex(STATUS_ERR_FG) + "; "
                         + "borderColor: " + hex(STATUS_ERR_BORDER) + "; focusWidth: 0; "
-                        + "hoverBackground: #4A2025; disabledBackground: " + hex(BG_CARD) + "; margin: 8,18,8,18");
+                        + "hoverBackground: #F6DFE1; hoverBorderColor: " + hex(STATUS_ERR_FG) + "; "
+                        + "pressedBackground: #F2D2D5; " + DESABILITADO + "margin: 8,16,8,16");
     }
 
-    /** Abas de navegação do cabeçalho no estilo "sublinhado". */
+    /** Item de navegação na barra em ardósia: texto claro em peso médio; o ativo é bloco --accent. */
     public static void estilizarNavTab(JToggleButton btn) {
         btn.setFocusPainted(false);
-        btn.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_TAB);
+        btn.setFont(fonteSemibold(tamanhoBase()));
         btn.putClientProperty(FlatClientProperties.STYLE,
-                "focusWidth: 0; margin: 14,14,12,14; "
-                        + "background: " + hex(BG_HEADER) + "; foreground: " + hex(TEXT_MUTED) + "; "
-                        + "hoverBackground: #181B21; selectedBackground: " + hex(BG_HEADER) + "; "
-                        + "selectedForeground: #FFFFFF; tab.underlineColor: " + hex(ACCENT_PRIMARY) + "; "
-                        + "tab.underlineHeight: 2; tab.selectedBackground: " + hex(BG_HEADER));
+                "arc: 3; borderWidth: 0; focusWidth: 0; innerFocusWidth: 0; margin: 7,14,7,14; "
+                        + "background: " + hex(NAV_BG) + "; foreground: " + hex(NAV_FG2) + "; "
+                        + "hoverBackground: " + hex(NAV_HOVER) + "; pressedBackground: " + hex(NAV_HOVER) + "; "
+                        + "selectedBackground: " + hex(ACCENT_PRIMARY) + "; selectedForeground: #FFFFFF");
     }
 
     /** Botão que abre um menu suspenso (agrupa ações relacionadas para limpar a barra de ferramentas). */

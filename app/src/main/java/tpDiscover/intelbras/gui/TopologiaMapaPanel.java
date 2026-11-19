@@ -76,16 +76,18 @@ import java.util.Map;
  */
 public class TopologiaMapaPanel extends JPanel {
 
-    // Paleta do canvas (mesma linha visual do Planejador de Rede).
-    private static final Color BG_CANVAS = new Color(0x141921);
-    private static final Color GRID_DOT = new Color(0x222A36);
-    private static final Color COR_COBRE = new Color(0x8B5CF6);
-    private static final Color COR_FIBRA = new Color(0xF0A020);
-    private static final Color COR_LOOP = new Color(0xDC2626);
-    private static final Color COR_ATENCAO = new Color(0xD97706);
-    private static final Color COR_IP = new Color(0x82B6FF);
-    private static final Color COR_SELECAO = new Color(0x3B82F6);
-    private static final Color COR_BUSCA = new Color(0xFBC75A);
+    // Paleta do canvas no padrão STR: fundo --bg3, cabos nas escalas azul-ardósia (cobre) e verde
+    // (fibra), âmbar só no que está pendente/incerto e vermelho só no loop.
+    private static final Color BG_CANVAS = SwingThemeHelper.BG_SUBTLE;
+    private static final Color GRID_DOT = new Color(0xD6DFE1);
+    private static final Color COR_COBRE = SwingThemeHelper.SLATE;
+    private static final Color COR_FIBRA = SwingThemeHelper.BRAND;
+    private static final Color COR_LOOP = SwingThemeHelper.STATUS_ERR_FG;
+    private static final Color COR_ATENCAO = SwingThemeHelper.WARN_HI;
+    private static final Color COR_IP = SwingThemeHelper.SLATE_DARK;
+    private static final Color COR_SELECAO = SwingThemeHelper.ACCENT_PRIMARY;
+    private static final Color COR_BUSCA = SwingThemeHelper.SLATE_LIGHT;
+    private static final Color FUNDO_SOBREPOSICAO = new Color(255, 255, 255, 235);
 
     private final Canvas canvas = new Canvas();
     private final JTextField txtBusca = new JTextField(18);
@@ -290,7 +292,7 @@ public class TopologiaMapaPanel extends JPanel {
         topo.setAlignmentX(Component.LEFT_ALIGNMENT);
         JLabel titulo = new JLabel(valorOu(n.nome(), "Equipamento"));
         titulo.setForeground(SwingThemeHelper.TEXT_PRIMARY);
-        titulo.setFont(titulo.getFont().deriveFont(Font.BOLD, titulo.getFont().getSize2D() + 3f));
+        titulo.setFont(SwingThemeHelper.fonteSemibold(titulo.getFont().getSize2D() + 3f));
         topo.add(titulo, BorderLayout.CENTER);
         JButton fechar = new JButton(SwingThemeHelper.criarIcone(IconKind.CLEAR, SwingThemeHelper.TEXT_MUTED, 12));
         fechar.putClientProperty("JButton.buttonType", "toolBarButton");
@@ -434,7 +436,7 @@ public class TopologiaMapaPanel extends JPanel {
         l.setToolTipText(texto);
         l.setMinimumSize(new Dimension(10, l.getPreferredSize().height));
         l.setForeground(cor);
-        if (negrito) l.setFont(l.getFont().deriveFont(Font.BOLD));
+        if (negrito) l.setFont(SwingThemeHelper.fonteSemibold(l.getFont().getSize2D()));
         return l;
     }
 
@@ -565,8 +567,8 @@ public class TopologiaMapaPanel extends JPanel {
     private static Color corAlerta(Alerta a) {
         switch (a) {
             case LOOP: return SwingThemeHelper.STATUS_ERR_FG;
-            case STP:
-            case AUTH_ERRO: return SwingThemeHelper.STATUS_WARN_FG;
+            case AUTH_ERRO: return SwingThemeHelper.STATUS_ERR_FG;
+            case STP: return SwingThemeHelper.STATUS_WARN_FG;
             case SEM_ACESSO: return SwingThemeHelper.TEXT_SECONDARY;
             default: return SwingThemeHelper.STATUS_OK_FG;
         }
@@ -986,8 +988,10 @@ public class TopologiaMapaPanel extends JPanel {
             String resumo = textoResumo();
             int pad = 8;
             int wRes = fm.stringWidth(resumo) + pad * 2;
-            g.setColor(new Color(15, 19, 26, 215));
-            g.fillRoundRect(10, 10, wRes, fm.getHeight() + 8, 10, 10);
+            g.setColor(FUNDO_SOBREPOSICAO);
+            g.fillRoundRect(10, 10, wRes, fm.getHeight() + 8, 6, 6);
+            g.setColor(SwingThemeHelper.BORDER_SUBTLE);
+            g.drawRoundRect(10, 10, wRes, fm.getHeight() + 8, 6, 6);
             g.setColor(SwingThemeHelper.TEXT_SECONDARY);
             g.drawString(resumo, 10 + pad, 10 + 4 + fm.getAscent());
 
@@ -997,8 +1001,10 @@ public class TopologiaMapaPanel extends JPanel {
             for (String nm : nomes) larg += 22 + fm.stringWidth(nm) + 14;
             int alt = fm.getHeight() + 10;
             int y0 = getHeight() - alt - 10;
-            g.setColor(new Color(15, 19, 26, 215));
-            g.fillRoundRect(10, y0, larg, alt, 10, 10);
+            g.setColor(FUNDO_SOBREPOSICAO);
+            g.fillRoundRect(10, y0, larg, alt, 6, 6);
+            g.setColor(SwingThemeHelper.BORDER_SUBTLE);
+            g.drawRoundRect(10, y0, larg, alt, 6, 6);
             int x = 10 + pad;
             int yLinha = y0 + alt / 2;
             for (int i = 0; i < nomes.length; i++) {
@@ -1044,7 +1050,7 @@ public class TopologiaMapaPanel extends JPanel {
             String l1 = "Nenhum mapa para exibir";
             String l2 = "Faça uma coleta na aba Coleta para ver o mapa da topologia aqui.";
             Font f = getFont();
-            g.setFont(f.deriveFont(Font.BOLD, f.getSize2D() + 3f));
+            g.setFont(SwingThemeHelper.fonteSemibold(f.getSize2D() + 3f));
             FontMetrics fm = g.getFontMetrics();
             int cy = getHeight() / 2;
             g.setColor(SwingThemeHelper.TEXT_SECONDARY);
@@ -1103,7 +1109,7 @@ public class TopologiaMapaPanel extends JPanel {
             // na dica do cabo e no painel de detalhes).
             boolean mostrarPortas = escalaAtual >= 0.5;
             if (mostrarPortas) {
-                Font fPorta = getFont().deriveFont(Font.BOLD, fonte(9.5f, 8.5f));
+                Font fPorta = SwingThemeHelper.fonteSemibold(fonte(9.5f, 8.5f));
                 g.setFont(fPorta);
                 List<Rectangle2D> ocupadas = new ArrayList<>();
                 List<Rectangle2D> etiquetas = new ArrayList<>();
@@ -1180,13 +1186,13 @@ public class TopologiaMapaPanel extends JPanel {
             if (escolhido == null) return;
             etiquetas.add(new Rectangle2D.Double(escolhido.getX() - 2, escolhido.getY() - 2,
                     escolhido.getWidth() + 4, escolhido.getHeight() + 4));
-            RoundRectangle2D pill = new RoundRectangle2D.Double(escolhido.getX(), escolhido.getY(), w, h, 7, 7);
-            g.setColor(new Color(0x0F131A));
+            RoundRectangle2D pill = new RoundRectangle2D.Double(escolhido.getX(), escolhido.getY(), w, h, 4, 4);
+            g.setColor(Color.WHITE);
             g.fill(pill);
             g.setStroke(new BasicStroke(1f));
             g.setColor(cor);
             g.draw(pill);
-            g.setColor(new Color(0xE8EBF1));
+            g.setColor(SwingThemeHelper.TEXT_PRIMARY);
             g.drawString(txt, (float) (escolhido.getCenterX() - fm.stringWidth(txt) / 2.0),
                     (float) (escolhido.getCenterY() + fm.getAscent() / 2.0 - 1.5));
         }
@@ -1212,9 +1218,9 @@ public class TopologiaMapaPanel extends JPanel {
 
             double cx = n.centroX();
             if (ehSel || ehBusca || ehHover) {
-                Color c = ehSel ? COR_SELECAO : (ehBusca ? COR_BUSCA : new Color(0x3A404C));
-                RoundRectangle2D halo = new RoundRectangle2D.Double(x - 8, y - 6, MapaTopologia.LARGURA_ICONE + 16, 86, 14, 14);
-                g.setColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), ehHover && !ehSel && !ehBusca ? 60 : 45));
+                Color c = ehSel ? COR_SELECAO : (ehBusca ? COR_BUSCA : SwingThemeHelper.BORDER_STRONG);
+                RoundRectangle2D halo = new RoundRectangle2D.Double(x - 8, y - 6, MapaTopologia.LARGURA_ICONE + 16, 86, 6, 6);
+                g.setColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), ehHover && !ehSel && !ehBusca ? 40 : 26));
                 g.fill(halo);
                 g.setStroke(new BasicStroke(ehSel ? 2f : 1.4f));
                 g.setColor(c);
@@ -1237,7 +1243,7 @@ public class TopologiaMapaPanel extends JPanel {
 
             // Nome e IP abaixo do ícone (como no Planejador)
             Font base = getFont();
-            g.setFont(base.deriveFont(Font.BOLD, fonte(12f, 10.5f)));
+            g.setFont(SwingThemeHelper.fonteSemibold(fonte(12f, 10.5f)));
             FontMetrics fm = g.getFontMetrics();
             String nome = caberNaLargura(valorOu(n.nome(), "?"), fm, 176);
             g.setColor(SwingThemeHelper.TEXT_PRIMARY);
@@ -1253,23 +1259,28 @@ public class TopologiaMapaPanel extends JPanel {
         }
 
         private void desenharBadge(Graphics2D g, No n, double cx, double y) {
+            // Etiqueta do STR: fundo translúcido da própria cor, texto na cor cheia, caixa normal
             String txt;
-            Color cor;
+            SwingThemeHelper.TipoStatus tipo;
             switch (n.alerta()) {
-                case LOOP: txt = "! LOOP"; cor = COR_LOOP; break;
-                case STP: txt = "STP BLK"; cor = COR_ATENCAO; break;
-                case AUTH_ERRO: txt = "! SENHA"; cor = new Color(0xB45309); break;
-                case SEM_ACESSO: txt = "SEM CLI"; cor = new Color(0x64748B); break;
+                case LOOP: txt = "Loop"; tipo = SwingThemeHelper.TipoStatus.ERR; break;
+                case STP: txt = "STP bloqueado"; tipo = SwingThemeHelper.TipoStatus.WARN; break;
+                case AUTH_ERRO: txt = "Senha incorreta"; tipo = SwingThemeHelper.TipoStatus.ERR; break;
+                case SEM_ACESSO: txt = "Sem CLI"; tipo = SwingThemeHelper.TipoStatus.IDLE; break;
                 default: return;
             }
-            g.setFont(getFont().deriveFont(Font.BOLD, 9f));
+            Color[] cores = SwingThemeHelper.coresStatus(tipo);
+            g.setFont(SwingThemeHelper.fonteSemibold(9.5f));
             FontMetrics fm = g.getFontMetrics();
-            double w = fm.stringWidth(txt) + 10;
-            RoundRectangle2D r = new RoundRectangle2D.Double(cx - w / 2, y - 14, w, 14, 6, 6);
-            g.setColor(cor);
+            double w = fm.stringWidth(txt) + 12;
+            RoundRectangle2D r = new RoundRectangle2D.Double(cx - w / 2, y - 15, w, 15, 3, 3);
+            g.setColor(cores[0]);
             g.fill(r);
-            g.setColor(Color.WHITE);
-            g.drawString(txt, (float) (cx - fm.stringWidth(txt) / 2.0), (float) (y - 14 + 10.5));
+            g.setStroke(new BasicStroke(1f));
+            g.setColor(cores[2]);
+            g.draw(r);
+            g.setColor(cores[1]);
+            g.drawString(txt, (float) (cx - fm.stringWidth(txt) / 2.0), (float) (y - 15 + 11));
         }
 
         /** Abrevia o texto (com reticências) para não passar da largura do espaço do equipamento. */
@@ -1316,15 +1327,17 @@ public class TopologiaMapaPanel extends JPanel {
         }
     }
 
-    private static final Color AZUL_CLARO = new Color(0x4FA3E3);
-    private static final Color AZUL_ESCURO = new Color(0x1C5E9F);
-    private static final Color AZUL_TOPO = new Color(0x9AD0F7);
-    private static final Color AZUL_LADO_1 = new Color(0x1A5490);
-    private static final Color AZUL_LADO_2 = new Color(0x0E3862);
-    private static final Color AZUL_CONTORNO = new Color(0x0F3A66);
+    // Ícones na escala azul-ardósia do STR (com o verde da marca nos LEDs)
+    private static final Color AZUL_CLARO = new Color(0x6990A7);
+    private static final Color AZUL_ESCURO = new Color(0x31586C);
+    private static final Color AZUL_TOPO = new Color(0xA5CADA);
+    private static final Color AZUL_LADO_1 = new Color(0x31586C);
+    private static final Color AZUL_LADO_2 = new Color(0x24475A);
+    private static final Color AZUL_CONTORNO = new Color(0x1F3D4D);
+    private static final Color LED = new Color(0x87C984);
 
     private static void sombra(Graphics2D g, double cx, double rx) {
-        g.setColor(new Color(0, 0, 0, 70));
+        g.setColor(new Color(30, 40, 45, 40));
         g.fill(new Ellipse2D.Double(cx - rx, 44 - 2.6, rx * 2, 5.2));
     }
 
@@ -1361,7 +1374,7 @@ public class TopologiaMapaPanel extends JPanel {
         preencher(g, poligono(52, 24, 62, 14, 62, 28, 52, 38), AZUL_LADO_1, AZUL_LADO_2, 14, 38, AZUL_CONTORNO, 0.8f);
         linhas(g, Color.WHITE, 1.8f, 17, 16.5, 29, 16.5, 34, 16.5, 46, 16.5, 41, 20.5, 29, 20.5, 24, 20.5, 12, 20.5);
         // LEDs frontais
-        g.setColor(new Color(0x5DF08F));
+        g.setColor(LED);
         for (int i = 0; i < 6; i++) g.fill(new Rectangle2D.Double(9 + i * 6, 30, 3.2, 2.6));
     }
 
@@ -1380,14 +1393,14 @@ public class TopologiaMapaPanel extends JPanel {
         nuvem.add(new Area(new Ellipse2D.Double(19, 12, 28, 24)));
         nuvem.add(new Area(new Ellipse2D.Double(34, 18, 22, 22)));
         nuvem.add(new Area(new Rectangle2D.Double(18, 30, 30, 10)));
-        g.setPaint(new GradientPaint(0, 12, Color.WHITE, 0, 40, new Color(0xC9DDF2)));
+        g.setPaint(new GradientPaint(0, 12, Color.WHITE, 0, 40, SwingThemeHelper.SLATE_SOFT));
         g.fill(nuvem);
         g.setColor(COR_ATENCAO);
         g.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 10f, new float[]{4f, 2f}, 0f));
         g.draw(nuvem);
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 9));
         FontMetrics fm = g.getFontMetrics();
-        g.setColor(new Color(0x92400E));
+        g.setColor(SwingThemeHelper.STATUS_WARN_FG);
         g.drawString("L2 / ?", (float) (32 - fm.stringWidth("L2 / ?") / 2.0), 32f);
     }
 
@@ -1396,47 +1409,47 @@ public class TopologiaMapaPanel extends JPanel {
         preencher(g, new Rectangle2D.Double(10, 30, 36, 9), AZUL_CLARO, AZUL_ESCURO, 30, 39, AZUL_CONTORNO, 0.8f);
         preencher(g, poligono(10, 30, 16, 24, 52, 24, 46, 30), AZUL_TOPO, AZUL_CLARO, 24, 30, AZUL_CONTORNO, 0.8f);
         preencher(g, poligono(46, 30, 52, 24, 52, 33, 46, 39), AZUL_LADO_1, AZUL_LADO_2, 24, 39, AZUL_CONTORNO, 0.8f);
-        g.setColor(new Color(0x4FA3E3));
+        g.setColor(SwingThemeHelper.SLATE);
         g.setStroke(new BasicStroke(2.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         for (double r : new double[]{6, 11, 16}) {
             g.draw(new Arc2D.Double(31 - r, 21 - r, r * 2, r * 2, 45, 90, Arc2D.OPEN));
         }
         g.fill(new Ellipse2D.Double(31 - 2.4, 21 - 2.4, 4.8, 4.8));
-        g.setColor(new Color(0x5DF08F));
+        g.setColor(LED);
         g.fill(new Ellipse2D.Double(40 - 1.4, 34.5 - 1.4, 2.8, 2.8));
     }
 
     private static void desenharRadio(Graphics2D g) {
         sombra(g, 32, 20);
         RoundRectangle2D corpo = new RoundRectangle2D.Double(20, 16, 24, 24, 8, 8);
-        g.setColor(new Color(0x0E7490));
+        g.setColor(AZUL_ESCURO);
         g.fill(corpo);
-        g.setColor(new Color(0x155E75));
+        g.setColor(AZUL_CONTORNO);
         g.setStroke(new BasicStroke(1f));
         g.draw(corpo);
-        g.setColor(new Color(0x67, 0xE8, 0xF9, 90));
+        g.setColor(new Color(0xA5, 0xCA, 0xDA, 120));
         g.fill(new RoundRectangle2D.Double(24, 20, 16, 14, 4, 4));
-        g.setColor(new Color(0x22D3EE));
+        g.setColor(AZUL_CLARO);
         g.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         for (double r : new double[]{7, 12}) {
             g.draw(new Arc2D.Double(22 - r, 28 - r, r * 2, r * 2, 150, 60, Arc2D.OPEN));
             g.draw(new Arc2D.Double(42 - r, 28 - r, r * 2, r * 2, -30, 60, Arc2D.OPEN));
         }
-        g.setColor(new Color(0x475569));
+        g.setColor(SwingThemeHelper.TEXT_SECONDARY);
         g.fill(new Rectangle2D.Double(29.5, 40, 5, 4));
     }
 
     private static void desenharOlt(Graphics2D g) {
         sombra(g, 32, 28);
-        Color contorno = new Color(0x11161D);
-        preencher(g, new Rectangle2D.Double(4, 22, 48, 15), new Color(0x3B4555), new Color(0x1F2630), 22, 37, contorno, 0.8f);
-        preencher(g, poligono(4, 22, 14, 13, 62, 13, 52, 22), new Color(0x6B7686), new Color(0x55606F), 13, 22, contorno, 0.8f);
-        preencher(g, poligono(52, 22, 62, 13, 62, 28, 52, 37), new Color(0x232A34), new Color(0x171C24), 13, 37, contorno, 0.8f);
-        g.setColor(new Color(0x22C55E));
+        Color contorno = new Color(0x2A363D);
+        preencher(g, new Rectangle2D.Double(4, 22, 48, 15), new Color(0x5E6D75), new Color(0x3E5055), 22, 37, contorno, 0.8f);
+        preencher(g, poligono(4, 22, 14, 13, 62, 13, 52, 22), new Color(0xA2B1B8), new Color(0x8A9BA3), 13, 22, contorno, 0.8f);
+        preencher(g, poligono(52, 22, 62, 13, 62, 28, 52, 37), new Color(0x3E5055), new Color(0x2E3D41), 13, 37, contorno, 0.8f);
+        g.setColor(LED);
         for (int i = 0; i < 6; i++) g.fill(new RoundRectangle2D.Double(8 + i * 5, 27.5, 3.4, 4, 1.2, 1.2));
-        g.setColor(new Color(0x3B82F6));
+        g.setColor(AZUL_TOPO);
         g.fill(new RoundRectangle2D.Double(46, 27, 4, 5, 1.2, 1.2));
-        g.setColor(new Color(0x0D9488));
+        g.setColor(SwingThemeHelper.ACCENT_PRIMARY);
         g.fill(new RoundRectangle2D.Double(10, 3, 26, 11, 4, 4));
         g.setColor(Color.WHITE);
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 8));

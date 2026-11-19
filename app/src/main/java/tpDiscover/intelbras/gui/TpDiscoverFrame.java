@@ -224,7 +224,7 @@ public class TpDiscoverFrame extends JFrame {
         root.add(criarBarraSuperior(), BorderLayout.NORTH);
 
         containerCards.setOpaque(false);
-        containerCards.setBorder(BorderFactory.createEmptyBorder(18, 22, 20, 22));
+        containerCards.setBorder(BorderFactory.createEmptyBorder(20, 24, 20, 24));
         containerCards.add(coletaPanel, CARD_COLETA);
         containerCards.add(equipamentosPanel, CARD_EQUIPAMENTOS);
         containerCards.add(topologiaPanel, CARD_TOPOLOGIA);
@@ -236,11 +236,8 @@ public class TpDiscoverFrame extends JFrame {
 
     private JPanel criarBarraSuperior() {
         JPanel bar = new JPanel(new BorderLayout(24, 0));
-        bar.setBackground(SwingThemeHelper.BG_HEADER);
-        bar.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, 0, 1, 0, SwingThemeHelper.BORDER_SUBTLE),
-                BorderFactory.createEmptyBorder(0, 22, 0, 22)
-        ));
+        bar.setBackground(SwingThemeHelper.NAV_BG);
+        bar.setBorder(BorderFactory.createEmptyBorder(11, 22, 11, 22));
 
         // Marca
         JLabel logo = new JLabel(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.NETWORK, Color.WHITE, 16)) {
@@ -248,9 +245,8 @@ public class TpDiscoverFrame extends JFrame {
             protected void paintComponent(java.awt.Graphics g) {
                 java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
                 g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setPaint(new java.awt.GradientPaint(0, 0, SwingThemeHelper.ACCENT_HOVER,
-                        getWidth(), getHeight(), SwingThemeHelper.ACCENT_PRESSED));
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
+                g2.setColor(SwingThemeHelper.ACCENT_PRIMARY);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 6, 6);
                 g2.dispose();
                 super.paintComponent(g);
             }
@@ -259,11 +255,11 @@ public class TpDiscoverFrame extends JFrame {
         logo.setHorizontalAlignment(JLabel.CENTER);
 
         JLabel nome = new JLabel("tpDiscover");
-        nome.setFont(nome.getFont().deriveFont(Font.BOLD, nome.getFont().getSize2D() + 2f));
-        nome.setForeground(SwingThemeHelper.TEXT_PRIMARY);
+        nome.setFont(SwingThemeHelper.fonteSemibold(nome.getFont().getSize2D() + 2f));
+        nome.setForeground(SwingThemeHelper.NAV_FG);
         JLabel sub = new JLabel("Intelbras");
         sub.setFont(sub.getFont().deriveFont(sub.getFont().getSize2D() - 1.5f));
-        sub.setForeground(SwingThemeHelper.TEXT_MUTED);
+        sub.setForeground(SwingThemeHelper.NAV_FG2);
         JPanel nomes = new JPanel(new BorderLayout(0, -2));
         nomes.setOpaque(false);
         nomes.add(nome, BorderLayout.NORTH);
@@ -279,9 +275,9 @@ public class TpDiscoverFrame extends JFrame {
         bar.add(marcaWrap, BorderLayout.WEST);
 
         // Navegação
-        JPanel nav = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+        JPanel nav = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
         nav.setOpaque(false);
-        Color corIconeNav = SwingThemeHelper.TEXT_MUTED;
+        Color corIconeNav = SwingThemeHelper.NAV_FG2;
         navColeta.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.SEARCH, corIconeNav));
         navEquipamentos.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.LIST, corIconeNav));
         navTopologia.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.NETWORK, corIconeNav));
@@ -329,11 +325,13 @@ public class TpDiscoverFrame extends JFrame {
     private void atualizarSinalTopologia() {
         SwingThemeHelper.TipoStatus tipo = topologiaPanel.getTipoStatus();
         if (tipo == SwingThemeHelper.TipoStatus.ERR || tipo == SwingThemeHelper.TipoStatus.WARN) {
-            navTopologia.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.ALERT, SwingThemeHelper.corTexto(tipo)));
+            // sobre a ardósia usa os tons claros do tema escuro do STR (âmbar #E3B03A, vermelho #EE6B76)
+            navTopologia.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.ALERT,
+                    tipo == SwingThemeHelper.TipoStatus.ERR ? new Color(0xEE6B76) : new Color(0xE3B03A)));
             navTopologia.setToolTipText(tipo == SwingThemeHelper.TipoStatus.ERR
                     ? "Possível loop crítico detectado" : "A topologia tem avisos");
         } else {
-            navTopologia.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.NETWORK, SwingThemeHelper.TEXT_MUTED));
+            navTopologia.setIcon(SwingThemeHelper.criarIcone(SwingThemeHelper.IconKind.NETWORK, SwingThemeHelper.NAV_FG2));
             navTopologia.setToolTipText(null);
         }
     }
@@ -408,6 +406,7 @@ public class TpDiscoverFrame extends JFrame {
     private void irParaEquipamentosCorrigirFalhos() {
         if (tableModel.contarPorEstado(DiscoveredTargetRow.EstadoColeta.FALHA) > 0) {
             tableModel.selecionarApenasFalhos();
+            equipamentosPanel.setSoFalhas(true);
         }
         selecionarAba(CARD_EQUIPAMENTOS);
     }

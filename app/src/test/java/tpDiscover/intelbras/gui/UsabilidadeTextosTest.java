@@ -43,4 +43,32 @@ class UsabilidadeTextosTest {
         assertEquals("10.1.40.3", model.getLinhas().get(1).getIpPorta(), "o restante segue a ordem numérica do IP");
         assertEquals("10.1.40.10", model.getLinhas().get(2).getIpPorta());
     }
+
+    @Test
+    void aoTerminarAColetaComFalhasMostraSoOsQuePrecisamAjuste() throws Exception {
+        TargetTableModel model = new TargetTableModel();
+        model.adicionarManual("10.1.40.10", "", "");
+        model.adicionarManual("10.1.40.20", "", "");
+        model.adicionarManual("10.1.40.30", "", "");
+        EquipamentosViewPanel[] painel = new EquipamentosViewPanel[1];
+        javax.swing.SwingUtilities.invokeAndWait(() -> {
+            painel[0] = new EquipamentosViewPanel(model);
+            painel[0].setEstadoExecucao(true);
+            model.atualizarStatusPorEndereco("10.1.40.10", EstadoColeta.OK, "OK");
+            model.atualizarStatusPorEndereco("10.1.40.20", EstadoColeta.FALHA, "Falha: Senha incorreta", "x");
+            model.atualizarStatusPorEndereco("10.1.40.30", EstadoColeta.OK, "OK");
+            assertEquals(3, painel[0].linhasVisiveis(), "durante a coleta a lista fica completa");
+            painel[0].setEstadoExecucao(false);
+        });
+        javax.swing.SwingUtilities.invokeAndWait(() -> {
+            org.junit.jupiter.api.Assertions.assertTrue(painel[0].isSoFalhas());
+            assertEquals(1, painel[0].linhasVisiveis(), "só o equipamento com falha aparece");
+            // senha corrigida e recoletada com sucesso: volta para a lista completa
+            model.atualizarStatusPorEndereco("10.1.40.20", EstadoColeta.OK, "OK");
+        });
+        javax.swing.SwingUtilities.invokeAndWait(() -> {
+            org.junit.jupiter.api.Assertions.assertFalse(painel[0].isSoFalhas());
+            assertEquals(3, painel[0].linhasVisiveis());
+        });
+    }
 }

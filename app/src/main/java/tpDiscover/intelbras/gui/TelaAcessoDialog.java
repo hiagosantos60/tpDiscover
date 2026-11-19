@@ -68,7 +68,7 @@ public final class TelaAcessoDialog extends JFrame {
         JLabel titulo = new JLabel("Acesso restrito", SwingThemeHelper.criarIcone(IconKind.KEY, SwingThemeHelper.ACCENT_PRIMARY, 18), JLabel.LEFT);
         titulo.setIconTextGap(10);
         titulo.setForeground(SwingThemeHelper.TEXT_PRIMARY);
-        titulo.setFont(titulo.getFont().deriveFont(Font.BOLD, titulo.getFont().getSize2D() + 4f));
+        titulo.setFont(SwingThemeHelper.fonteSemibold(titulo.getFont().getSize2D() + 4f));
         JLabel dica = SwingThemeHelper.criarTextoAjuda("Informe a senha de acesso para usar o tpDiscover.");
         JPanel topo = new JPanel(new GridLayout(2, 1, 0, 4));
         topo.setOpaque(false);

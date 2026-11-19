@@ -17,6 +17,9 @@ import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
+import javax.swing.JToggleButton;
+import javax.swing.RowFilter;
+import javax.swing.table.TableRowSorter;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
@@ -54,6 +57,12 @@ public class EquipamentosViewPanel extends JPanel {
     private final JButton btnColetarSelecionados = new JButton("Coletar marcados");
     private final JButton btnRecoletarFalhas = new JButton("Recoletar falhas");
     private final JLabel lblResumo = SwingThemeHelper.criarTextoAjuda(" ");
+    /** Filtro "Só falhas": mostra apenas os equipamentos que precisam de ajuste (senha, acesso). */
+    private final JToggleButton btnSoFalhas = new JToggleButton("Só falhas");
+    private final JButton btnMostrarTodos = new JButton("Mostrar todos");
+    private final TableRowSorter<TargetTableModel> sorter;
+    private final JPanel faixaFalhas = new JPanel(new BorderLayout(10, 0));
+    private final JLabel lblFalhas = new JLabel(" ");
 
     private boolean modoIncrementalAtivo;
     private boolean executando;
@@ -69,6 +78,12 @@ public class EquipamentosViewPanel extends JPanel {
                 }
             }
         };
+        this.sorter = new TableRowSorter<>(tableModel);
+        for (int i = 0; i < tableModel.getColumnCount(); i++) {
+            sorter.setSortable(i, false); // a ordem é a do modelo (falhas primeiro, depois IP)
+        }
+        sorter.setSortsOnUpdates(true);
+        tblAlvos.setRowSorter(sorter);
         setLayout(new BorderLayout());
         setOpaque(false);
 
@@ -118,17 +133,21 @@ public class EquipamentosViewPanel extends JPanel {
         btnColetarSelecionados.setIcon(SwingThemeHelper.criarIcone(IconKind.PLAY, Color.WHITE));
         btnColetarSelecionados.setEnabled(false);
 
-        SwingThemeHelper.estilizarBotaoSecundario(btnRecoletarFalhas);
-        btnRecoletarFalhas.setIcon(SwingThemeHelper.criarIcone(IconKind.REFRESH, SwingThemeHelper.STATUS_WARN_FG));
+        SwingThemeHelper.estilizarBotaoCompacto(btnRecoletarFalhas);
+        btnRecoletarFalhas.setIcon(SwingThemeHelper.criarIcone(IconKind.REFRESH, SwingThemeHelper.TEXT_SECONDARY));
         btnRecoletarFalhas.setToolTipText("Marca só os equipamentos que falharam e coleta de novo (depois de corrigir as senhas)");
         btnRecoletarFalhas.setVisible(false);
         btnRecoletarFalhas.addActionListener(e -> {
             tableModel.selecionarApenasFalhos();
             btnColetarSelecionados.doClick();
         });
+        SwingThemeHelper.estilizarFiltro(btnSoFalhas);
+        btnSoFalhas.setIcon(SwingThemeHelper.criarIcone(IconKind.ALERT, SwingThemeHelper.STATUS_ERR_FG));
+        btnSoFalhas.setSelectedIcon(SwingThemeHelper.criarIcone(IconKind.ALERT, Color.WHITE));
+        btnSoFalhas.setToolTipText("Mostra só os equipamentos que falharam e precisam de ajuste (senha, acesso)");
+        btnSoFalhas.addActionListener(e -> aplicarFiltro());
         JPanel direita = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         direita.setOpaque(false);
-        direita.add(btnRecoletarFalhas);
         direita.add(btnColetarSelecionados);
 
         JPanel toolbar = new JPanel(new BorderLayout(8, 0));
@@ -143,10 +162,37 @@ public class EquipamentosViewPanel extends JPanel {
         JScrollPane scroll = new JScrollPane(tblAlvos);
         scroll.setBorder(BorderFactory.createLineBorder(SwingThemeHelper.BORDER_SUBTLE, 1, true));
         scroll.getViewport().setBackground(SwingThemeHelper.BG_CARD);
-        card.add(scroll, BorderLayout.CENTER);
+
+        // Faixa de falhas (só aparece quando algo falhou): filtro + recoleta, acima da tabela
+        faixaFalhas.putClientProperty(com.formdev.flatlaf.FlatClientProperties.STYLE,
+                "arc: 6; background: " + SwingThemeHelper.hex(SwingThemeHelper.STATUS_ERR_BG)
+                        + "; border: 7,12,7,8," + SwingThemeHelper.hex(SwingThemeHelper.STATUS_ERR_BORDER) + ",1,6");
+        lblFalhas.setIcon(SwingThemeHelper.criarIcone(IconKind.ALERT, SwingThemeHelper.STATUS_ERR_FG));
+        lblFalhas.setIconTextGap(8);
+        lblFalhas.setForeground(SwingThemeHelper.STATUS_ERR_FG);
+        JPanel acoesFalhas = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        acoesFalhas.setOpaque(false);
+        acoesFalhas.add(btnSoFalhas);
+        acoesFalhas.add(btnRecoletarFalhas);
+        faixaFalhas.add(lblFalhas, BorderLayout.CENTER);
+        faixaFalhas.add(acoesFalhas, BorderLayout.EAST);
+        faixaFalhas.setVisible(false);
+
+        JPanel centro = new JPanel(new BorderLayout(0, 10));
+        centro.setOpaque(false);
+        centro.add(faixaFalhas, BorderLayout.NORTH);
+        centro.add(scroll, BorderLayout.CENTER);
+        card.add(centro, BorderLayout.CENTER);
 
         // Rodapé
-        card.add(lblResumo, BorderLayout.SOUTH);
+        SwingThemeHelper.estilizarBotaoLink(btnMostrarTodos);
+        btnMostrarTodos.setVisible(false);
+        btnMostrarTodos.addActionListener(e -> setSoFalhas(false));
+        JPanel rodape = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        rodape.setOpaque(false);
+        rodape.add(lblResumo);
+        rodape.add(btnMostrarTodos);
+        card.add(rodape, BorderLayout.SOUTH);
 
         add(card, BorderLayout.CENTER);
 
@@ -159,6 +205,10 @@ public class EquipamentosViewPanel extends JPanel {
 
         tblAlvos.getSelectionModel().addListSelectionListener(e -> atualizarBotoes());
         tableModel.addTableModelListener(e -> {
+            // filtro ligado e nenhuma falha restante (senha corrigida e recoletada): volta para a lista toda
+            if (btnSoFalhas.isSelected() && !executando && tableModel.contarPorEstado(EstadoColeta.FALHA) == 0) {
+                javax.swing.SwingUtilities.invokeLater(() -> setSoFalhas(false));
+            }
             atualizarResumo();
             atualizarBotoes();
         });
@@ -177,9 +227,13 @@ public class EquipamentosViewPanel extends JPanel {
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         Font base = t.getFont();
+        if (t.getModel().getRowCount() > 0) {
+            g2.dispose();
+            return; // filtro ativo sem resultados: o rodapé já explica
+        }
         String l1 = "Nenhum equipamento na lista ainda";
         String l2 = "Inicie uma coleta na aba Coleta, clique em Adicionar ou importe uma lista em Arquivo.";
-        g2.setFont(base.deriveFont(Font.BOLD, base.getSize2D() + 1.5f));
+        g2.setFont(SwingThemeHelper.fonteSemibold(base.getSize2D() + 1.5f));
         FontMetrics fm1 = g2.getFontMetrics();
         int cy = Math.max(60, t.getVisibleRect().height / 2 - 10);
         g2.setColor(SwingThemeHelper.TEXT_SECONDARY);
@@ -201,6 +255,14 @@ public class EquipamentosViewPanel extends JPanel {
         int ok = tableModel.contarPorEstado(EstadoColeta.OK);
         int falhas = tableModel.contarPorEstado(EstadoColeta.FALHA);
         StringBuilder sb = new StringBuilder("<html>");
+        if (btnSoFalhas.isSelected()) {
+            sb.append("<font color='").append(SwingThemeHelper.hex(SwingThemeHelper.STATUS_ERR_FG)).append("'>")
+                    .append("Mostrando só os ").append(falhas).append(falhas == 1 ? " que falhou" : " que falharam")
+                    .append("</font> (de ").append(total).append(")");
+            sb.append("</html>");
+            lblResumo.setText(sb.toString());
+            return;
+        }
         sb.append(total).append(total == 1 ? " equipamento" : " equipamentos")
                 .append("  ·  ").append(marcados).append(marcados == 1 ? " marcado" : " marcados");
         if (ok > 0) {
@@ -227,6 +289,14 @@ public class EquipamentosViewPanel extends JPanel {
         btnRecoletarFalhas.setText("Recoletar falhas (" + falhas + ")");
         btnRecoletarFalhas.setVisible(falhas > 0);
         btnRecoletarFalhas.setEnabled(!executando);
+        btnSoFalhas.setText("Só falhas (" + falhas + ")");
+        btnSoFalhas.setEnabled(!executando);
+        faixaFalhas.setVisible(falhas > 0);
+        lblFalhas.setText(falhas == 1
+                ? "1 equipamento falhou e precisa de ajuste: corrija a senha e recolete."
+                : falhas + " equipamentos falharam e precisam de ajuste: corrija a senha e recolete.");
+        btnMostrarTodos.setVisible(btnSoFalhas.isSelected());
+        btnMostrarTodos.setText("Mostrar todos (" + tableModel.getRowCount() + ")");
         if (executando) {
             btnColetarSelecionados.setEnabled(false);
         } else {
@@ -250,7 +320,48 @@ public class EquipamentosViewPanel extends JPanel {
     }
 
     public void setEstadoExecucao(boolean executando) {
+        boolean terminou = this.executando && !executando;
         this.executando = executando;
+        if (executando) {
+            // durante a coleta a lista inteira fica visível (o status de cada um muda ao vivo)
+            setSoFalhas(false);
+        } else if (terminou) {
+            // fim da coleta: se algo falhou, mostra só o que precisa ser ajustado
+            setSoFalhas(tableModel.contarPorEstado(EstadoColeta.FALHA) > 0);
+        }
+        atualizarBotoes();
+    }
+
+    /** Liga/desliga o filtro que mostra só os equipamentos com falha. */
+    public void setSoFalhas(boolean soFalhas) {
+        finalizarEdicaoTabela();
+        btnSoFalhas.setSelected(soFalhas);
+        aplicarFiltro();
+    }
+
+    public boolean isSoFalhas() {
+        return btnSoFalhas.isSelected();
+    }
+
+    /** Quantidade de linhas visíveis na tabela (depois do filtro). */
+    int linhasVisiveis() {
+        return tblAlvos.getRowCount();
+    }
+
+    private void aplicarFiltro() {
+        if (btnSoFalhas.isSelected()) {
+            sorter.setRowFilter(new RowFilter<TargetTableModel, Integer>() {
+                @Override
+                public boolean include(Entry<? extends TargetTableModel, ? extends Integer> entry) {
+                    int i = entry.getIdentifier();
+                    List<DiscoveredTargetRow> linhas = entry.getModel().getLinhas();
+                    return i < linhas.size() && linhas.get(i).getEstado() == EstadoColeta.FALHA;
+                }
+            });
+        } else {
+            sorter.setRowFilter(null);
+        }
+        atualizarResumo();
         atualizarBotoes();
     }
 
@@ -409,7 +520,8 @@ public class EquipamentosViewPanel extends JPanel {
         }
         List<DiscoveredTargetRow> linhas = tableModel.getLinhas();
         for (int i = 0; i < linhas.size(); i++) {
-            if (linhas.get(i).isSelecionado()) {
+            // com o filtro "Só falhas" ligado, vale só o que está visível
+            if (linhas.get(i).isSelecionado() && tblAlvos.convertRowIndexToView(i) >= 0) {
                 indices.add(i);
             }
         }

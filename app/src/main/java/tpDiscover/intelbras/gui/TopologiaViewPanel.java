@@ -71,7 +71,7 @@ public class TopologiaViewPanel extends JPanel {
         SwingThemeHelper.estilizarFaixa(loopCard, TipoStatus.IDLE, 14);
         loopCard.setBorder(BorderFactory.createEmptyBorder(14, 18, 14, 14));
         lblLoopBanner.setForeground(SwingThemeHelper.TEXT_SECONDARY);
-        lblLoopBanner.setFont(lblLoopBanner.getFont().deriveFont(Font.BOLD, lblLoopBanner.getFont().getSize2D() + 1.5f));
+        lblLoopBanner.setFont(SwingThemeHelper.fonteSemibold(lblLoopBanner.getFont().getSize2D() + 1.5f));
         lblLoopBanner.setIconTextGap(10);
         JPanel textos = new JPanel(new BorderLayout(0, 4));
         textos.setOpaque(false);
@@ -184,7 +184,7 @@ public class TopologiaViewPanel extends JPanel {
                     g2.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,
                             java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
                     Font base = getFont();
-                    g2.setFont(base.deriveFont(Font.BOLD, base.getSize2D() + 1.5f));
+                    g2.setFont(SwingThemeHelper.fonteSemibold(base.getSize2D() + 1.5f));
                     java.awt.FontMetrics f1 = g2.getFontMetrics();
                     int cy = Math.max(60, getVisibleRect().height / 2 - 10);
                     g2.setColor(SwingThemeHelper.TEXT_SECONDARY);
@@ -380,7 +380,7 @@ public class TopologiaViewPanel extends JPanel {
                     : (semAcesso ? SwingThemeHelper.TEXT_SECONDARY : SwingThemeHelper.STATUS_WARN_FG);
             l.setIcon(SwingThemeHelper.criarIcone(semAcesso ? IconKind.KEY : IconKind.ALERT, cor, 13));
             l.setIconTextGap(8);
-            l.setFont(l.getFont().deriveFont(Font.BOLD));
+            l.setFont(SwingThemeHelper.fonteSemibold(l.getFont().getSize2D()));
             if (!isSelected) l.setForeground(cor);
             return l;
         }

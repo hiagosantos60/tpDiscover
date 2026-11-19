@@ -314,7 +314,7 @@ public class ColetaViewPanel extends JPanel {
         JPanel linhaStatus = new JPanel(new BorderLayout(10, 0));
         linhaStatus.setOpaque(false);
         lblStatusExecucao.setForeground(SwingThemeHelper.TEXT_PRIMARY);
-        lblStatusExecucao.setFont(lblStatusExecucao.getFont().deriveFont(Font.BOLD, lblStatusExecucao.getFont().getSize2D() + 1f));
+        lblStatusExecucao.setFont(SwingThemeHelper.fonteSemibold(lblStatusExecucao.getFont().getSize2D() + 1f));
         linhaStatus.add(lblStatusExecucao, BorderLayout.CENTER);
         linhaStatus.add(lblProgresso, BorderLayout.EAST);
         linhaStatus.setAlignmentX(LEFT_ALIGNMENT);
@@ -330,7 +330,7 @@ public class ColetaViewPanel extends JPanel {
         // Faixa de conclusão
         faixaConclusao.setBorder(BorderFactory.createEmptyBorder(12, 14, 12, 12));
         faixaConclusao.setAlignmentX(LEFT_ALIGNMENT);
-        lblResumoConclusao.setFont(lblResumoConclusao.getFont().deriveFont(Font.BOLD));
+        lblResumoConclusao.setFont(SwingThemeHelper.fonteSemibold(lblResumoConclusao.getFont().getSize2D()));
         lblResumoConclusao.setIconTextGap(10);
         faixaConclusao.add(lblResumoConclusao, BorderLayout.CENTER);
 
@@ -378,7 +378,7 @@ public class ColetaViewPanel extends JPanel {
         cabecalhoLog.setOpaque(false);
         JLabel tituloLog = new JLabel("Registro de atividade");
         tituloLog.setForeground(SwingThemeHelper.TEXT_MUTED);
-        tituloLog.setFont(tituloLog.getFont().deriveFont(Font.BOLD, tituloLog.getFont().getSize2D() - 1f));
+        tituloLog.setFont(SwingThemeHelper.fonteSemibold(tituloLog.getFont().getSize2D() - 1f));
         cabecalhoLog.add(tituloLog, BorderLayout.WEST);
 
         JButton btnCopiarLog = new JButton("Copiar");
@@ -404,8 +404,8 @@ public class ColetaViewPanel extends JPanel {
         txtLog.setLineWrap(true);
         txtLog.setWrapStyleWord(true);
         txtLog.setBackground(SwingThemeHelper.BG_CONSOLE);
-        txtLog.setForeground(new Color(0xB9C1CE));
-        txtLog.setCaretColor(Color.WHITE);
+        txtLog.setForeground(SwingThemeHelper.TEXT_PRIMARY);
+        txtLog.setCaretColor(SwingThemeHelper.TEXT_PRIMARY);
         txtLog.setFont(SwingThemeHelper.fonteMonoespacada());
         txtLog.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
         txtLog.setText("[" + LocalTime.now().format(HORA_FMT)

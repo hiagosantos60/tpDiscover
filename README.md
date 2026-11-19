@@ -105,7 +105,7 @@ Lista tudo o que foi encontrado (ou importado), com a **Situação** de cada um.
 | Usuário / Senha | Em branco = usa os da aba Coleta (duplo clique para editar) |
 | Situação | `OK · ...` ou `Falha: <motivo>`. **Passe o mouse** para ver a mensagem técnica completa |
 
-Depois de uma coleta, **os equipamentos com falha ficam no topo** da lista.
+Se a coleta terminar com falhas, a lista **mostra só os equipamentos que falharam** (filtro **Só falhas (N)** ligado): são os que precisam de ajuste. Corrija a senha e use **Recoletar falhas**. Para ver a lista completa, clique em **Mostrar todos** no rodapé ou desligue o filtro. Quando não sobra nenhuma falha, a lista completa volta sozinha. Com o filtro desligado, os equipamentos com falha ficam no topo.
 
 Barra de ferramentas:
 
@@ -113,6 +113,7 @@ Barra de ferramentas:
 - **Marcar ▾** — marcar todos, desmarcar todos ou **marcar só os que falharam**;
 - **Definir senha** — aplica usuário/senha às linhas selecionadas, ou marca como *"não tenho a senha"* (o equipamento aparece na topologia como passivo, sem coleta);
 - **Arquivo ▾** — **importar** ou **exportar** a lista em `.txt` (formato em [Lista de equipamentos](#lista-de-equipamentos-txt));
+- **Só falhas (N)** — mostra apenas os equipamentos que falharam (liga sozinho no fim de uma coleta com falhas);
 - **Recoletar falhas (N)** — marca só os que falharam e coleta de novo (use depois de corrigir as senhas);
 - **Recoletar marcados** — coleta os equipamentos marcados.
 
@@ -134,7 +135,7 @@ A faixa traz os botões **Corrigir senhas**, **Abrir pasta** e **Finalizar e ger
 O mesmo diagrama do PDF, interativo:
 
 - **Equipamentos** com ícone, nome e IP; alertas sobre o ícone: `! LOOP`, `STP BLK`, `! SENHA`, `SEM CLI`.
-- **Cabos** com a porta em cada ponta. Cores: roxo = cobre, laranja = fibra, tracejado = incerto/bloqueado pelo STP, vermelho = loop. A legenda fica no canto inferior esquerdo; o resumo (equipamentos, cabos, sem acesso) no canto superior.
+- **Cabos** com a porta em cada ponta. Cores: azul-ardósia = cobre, verde = fibra, âmbar tracejado = incerto/bloqueado pelo STP, vermelho = loop. A legenda fica no canto inferior esquerdo; o resumo (equipamentos, cabos, sem acesso) no canto superior.
 - **Navegação**: roda do mouse = zoom; arrastar = mover; duplo clique no fundo ou **Ajustar** = enquadrar. Em redes grandes o mapa abre num tamanho legível centrado no gateway/core — arraste para ver o resto.
 - **Buscar** (Ctrl+F) — por nome, IP ou MAC; Enter vai para o próximo resultado.
 - **Clique num equipamento** — abre o painel de detalhes: IP, MAC, serial, situação da coleta e a lista de conexões (*"GE1/0/24 → Gateway 10.1.40.1, porta remota LAN1"*). Clique numa conexão para ir até o vizinho. Botões **Copiar IP** e **Abrir web**.
@@ -351,7 +352,7 @@ app/src/main/java/tpDiscover/intelbras/
 ├── parser/                  Comware, Série 3000, OLT, AP
 ├── correlacao/              motor de topologia, loops, relatório, PDF, mapa e exportação p/ Planejador
 ├── descoberta/              varredura de rede e identificação de produtos
-├── gui/                     interface Swing (FlatLaf)
+├── gui/                     interface Swing (FlatLaf claro, cores do padrão visual STR em SwingThemeHelper)
 ├── modelos/                 MAC, ARP, LLDP, STP, identidade do equipamento
 ├── seguranca/               senha de acesso
 └── util/                    Compat (APIs Java 9+ para Java 8)
