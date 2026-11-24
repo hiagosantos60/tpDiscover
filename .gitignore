@@ -1,0 +1,24 @@
+# Ignore Gradle project-specific cache directory
+.gradle
+
+# Ignore Gradle build output directory
+build
+
+# Ignore Kotlin plugin data
+.kotlin
+
+# Relatorios de topologia gerados em runtime
+topologia_*.pdf
+topologia_*.html
+topologia_*.json
+topologia_*.txt
+
+# Nunca versionar a senha de acesso em texto puro
+senha.txt
+
+# Listas de equipamentos com senhas e coletas reais de clientes (ficam só na máquina)
+switches.txt
+testes-reais/
+
+# Configuração local do editor
+.vscode/
